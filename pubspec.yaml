@@ -1,0 +1,61 @@
+name: notex
+description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.0
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  # Local persistence
+  drift: ^2.22.1
+  sqlite3_flutter_libs: ^0.5.28
+  path_provider: ^2.1.5
+  path: ^1.9.1
+
+  # Rich text editor
+  flutter_quill: ^11.1.0
+
+  # DI
+  get_it: ^8.0.3
+
+  # Utilities
+  uuid: ^4.5.1
+  intl: ^0.20.2
+  google_fonts: ^6.2.1
+
+  # Calendar
+  table_calendar: ^3.2.0
+
+  # File picker
+  file_picker: ^8.1.7
+
+  # Icons
+  cupertino_icons: ^1.0.8
+
+  # Window management (frameless + rounded corners)
+  window_manager: ^0.3.9
+  flutter_acrylic: ^1.1.4
+  morphable_shape: ^2.0.0
+
+  # Color palette extraction from images
+  palette_generator_master: ^1.0.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  drift_dev: ^2.22.1
+  build_runner: ^2.4.14
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/

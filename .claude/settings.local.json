@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze:*)",
+      "Bash(flutter build:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(flutter pub deps:*)",
+      "Bash(flutter pub add:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:pub.dev)",
+      "Bash(flutter clean:*)",
+      "Bash(flutter --version:*)",
+      "Bash(dart run build_runner build:*)"
+    ]
+  }
+}

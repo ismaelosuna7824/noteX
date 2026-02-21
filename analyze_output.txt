@@ -1,0 +1,15 @@
+﻿Resolving dependencies...
+Downloading packages...
+  _fe_analyzer_shared 93.0.0 (95.0.0 available)
+  analyzer 10.0.1 (10.1.0 available)
+  file_picker 8.3.7 (10.3.10 available)
+  get_it 8.3.0 (9.2.1 available)
+  google_fonts 6.3.3 (8.0.2 available)
+  meta 1.17.0 (1.18.1 available)
+  sqlite3 2.9.4 (3.1.6 available)
+  sqlite3_flutter_libs 0.5.41 (0.6.0+eol available)
+Got dependencies!
+8 packages have newer versions incompatible with dependency constraints.
+Try `flutter pub outdated` for more information.
+Analyzing notex...                                              
+No issues found! (ran in 12.4s)
