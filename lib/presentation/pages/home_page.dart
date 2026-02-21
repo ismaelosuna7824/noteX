@@ -85,31 +85,33 @@ class HomePage extends StatelessWidget {
     ThemeData theme,
     Color accentColor,
   ) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // "Explore, Write, and ENJOY" organic card (left)
-        Expanded(
-          flex: 3,
-          child: _buildEnjoyCard(context, theme, accentColor),
-        ),
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // "Explore, Write, and ENJOY" organic card (left)
+          Expanded(
+            flex: 3,
+            child: _buildEnjoyCard(context, theme, accentColor),
+          ),
 
-        const SizedBox(width: 16),
+          const SizedBox(width: 16),
 
-        // Combined "Total Notes + Today's Note" organic card (center-right)
-        Expanded(
-          flex: 2,
-          child: _buildCombinedStatsCard(context, theme, accentColor),
-        ),
+          // Combined "Total Notes + Today's Note" organic card (center)
+          Expanded(
+            flex: 2,
+            child: _buildCombinedStatsCard(context, theme, accentColor),
+          ),
 
-        const SizedBox(width: 16),
+          const SizedBox(width: 16),
 
-        // Pinned Notes card (far right)
-        Expanded(
-          flex: 2,
-          child: _buildPinnedNotesCard(context, theme, accentColor),
-        ),
-      ],
+          // Pinned Notes card (right)
+          Expanded(
+            flex: 2,
+            child: _buildPinnedNotesCard(context, theme, accentColor),
+          ),
+        ],
+      ),
     );
   }
 
@@ -145,7 +147,8 @@ class HomePage extends StatelessWidget {
       padding: const EdgeInsets.all(28),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           Text(
             'Explore, Write, and',
@@ -213,7 +216,8 @@ class HomePage extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(30, 26, 28, 30),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize: MainAxisSize.max,
+        mainAxisAlignment: MainAxisAlignment.start,
         children: [
           // ── Total Notes ──────────────────────────────────────────
           Row(
@@ -310,7 +314,7 @@ class HomePage extends StatelessWidget {
   }
 
   // ─── Pinned Notes card ──────────────────────────────────────────────────────
-  // Symmetric shape: large on all corners (rounded pill-ish)
+  // Mirrors ENJOY card shape: small topLeft/bottomRight, large topRight/bottomLeft
   Widget _buildPinnedNotesCard(
     BuildContext context,
     ThemeData theme,
@@ -318,13 +322,23 @@ class HomePage extends StatelessWidget {
   ) {
     final pinnedCount = appState.pinnedNotes.length;
 
+    final shape = RectangleShapeBorder(
+      borderRadius: DynamicBorderRadius.only(
+        topLeft: DynamicRadius.circular(Length(28)),
+        topRight: DynamicRadius.circular(Length(72)),
+        bottomLeft: DynamicRadius.circular(Length(72)),
+        bottomRight: DynamicRadius.circular(Length(28)),
+      ),
+    );
+
     return GestureDetector(
       onTap: () => appState.navigateToPinnedNotes(),
       child: Container(
-        decoration: BoxDecoration(
+        clipBehavior: Clip.antiAlias,
+        decoration: ShapeDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(28),
-          boxShadow: [
+          shape: shape,
+          shadows: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.07),
               blurRadius: 20,
@@ -335,7 +349,8 @@ class HomePage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(28, 26, 28, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.start,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,

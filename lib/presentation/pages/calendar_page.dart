@@ -134,6 +134,7 @@ class _CalendarPageState extends State<CalendarPage> {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Calendar in a white card
           Expanded(
