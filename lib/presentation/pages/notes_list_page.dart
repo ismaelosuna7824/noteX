@@ -28,11 +28,16 @@ class _NotesListPageState extends State<NotesListPage> {
   TextEditingController? _titleController;
   String? _loadedNoteId;
 
+  /// Persistent scroll controller for the Quill editor.
+  /// Created once so the platform scrollbar always has a valid position.
+  final ScrollController _quillScrollController = ScrollController();
+
   @override
   void dispose() {
     _forceSave();
     _quillController?.dispose();
     _titleController?.dispose();
+    _quillScrollController.dispose();
     super.dispose();
   }
 
@@ -488,7 +493,7 @@ class _NotesListPageState extends State<NotesListPage> {
               child: QuillEditor(
                 controller: _quillController!,
                 focusNode: FocusNode(),
-                scrollController: ScrollController(),
+                scrollController: _quillScrollController,
                 config: QuillEditorConfig(
                   placeholder: 'Start typing...',
                   padding: EdgeInsets.zero,

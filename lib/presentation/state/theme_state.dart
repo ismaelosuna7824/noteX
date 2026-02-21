@@ -24,6 +24,9 @@ class ThemeState extends ChangeNotifier {
   /// Defaults to white (for dark backgrounds / no background).
   Color _heroTextColor = Colors.white;
 
+  /// True while the palette extraction is running after a bg change.
+  bool _isPaletteLoading = false;
+
   /// Cancellation token: each new extraction increments this; stale callbacks
   /// compare against the current value and abort if they no longer match.
   int _paletteToken = 0;
@@ -34,6 +37,9 @@ class ThemeState extends ChangeNotifier {
   String? get backgroundImagePath => _backgroundImagePath;
   Color get accentColor => _accentColor;
   bool get isDarkMode => _isDarkMode;
+
+  /// True while the palette/accent color is being extracted from a new bg.
+  bool get isPaletteLoading => _isPaletteLoading;
 
   /// Best text color for hero titles over the current background.
   /// Computed via WCAG contrast ratio (minimum 4.5:1) for readability.
@@ -84,6 +90,9 @@ class ThemeState extends ChangeNotifier {
     'assets/images/magenta-landscape-with-fantasy-nature.jpg',
     'assets/images/mythical-dragon-beast-anime-style (1).jpg',
     'assets/images/mythical-dragon-beast-anime-style.jpg',
+    'assets/images/1311994.jpeg',
+    'assets/images/896653.jpg',
+    'assets/images/clay-banks-hwLAI5lRhdM-unsplash.jpg',
   ];
 
   /// Returns `true` when [path] refers to a bundled asset (not a disk file).
@@ -126,7 +135,18 @@ class ThemeState extends ChangeNotifier {
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
-    notifyListeners();
+
+    // First launch: no saved background → pick the first preset automatically
+    // so the app always opens with a beautiful image rather than a plain gradient.
+    if (_backgroundImagePath == null) {
+      _backgroundImagePath = presetBackgrounds[0];
+      _isPaletteLoading = true;
+      notifyListeners();
+      // Extract palette async — sets accent color + clears _isPaletteLoading.
+      _extractAndApplyPalette(_backgroundImagePath!);
+    } else {
+      notifyListeners();
+    }
   }
 
   /// Write current settings to disk (called after every change).
@@ -166,6 +186,10 @@ class ThemeState extends ChangeNotifier {
     if (path == null) {
       _dominantLuminance = 0.15;
       _heroTextColor = Colors.white;
+      _isPaletteLoading = false;
+    } else {
+      // Show loading indicator while we extract the palette from the new image.
+      _isPaletteLoading = true;
     }
 
     _saveToDisk();
@@ -218,10 +242,13 @@ class ThemeState extends ChangeNotifier {
         _accentColor = extracted;
       }
 
+      _isPaletteLoading = false;
       await _saveToDisk();
       notifyListeners();
     } catch (_) {
       // Palette extraction is best-effort — never break the UI.
+      _isPaletteLoading = false;
+      notifyListeners();
     }
   }
 

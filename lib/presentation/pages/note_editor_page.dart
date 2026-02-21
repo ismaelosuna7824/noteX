@@ -381,7 +381,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.95),
+                            color: Colors.white.withValues(alpha: 1),
                             borderRadius: const BorderRadius.only(
                               bottomLeft: Radius.circular(20),
                               bottomRight: Radius.circular(20),

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../state/timer_state.dart';
 
 /// Home/Dashboard page.
 ///
@@ -38,32 +40,14 @@ class HomePage extends StatelessWidget {
       builder: (context, constraints) {
         return Stack(
           children: [
-            // Floating typography in top-left
+            // Hero typography in top-left
             Positioned(
               left: 32,
               top: 32,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'IMMERSE IN',
-                    style: theme.textTheme.displaySmall?.copyWith(
-                      color: heroColor,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
-                      shadows: heroShadows,
-                    ),
-                  ),
-                  Text(
-                    'YOUR NOTES',
-                    style: theme.textTheme.displayMedium?.copyWith(
-                      color: heroColor,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 4,
-                      shadows: heroShadows,
-                    ),
-                  ),
-                ],
+              child: _HeroText(
+                heroColor: heroColor,
+                theme: theme,
+                shadows: heroShadows,
               ),
             ),
 
@@ -105,10 +89,18 @@ class HomePage extends StatelessWidget {
 
           const SizedBox(width: 16),
 
-          // Pinned Notes card (right)
+          // Right column: Daily Tasks card stacked above Pinned Notes card
           Expanded(
             flex: 2,
-            child: _buildPinnedNotesCard(context, theme, accentColor),
+            child: Column(
+              mainAxisSize: MainAxisSize.max,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildDailyTasksCard(context, theme, accentColor),
+                const SizedBox(height: 12),
+                _buildPinnedNotesCard(context, theme, accentColor),
+              ],
+            ),
           ),
         ],
       ),
@@ -116,7 +108,6 @@ class HomePage extends StatelessWidget {
   }
 
   // ─── ENJOY card ─────────────────────────────────────────────────────────────
-  // Organic shape: small topLeft/bottomRight, large topRight/bottomLeft
   Widget _buildEnjoyCard(
     BuildContext context,
     ThemeData theme,
@@ -181,7 +172,6 @@ class HomePage extends StatelessWidget {
   }
 
   // ─── Combined Stats card ─────────────────────────────────────────────────────
-  // Mirror of ENJOY: large topLeft/bottomRight, small topRight/bottomLeft
   Widget _buildCombinedStatsCard(
     BuildContext context,
     ThemeData theme,
@@ -212,7 +202,6 @@ class HomePage extends StatelessWidget {
           ),
         ],
       ),
-      // Extra padding near the large 72px corners (topLeft + bottomRight).
       padding: const EdgeInsets.fromLTRB(30, 26, 28, 30),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -287,8 +276,9 @@ class HomePage extends StatelessWidget {
                 ],
               ),
               const Spacer(),
-              GestureDetector(
+              _PressButton(
                 onTap: hasTodayNote ? () => appState.navigateToPage(2) : null,
+                pressScale: 0.88,
                 child: Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
@@ -313,8 +303,103 @@ class HomePage extends StatelessWidget {
     );
   }
 
+  // ─── Daily Tasks card ───────────────────────────────────────────────────────
+  Widget _buildDailyTasksCard(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+  ) {
+    // Uses a mirrored organic shape (large topRight/bottomLeft)
+    final shape = RectangleShapeBorder(
+      borderRadius: DynamicBorderRadius.only(
+        topLeft: DynamicRadius.circular(Length(56)),
+        topRight: DynamicRadius.circular(Length(24)),
+        bottomLeft: DynamicRadius.circular(Length(24)),
+        bottomRight: DynamicRadius.circular(Length(56)),
+      ),
+    );
+
+    return ListenableBuilder(
+      listenable: GetIt.instance<TimerState>(),
+      builder: (context, _) {
+        final timerState = GetIt.instance<TimerState>();
+        final today = DateTime.now();
+        final todayDate = DateTime(today.year, today.month, today.day);
+        final taskCount = (timerState.entriesByDay[todayDate] ?? []).length;
+        final trackedTime = timerState.dailyTotal(todayDate);
+        final hasTime = trackedTime.inSeconds > 0;
+
+        return _PressButton(
+          onTap: () => appState.navigateToPage(4),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: ShapeDecoration(
+              color: Colors.white,
+              shape: shape,
+              shadows: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.07),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 16, 22, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '$taskCount',
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    Text(
+                      'Tasks today',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: Colors.grey.shade500,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    if (hasTime) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        _formatDurationShort(trackedTime),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: accentColor,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accentColor.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.timer_rounded,
+                    color: accentColor,
+                    size: 20,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // ─── Pinned Notes card ──────────────────────────────────────────────────────
-  // Mirrors ENJOY card shape: small topLeft/bottomRight, large topRight/bottomLeft
   Widget _buildPinnedNotesCard(
     BuildContext context,
     ThemeData theme,
@@ -331,7 +416,7 @@ class HomePage extends StatelessWidget {
       ),
     );
 
-    return GestureDetector(
+    return _PressButton(
       onTap: () => appState.navigateToPinnedNotes(),
       child: Container(
         clipBehavior: Clip.antiAlias,
@@ -349,8 +434,7 @@ class HomePage extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(28, 26, 28, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.max,
-          mainAxisAlignment: MainAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
@@ -392,10 +476,9 @@ class HomePage extends StatelessWidget {
 
             if (pinnedCount > 0) ...[
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
+                padding: const EdgeInsets.symmetric(vertical: 10),
                 child: Divider(color: Colors.grey.shade100, thickness: 1),
               ),
-              // Preview of first pinned note title
               Row(
                 children: [
                   Expanded(
@@ -425,6 +508,7 @@ class HomePage extends StatelessWidget {
     );
   }
 
+  // ─── New Note action button ─────────────────────────────────────────────────
   Widget _buildActionButton({
     required BuildContext context,
     required String label,
@@ -433,9 +517,8 @@ class HomePage extends StatelessWidget {
   }) {
     final theme = Theme.of(context);
 
-    return InkWell(
+    return _PressButton(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(30),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
@@ -477,4 +560,109 @@ class HomePage extends StatelessWidget {
       ),
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Static hero text — two lines of bold display text, no animation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeroText extends StatelessWidget {
+  final Color heroColor;
+  final ThemeData theme;
+  final List<Shadow> shadows;
+
+  const _HeroText({
+    required this.heroColor,
+    required this.theme,
+    required this.shadows,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'IMMERSE IN',
+          style: theme.textTheme.displaySmall?.copyWith(
+            color: heroColor,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 2,
+            shadows: shadows,
+          ),
+        ),
+        Text(
+          'YOUR NOTES',
+          style: theme.textTheme.displayMedium?.copyWith(
+            color: heroColor,
+            fontWeight: FontWeight.w900,
+            letterSpacing: 4,
+            shadows: shadows,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Press button — wraps any widget in a scale-down animation on tap, giving
+// satisfying tactile feedback without relying on InkWell's ink overlay.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _PressButton extends StatefulWidget {
+  final Widget child;
+  final VoidCallback? onTap;
+
+  /// How far the widget scales down while pressed (0.94 = 6 % smaller).
+  final double pressScale;
+
+  const _PressButton({
+    required this.child,
+    this.onTap,
+    this.pressScale = 0.94,
+  });
+
+  @override
+  State<_PressButton> createState() => _PressButtonState();
+}
+
+class _PressButtonState extends State<_PressButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: widget.onTap != null ? (_) => setState(() => _pressed = true) : null,
+      onTapUp: widget.onTap != null
+          ? (_) {
+              setState(() => _pressed = false);
+              widget.onTap!();
+            }
+          : null,
+      onTapCancel: () => setState(() => _pressed = false),
+      child: AnimatedScale(
+        scale: _pressed ? widget.pressScale : 1.0,
+        duration: const Duration(milliseconds: 100),
+        curve: Curves.easeOut,
+        child: widget.child,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Duration helpers (shared with timer page style)
+// ─────────────────────────────────────────────────────────────────────────────
+
+String _formatDurationShort(Duration d) {
+  if (d.inHours > 0) {
+    final m = d.inMinutes % 60;
+    return m > 0 ? '${d.inHours}h ${m}m' : '${d.inHours}h';
+  }
+  if (d.inMinutes > 0) {
+    return '${d.inMinutes}m';
+  }
+  return '${d.inSeconds}s';
 }

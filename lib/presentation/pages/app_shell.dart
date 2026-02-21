@@ -11,6 +11,7 @@ import 'note_editor_page.dart';
 import 'notes_list_page.dart';
 import 'calendar_page.dart';
 import 'settings_page.dart';
+import 'timer_page.dart';
 
 /// Corner radius used for the rounded window frame.
 const double _kWindowRadius = 14.0;
@@ -81,6 +82,27 @@ class _AppShellState extends State<AppShell> with WindowListener {
               child: _buildBackground(widget.themeState),
             ),
 
+            // ── Palette-loading indicator ───────────────────────────
+            // Fades in/out as a thin progress bar at the very top of the
+            // window while the accent color is being extracted from the
+            // newly selected background image.
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AnimatedOpacity(
+                opacity: widget.themeState.isPaletteLoading ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 350),
+                child: LinearProgressIndicator(
+                  backgroundColor: Colors.transparent,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    widget.themeState.accentColor.withValues(alpha: 0.85),
+                  ),
+                  minHeight: 3,
+                ),
+              ),
+            ),
+
             // ── Main layout ─────────────────────────────────────────
             Column(
               children: [
@@ -107,7 +129,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                               avatarUrl: widget.appState.userAvatar,
                               onNotificationTap: () {},
                               onProfileTap: () =>
-                                  widget.appState.navigateToPage(4),
+                                  widget.appState.navigateToPage(5),
                             ),
                             Expanded(
                               child: AnimatedSwitcher(
@@ -190,6 +212,12 @@ class _AppShellState extends State<AppShell> with WindowListener {
           themeState: widget.themeState,
         );
       case 4:
+        return TimerPage(
+          key: const ValueKey('timer'),
+          appState: widget.appState,
+          themeState: widget.themeState,
+        );
+      case 5:
         return SettingsPage(
           key: const ValueKey('settings'),
           appState: widget.appState,

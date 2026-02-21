@@ -21,8 +21,10 @@ class Sidebar extends StatelessWidget {
     (1, _SidebarItem(Icons.list_alt_rounded, 'Notes')),
     (2, _SidebarItem(Icons.edit_note_rounded, 'Editor')),
     (3, _SidebarItem(Icons.calendar_month_rounded, 'Calendar')),
+    (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
   ];
-  static const _settingsItem = (4, _SidebarItem(Icons.settings_rounded, 'Settings'));
+  static const _settingsItem =
+      (5, _SidebarItem(Icons.settings_rounded, 'Settings'));
 
   @override
   Widget build(BuildContext context) {
@@ -31,51 +33,107 @@ class Sidebar extends StatelessWidget {
       padding: const EdgeInsets.only(top: 48, bottom: 24),
       child: Column(
         children: [
-          // Top nav items: Home, Notes, Editor, Calendar
+          // Top nav items: Home, Notes, Editor, Calendar, Timer
           for (final (pageIndex, item) in _navItems)
-            _buildNavItem(pageIndex, item, context),
+            _NavButton(
+              pageIndex: pageIndex,
+              item: item,
+              isSelected: selectedIndex == pageIndex,
+              accentColor: accentColor,
+              onTap: () => onItemSelected(pageIndex),
+            ),
 
           const Spacer(),
 
           // Bottom item: Settings
-          _buildNavItem(_settingsItem.$1, _settingsItem.$2, context),
+          _NavButton(
+            pageIndex: _settingsItem.$1,
+            item: _settingsItem.$2,
+            isSelected: selectedIndex == _settingsItem.$1,
+            accentColor: accentColor,
+            onTap: () => onItemSelected(_settingsItem.$1),
+          ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildNavItem(int pageIndex, _SidebarItem item, BuildContext context) {
-    final isSelected = selectedIndex == pageIndex;
+// ─────────────────────────────────────────────────────────────────────────────
+// Single nav button — uses MouseRegion so hover state is fully controlled
+// and never leaks through the InkWell splash/hover overlay.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _NavButton extends StatefulWidget {
+  final int pageIndex;
+  final _SidebarItem item;
+  final bool isSelected;
+  final Color accentColor;
+  final VoidCallback onTap;
+
+  const _NavButton({
+    required this.pageIndex,
+    required this.item,
+    required this.isSelected,
+    required this.accentColor,
+    required this.onTap,
+  });
+
+  @override
+  State<_NavButton> createState() => _NavButtonState();
+}
+
+class _NavButtonState extends State<_NavButton> {
+  bool _hovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isSelected = widget.isSelected;
+    final accent = widget.accentColor;
+
+    // Tint the circle slightly on hover (unselected only).
+    final circleColor = isSelected
+        ? accent
+        : (_hovered
+            ? Colors.white.withValues(alpha: 0.88)
+            : Colors.white);
+
+    final shadowColor = isSelected
+        ? accent.withValues(alpha: 0.35)
+        : Colors.black.withValues(alpha: _hovered ? 0.14 : 0.08);
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Tooltip(
-        message: item.label,
+        message: widget.item.label,
         preferBelow: false,
         waitDuration: const Duration(milliseconds: 600),
-        child: InkWell(
-          onTap: () => onItemSelected(pageIndex),
-          borderRadius: BorderRadius.circular(24),
-          child: Container(
-            width: 46,
-            height: 46,
-            decoration: BoxDecoration(
-              color: isSelected ? accentColor : Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: isSelected
-                      ? accentColor.withValues(alpha: 0.35)
-                      : Colors.black.withValues(alpha: 0.08),
-                  blurRadius: isSelected ? 12 : 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Icon(
-              item.icon,
-              color: isSelected ? Colors.white : Colors.grey.shade500,
-              size: 22,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hovered = true),
+          onExit: (_) => setState(() => _hovered = false),
+          child: GestureDetector(
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: 46,
+              height: 46,
+              decoration: BoxDecoration(
+                color: circleColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: shadowColor,
+                    blurRadius: isSelected ? 12 : (_hovered ? 8 : 6),
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Icon(
+                widget.item.icon,
+                color: isSelected ? Colors.white : Colors.grey.shade500,
+                size: 22,
+              ),
             ),
           ),
         ),

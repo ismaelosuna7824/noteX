@@ -8,7 +8,7 @@ import '../state/theme_state.dart';
 /// Settings page for theme, font, background, and auth management.
 ///
 /// Uses white card design consistent with the rest of the app.
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
@@ -17,6 +17,25 @@ class SettingsPage extends StatelessWidget {
     required this.appState,
     required this.themeState,
   });
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  /// Persistent controller for the horizontal preset-image strip.
+  /// Kept alive so the Scrollbar always has a valid scroll position.
+  final ScrollController _bgScrollController = ScrollController();
+
+  @override
+  void dispose() {
+    _bgScrollController.dispose();
+    super.dispose();
+  }
+
+  // Convenience getters to keep build methods tidy.
+  AppState get appState => widget.appState;
+  ThemeState get themeState => widget.themeState;
 
   @override
   Widget build(BuildContext context) {
@@ -363,9 +382,11 @@ class SettingsPage extends StatelessWidget {
             ),
             child: Scrollbar(
               thumbVisibility: true,
+              controller: _bgScrollController,
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: ListView.separated(
+                  controller: _bgScrollController,
                   scrollDirection: Axis.horizontal,
                   itemCount: ThemeState.presetBackgrounds.length + 1,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
