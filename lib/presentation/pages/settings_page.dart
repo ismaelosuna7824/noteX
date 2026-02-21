@@ -5,9 +5,12 @@ import 'package:file_picker/file_picker.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 
+/// Dark-mode card surface — same navy used across the app.
+const _kDarkCard = Color(0xFF1A1A2E);
+
 /// Settings page for theme, font, background, and auth management.
 ///
-/// Uses white card design consistent with the rest of the app.
+/// Uses adaptive card design: light white in light mode, dark navy in dark mode.
 class SettingsPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
@@ -40,7 +43,15 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final accentColor = themeState.accentColor;
+
+    // Adaptive colors used in inner items (font rows, account box, etc.)
+    final innerBg =
+        isDark ? Colors.white.withValues(alpha: 0.07) : Colors.grey.shade50;
+    final innerBorder =
+        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade200;
+    final mutedText = isDark ? Colors.white38 : Colors.grey.shade500;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -68,6 +79,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       // Accent Color
                       _buildSection(
                         context,
+                        isDark: isDark,
                         title: 'Accent Color',
                         icon: Icons.palette_rounded,
                         accentColor: accentColor,
@@ -153,6 +165,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       // Background Image
                       _buildSection(
                         context,
+                        isDark: isDark,
                         title: 'Background Image',
                         icon: Icons.image_rounded,
                         accentColor: accentColor,
@@ -171,6 +184,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       // Font Family
                       _buildSection(
                         context,
+                        isDark: isDark,
                         title: 'Font Family',
                         icon: Icons.text_fields_rounded,
                         accentColor: accentColor,
@@ -190,12 +204,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                   decoration: BoxDecoration(
                                     color: isSelected
                                         ? accentColor.withValues(alpha: 0.08)
-                                        : Colors.grey.shade50,
+                                        : innerBg,
                                     borderRadius: BorderRadius.circular(10),
                                     border: Border.all(
                                       color: isSelected
                                           ? accentColor
-                                          : Colors.grey.shade200,
+                                          : innerBorder,
                                     ),
                                   ),
                                   child: Row(
@@ -206,8 +220,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                           fontWeight: isSelected
                                               ? FontWeight.w600
                                               : FontWeight.w400,
-                                          color:
-                                              isSelected ? accentColor : null,
+                                          color: isSelected
+                                              ? accentColor
+                                              : null,
                                           fontSize: 14,
                                         ),
                                       ),
@@ -229,6 +244,7 @@ class _SettingsPageState extends State<SettingsPage> {
                       // Account & Sync
                       _buildSection(
                         context,
+                        isDark: isDark,
                         title: 'Account & Sync',
                         icon: Icons.cloud_sync_rounded,
                         accentColor: accentColor,
@@ -237,10 +253,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             Container(
                               padding: const EdgeInsets.all(20),
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
+                                color: innerBg,
                                 borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                    color: Colors.grey.shade200),
+                                border: Border.all(color: innerBorder),
                               ),
                               child: Column(
                                 children: [
@@ -271,7 +286,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                         ? 'Notes synced to cloud'
                                         : 'Sign in to sync across devices',
                                     style: TextStyle(
-                                        color: Colors.grey.shade500,
+                                        color: mutedText,
                                         fontSize: 12),
                                     textAlign: TextAlign.center,
                                   ),
@@ -324,10 +339,9 @@ class _SettingsPageState extends State<SettingsPage> {
                             // Dark mode toggle
                             Container(
                               decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
+                                color: innerBg,
                                 borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                    color: Colors.grey.shade200),
+                                border: Border.all(color: innerBorder),
                               ),
                               child: SwitchListTile(
                                 title: const Text('Dark Mode',
@@ -335,7 +349,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 subtitle: Text('Toggle dark theme',
                                     style: TextStyle(
                                         fontSize: 12,
-                                        color: Colors.grey.shade500)),
+                                        color: mutedText)),
                                 value: themeState.isDarkMode,
                                 onChanged: (_) =>
                                     themeState.toggleDarkMode(),
@@ -491,6 +505,7 @@ class _SettingsPageState extends State<SettingsPage> {
 
   Widget _buildSection(
     BuildContext context, {
+    required bool isDark,
     required String title,
     required IconData icon,
     required Color accentColor,
@@ -498,12 +513,17 @@ class _SettingsPageState extends State<SettingsPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.92),
+        color: isDark
+            ? _kDarkCard.withValues(alpha: 0.90)
+            : Colors.white.withValues(alpha: 0.92),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200, width: 1),
+        border: Border.all(
+          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade200,
+          width: 1,
+        ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
             blurRadius: 12,
             offset: const Offset(0, 2),
           ),

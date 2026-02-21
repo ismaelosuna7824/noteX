@@ -4,9 +4,12 @@ import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../../domain/entities/note.dart';
 
+/// Dark-mode card surface — same as home page for visual consistency.
+const _kDarkCard = Color(0xFF1A1A2E);
+
 /// Calendar view for navigating notes by date.
 ///
-/// Uses white card design matching the editor style.
+/// Uses adaptive card design: light white in light mode, dark navy in dark mode.
 class CalendarPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
@@ -54,6 +57,7 @@ class _CalendarPageState extends State<CalendarPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
+          final isDark = Theme.of(ctx).brightness == Brightness.dark;
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             contentPadding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
@@ -107,7 +111,10 @@ class _CalendarPageState extends State<CalendarPage> {
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
-                          color: isSelected ? Colors.white : Colors.black87,
+                          // Selected always white; unselected adapts to mode
+                          color: isSelected
+                              ? Colors.white
+                              : (isDark ? Colors.white70 : Colors.black87),
                         ),
                       ),
                     ),
@@ -124,6 +131,7 @@ class _CalendarPageState extends State<CalendarPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final accentColor = widget.themeState.accentColor;
     final selectedNotes =
         _selectedDay != null ? _getNotesForDay(_selectedDay!) : <Note>[];
@@ -131,25 +139,40 @@ class _CalendarPageState extends State<CalendarPage> {
     final isCurrentMonth =
         _focusedDay.year == now.year && _focusedDay.month == now.month;
 
+    // Adaptive surface colors
+    final cardColor =
+        isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white.withValues(alpha: 0.95);
+    final cardBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.grey.shade200;
+    final cardShadow = Colors.black.withValues(alpha: isDark ? 0.30 : 0.04);
+    final innerItemBg =
+        isDark ? Colors.white.withValues(alpha: 0.07) : Colors.grey.shade50;
+    final innerItemBorder =
+        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade200;
+    final dividerColor =
+        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade200;
+    final emptyIconColor =
+        isDark ? Colors.white.withValues(alpha: 0.20) : Colors.grey.shade300;
+    final emptyTextColor =
+        isDark ? Colors.white.withValues(alpha: 0.40) : Colors.grey.shade400;
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Calendar in a white card
+          // Calendar card
           Expanded(
             flex: 3,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.95),
+                color: cardColor,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.grey.shade200,
-                  width: 1,
-                ),
+                border: Border.all(color: cardBorder, width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
+                    color: cardShadow,
                     blurRadius: 12,
                     offset: const Offset(0, 2),
                   ),
@@ -160,128 +183,168 @@ class _CalendarPageState extends State<CalendarPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   TableCalendar<Note>(
-                firstDay: DateTime.utc(2020, 1, 1),
-                lastDay: DateTime.utc(2030, 12, 31),
-                focusedDay: _focusedDay,
-                selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
-                calendarFormat: _calendarFormat,
-                eventLoader: _getNotesForDay,
-                startingDayOfWeek: StartingDayOfWeek.monday,
-                onDaySelected: (selectedDay, focusedDay) {
-                  setState(() {
-                    _selectedDay = selectedDay;
-                    _focusedDay = focusedDay;
-                  });
+                    firstDay: DateTime.utc(2020, 1, 1),
+                    lastDay: DateTime.utc(2030, 12, 31),
+                    focusedDay: _focusedDay,
+                    selectedDayPredicate: (day) => isSameDay(_selectedDay, day),
+                    calendarFormat: _calendarFormat,
+                    eventLoader: _getNotesForDay,
+                    startingDayOfWeek: StartingDayOfWeek.monday,
+                    onDaySelected: (selectedDay, focusedDay) {
+                      setState(() {
+                        _selectedDay = selectedDay;
+                        _focusedDay = focusedDay;
+                      });
 
-                  final notes = _getNotesForDay(selectedDay);
-                  if (notes.isNotEmpty) {
-                    widget.appState.previewNote(notes.first);
-                  }
-                },
-                onFormatChanged: (format) {
-                  setState(() => _calendarFormat = format);
-                },
-                onPageChanged: (focusedDay) {
-                  setState(() => _focusedDay = focusedDay);
-                },
-                onHeaderTapped: (_) => _showMonthYearPicker(context, accentColor),
-                calendarStyle: CalendarStyle(
-                  todayDecoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.3),
-                    shape: BoxShape.circle,
-                  ),
-                  selectedDecoration: BoxDecoration(
-                    color: accentColor,
-                    shape: BoxShape.circle,
-                  ),
-                  markerDecoration: BoxDecoration(
-                    color: accentColor.withValues(alpha: 0.7),
-                    shape: BoxShape.circle,
-                  ),
-                  markerSize: 6,
-                  markersMaxCount: 1,
-                  outsideDaysVisible: false,
-                ),
-                headerStyle: HeaderStyle(
-                  formatButtonDecoration: BoxDecoration(
-                    border: Border.all(color: accentColor),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  formatButtonTextStyle: TextStyle(color: accentColor),
-                  titleCentered: true,
-                  titleTextStyle: theme.textTheme.titleLarge!.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                calendarBuilders: CalendarBuilders(
-                  headerTitleBuilder: (context, day) {
-                    return GestureDetector(
-                      onTap: () => _showMonthYearPicker(context, accentColor),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(
-                            '${_monthNames[day.month - 1]} ${day.year}',
-                            style: theme.textTheme.titleLarge!.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Icon(
-                            Icons.arrow_drop_down_rounded,
-                            color: accentColor,
-                            size: 22,
-                          ),
-                        ],
+                      final notes = _getNotesForDay(selectedDay);
+                      if (notes.isNotEmpty) {
+                        widget.appState.previewNote(notes.first);
+                      }
+                    },
+                    onFormatChanged: (format) {
+                      setState(() => _calendarFormat = format);
+                    },
+                    onPageChanged: (focusedDay) {
+                      setState(() => _focusedDay = focusedDay);
+                    },
+                    onHeaderTapped: (_) => _showMonthYearPicker(context, accentColor),
+                    calendarStyle: CalendarStyle(
+                      todayDecoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.3),
+                        shape: BoxShape.circle,
                       ),
-                    );
-                  },
-                ),
-              ),
-              // "Today" button — only visible when away from current month
-              AnimatedSize(
-                duration: const Duration(milliseconds: 200),
-                curve: Curves.easeInOut,
-                child: isCurrentMonth
-                    ? const SizedBox.shrink()
-                    : Padding(
-                        padding: const EdgeInsets.only(top: 12),
-                        child: GestureDetector(
-                          onTap: () => setState(() {
-                            _focusedDay = now;
-                            _selectedDay = now;
-                          }),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: accentColor.withValues(alpha: 0.12),
-                              borderRadius: BorderRadius.circular(30),
-                              border: Border.all(
-                                color: accentColor.withValues(alpha: 0.3),
+                      selectedDecoration: BoxDecoration(
+                        color: accentColor,
+                        shape: BoxShape.circle,
+                      ),
+                      markerDecoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.7),
+                        shape: BoxShape.circle,
+                      ),
+                      markerSize: 6,
+                      markersMaxCount: 1,
+                      outsideDaysVisible: false,
+                      // Adapt day text colors to mode
+                      defaultTextStyle: TextStyle(
+                        color: isDark ? Colors.white : Colors.black87,
+                      ),
+                      weekendTextStyle: TextStyle(
+                        color: isDark ? Colors.white60 : Colors.grey.shade700,
+                      ),
+                      todayTextStyle: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      selectedTextStyle: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      outsideTextStyle: TextStyle(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.20)
+                            : Colors.grey.shade300,
+                      ),
+                      disabledTextStyle: TextStyle(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.20)
+                            : Colors.grey.shade300,
+                      ),
+                      weekNumberTextStyle: TextStyle(
+                        color: isDark ? Colors.white38 : Colors.grey.shade400,
+                      ),
+                    ),
+                    daysOfWeekStyle: DaysOfWeekStyle(
+                      weekdayStyle: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white54 : Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                      weekendStyle: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        color: isDark ? Colors.white38 : Colors.grey.shade500,
+                        fontSize: 12,
+                      ),
+                    ),
+                    headerStyle: HeaderStyle(
+                      formatButtonDecoration: BoxDecoration(
+                        border: Border.all(color: accentColor),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      formatButtonTextStyle: TextStyle(color: accentColor),
+                      titleCentered: true,
+                      titleTextStyle: theme.textTheme.titleLarge!.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    calendarBuilders: CalendarBuilders(
+                      headerTitleBuilder: (context, day) {
+                        return GestureDetector(
+                          onTap: () => _showMonthYearPicker(context, accentColor),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                '${_monthNames[day.month - 1]} ${day.year}',
+                                style: theme.textTheme.titleLarge!.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.today_rounded,
-                                    size: 16, color: accentColor),
-                                const SizedBox(width: 6),
-                                Text(
-                                  'Back to Today',
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w600,
-                                    color: accentColor,
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.arrow_drop_down_rounded,
+                                color: accentColor,
+                                size: 22,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  // "Today" button — only visible when away from current month
+                  AnimatedSize(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeInOut,
+                    child: isCurrentMonth
+                        ? const SizedBox.shrink()
+                        : Padding(
+                            padding: const EdgeInsets.only(top: 12),
+                            child: GestureDetector(
+                              onTap: () => setState(() {
+                                _focusedDay = now;
+                                _selectedDay = now;
+                              }),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: accentColor.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(30),
+                                  border: Border.all(
+                                    color: accentColor.withValues(alpha: 0.3),
                                   ),
                                 ),
-                              ],
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.today_rounded,
+                                        size: 16, color: accentColor),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Back to Today',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: accentColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      ),
-              ),
+                  ),
                 ],
               ),
             ),
@@ -289,20 +352,17 @@ class _CalendarPageState extends State<CalendarPage> {
 
           const SizedBox(width: 16),
 
-          // Selected day notes in a white card
+          // Selected day notes panel
           Expanded(
             flex: 2,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.92),
+                color: cardColor,
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: Colors.grey.shade200,
-                  width: 1,
-                ),
+                border: Border.all(color: cardBorder, width: 1),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.04),
+                    color: cardShadow,
                     blurRadius: 12,
                     offset: const Offset(0, 2),
                   ),
@@ -331,7 +391,7 @@ class _CalendarPageState extends State<CalendarPage> {
                     ],
                   ),
                   const SizedBox(height: 4),
-                  Divider(color: Colors.grey.shade200),
+                  Divider(color: dividerColor),
                   const SizedBox(height: 8),
                   Expanded(
                     child: selectedNotes.isEmpty
@@ -342,13 +402,12 @@ class _CalendarPageState extends State<CalendarPage> {
                                 Icon(
                                   Icons.event_note_outlined,
                                   size: 48,
-                                  color: Colors.grey.shade300,
+                                  color: emptyIconColor,
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
                                   'No notes for this day',
-                                  style:
-                                      TextStyle(color: Colors.grey.shade400),
+                                  style: TextStyle(color: emptyTextColor),
                                 ),
                                 const SizedBox(height: 16),
                                 FilledButton.icon(
@@ -361,8 +420,7 @@ class _CalendarPageState extends State<CalendarPage> {
                                   style: FilledButton.styleFrom(
                                     backgroundColor: accentColor,
                                     shape: RoundedRectangleBorder(
-                                      borderRadius:
-                                          BorderRadius.circular(12),
+                                      borderRadius: BorderRadius.circular(12),
                                     ),
                                   ),
                                 ),
@@ -384,10 +442,10 @@ class _CalendarPageState extends State<CalendarPage> {
                                 child: Container(
                                   padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: Colors.grey.shade50,
+                                    color: innerItemBg,
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: Colors.grey.shade200,
+                                      color: innerItemBorder,
                                       width: 1,
                                     ),
                                   ),
@@ -411,7 +469,9 @@ class _CalendarPageState extends State<CalendarPage> {
                                             Text(
                                               'Updated: ${note.updatedAt.hour}:${note.updatedAt.minute.toString().padLeft(2, '0')}',
                                               style: TextStyle(
-                                                color: Colors.grey.shade500,
+                                                color: isDark
+                                                    ? Colors.white38
+                                                    : Colors.grey.shade500,
                                                 fontSize: 12,
                                               ),
                                             ),

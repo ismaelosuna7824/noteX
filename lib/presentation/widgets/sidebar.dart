@@ -131,7 +131,12 @@ class _NavButtonState extends State<_NavButton> {
               ),
               child: Icon(
                 widget.item.icon,
-                color: isSelected ? Colors.white : Colors.grey.shade500,
+                // Selected → always white; unselected adapts slightly by mode.
+                color: isSelected
+                    ? Colors.white
+                    : (Theme.of(context).brightness == Brightness.dark
+                        ? Colors.grey.shade400
+                        : Colors.grey.shade600),
                 size: 22,
               ),
             ),

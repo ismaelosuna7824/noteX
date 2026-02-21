@@ -10,7 +10,8 @@
       "WebFetch(domain:pub.dev)",
       "Bash(flutter clean:*)",
       "Bash(flutter --version:*)",
-      "Bash(dart run build_runner build:*)"
+      "Bash(dart run build_runner build:*)",
+      "Bash(ls -la \"D:\\\\Git\\\\NoteX\\\\notex\\\\lib\\\\data\"\" 2>/dev/null || echo \"data directory not found \")"
     ]
   }
 }

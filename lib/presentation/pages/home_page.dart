@@ -5,6 +5,10 @@ import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 
+/// Dark-mode card surface — deep navy, slightly transparent so the bg image
+/// shows through subtly.
+const _kDarkCard = Color(0xFF1A1A2E);
+
 /// Home/Dashboard page.
 ///
 /// Large hero area with background image, bold title text,
@@ -69,6 +73,7 @@ class HomePage extends StatelessWidget {
     ThemeData theme,
     Color accentColor,
   ) {
+    final isDark = theme.brightness == Brightness.dark;
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -76,7 +81,7 @@ class HomePage extends StatelessWidget {
           // "Explore, Write, and ENJOY" organic card (left)
           Expanded(
             flex: 3,
-            child: _buildEnjoyCard(context, theme, accentColor),
+            child: _buildEnjoyCard(context, theme, accentColor, isDark),
           ),
 
           const SizedBox(width: 16),
@@ -84,7 +89,7 @@ class HomePage extends StatelessWidget {
           // Combined "Total Notes + Today's Note" organic card (center)
           Expanded(
             flex: 2,
-            child: _buildCombinedStatsCard(context, theme, accentColor),
+            child: _buildCombinedStatsCard(context, theme, accentColor, isDark),
           ),
 
           const SizedBox(width: 16),
@@ -112,6 +117,7 @@ class HomePage extends StatelessWidget {
     BuildContext context,
     ThemeData theme,
     Color accentColor,
+    bool isDark,
   ) {
     final shape = RectangleShapeBorder(
       borderRadius: DynamicBorderRadius.only(
@@ -125,11 +131,13 @@ class HomePage extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: ShapeDecoration(
-        color: Colors.white.withValues(alpha: 0.94),
+        color: isDark
+            ? _kDarkCard.withValues(alpha: 0.90)
+            : Colors.white.withValues(alpha: 0.94),
         shape: shape,
         shadows: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -145,7 +153,7 @@ class HomePage extends StatelessWidget {
             'Explore, Write, and',
             style: theme.textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w500,
-              color: Colors.black54,
+              color: isDark ? Colors.white54 : Colors.black54,
             ),
           ),
           Text(
@@ -153,7 +161,7 @@ class HomePage extends StatelessWidget {
             style: theme.textTheme.headlineLarge?.copyWith(
               fontWeight: FontWeight.w900,
               letterSpacing: 3,
-              color: Colors.black87,
+              color: isDark ? Colors.white : Colors.black87,
             ),
           ),
           const SizedBox(height: 20),
@@ -161,6 +169,7 @@ class HomePage extends StatelessWidget {
             context: context,
             label: 'New Note',
             accentColor: accentColor,
+            isDark: isDark,
             onTap: () async {
               await appState.createNewNote();
               appState.navigateToPage(2);
@@ -176,6 +185,7 @@ class HomePage extends StatelessWidget {
     BuildContext context,
     ThemeData theme,
     Color accentColor,
+    bool isDark,
   ) {
     final shape = RectangleShapeBorder(
       borderRadius: DynamicBorderRadius.only(
@@ -189,14 +199,19 @@ class HomePage extends StatelessWidget {
     final hasTodayNote = appState.currentNote != null;
     final totalNotes = appState.notes.length;
 
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+    final dividerColor =
+        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade100;
+
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: ShapeDecoration(
-        color: Colors.white,
+        color: isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white,
         shape: shape,
         shadows: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.07),
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
             blurRadius: 20,
             offset: const Offset(0, 6),
           ),
@@ -219,13 +234,13 @@ class HomePage extends StatelessWidget {
                     '$totalNotes',
                     style: theme.textTheme.headlineLarge?.copyWith(
                       fontWeight: FontWeight.w900,
-                      color: Colors.black87,
+                      color: primaryText,
                     ),
                   ),
                   Text(
                     'Total Notes',
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade500,
+                      color: secondaryText,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -249,7 +264,7 @@ class HomePage extends StatelessWidget {
 
           Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Divider(color: Colors.grey.shade100, thickness: 1),
+            child: Divider(color: dividerColor, thickness: 1),
           ),
 
           // ── Today's Note ─────────────────────────────────────────
@@ -263,13 +278,13 @@ class HomePage extends StatelessWidget {
                     hasTodayNote ? '1' : '0',
                     style: theme.textTheme.headlineLarge?.copyWith(
                       fontWeight: FontWeight.w900,
-                      color: Colors.black87,
+                      color: primaryText,
                     ),
                   ),
                   Text(
                     "Today's Note",
                     style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade500,
+                      color: secondaryText,
                       fontWeight: FontWeight.w500,
                     ),
                   ),
@@ -284,14 +299,18 @@ class HomePage extends StatelessWidget {
                   decoration: BoxDecoration(
                     color: hasTodayNote
                         ? accentColor.withValues(alpha: 0.15)
-                        : Colors.grey.shade100,
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : Colors.grey.shade100),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
                     hasTodayNote
                         ? Icons.north_east_rounded
                         : Icons.today_rounded,
-                    color: hasTodayNote ? accentColor : Colors.grey.shade400,
+                    color: hasTodayNote
+                        ? accentColor
+                        : (isDark ? Colors.white38 : Colors.grey.shade400),
                     size: 20,
                   ),
                 ),
@@ -322,6 +341,7 @@ class HomePage extends StatelessWidget {
     return ListenableBuilder(
       listenable: GetIt.instance<TimerState>(),
       builder: (context, _) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final timerState = GetIt.instance<TimerState>();
         final today = DateTime.now();
         final todayDate = DateTime(today.year, today.month, today.day);
@@ -329,16 +349,19 @@ class HomePage extends StatelessWidget {
         final trackedTime = timerState.dailyTotal(todayDate);
         final hasTime = trackedTime.inSeconds > 0;
 
+        final primaryText = isDark ? Colors.white : Colors.black87;
+        final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+
         return _PressButton(
           onTap: () => appState.navigateToPage(4),
           child: Container(
             clipBehavior: Clip.antiAlias,
             decoration: ShapeDecoration(
-              color: Colors.white,
+              color: isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white,
               shape: shape,
               shadows: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.07),
+                  color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
                   blurRadius: 20,
                   offset: const Offset(0, 6),
                 ),
@@ -356,13 +379,13 @@ class HomePage extends StatelessWidget {
                       '$taskCount',
                       style: theme.textTheme.headlineLarge?.copyWith(
                         fontWeight: FontWeight.w900,
-                        color: Colors.black87,
+                        color: primaryText,
                       ),
                     ),
                     Text(
                       'Tasks today',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
+                        color: secondaryText,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -405,6 +428,7 @@ class HomePage extends StatelessWidget {
     ThemeData theme,
     Color accentColor,
   ) {
+    final isDark = theme.brightness == Brightness.dark;
     final pinnedCount = appState.pinnedNotes.length;
 
     final shape = RectangleShapeBorder(
@@ -416,16 +440,22 @@ class HomePage extends StatelessWidget {
       ),
     );
 
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+    final subtitleText = isDark ? Colors.white60 : Colors.grey.shade600;
+    final dividerColor =
+        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade100;
+
     return _PressButton(
       onTap: () => appState.navigateToPinnedNotes(),
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: ShapeDecoration(
-          color: Colors.white,
+          color: isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white,
           shape: shape,
           shadows: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.07),
+              color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
               blurRadius: 20,
               offset: const Offset(0, 6),
             ),
@@ -446,13 +476,13 @@ class HomePage extends StatelessWidget {
                       '$pinnedCount',
                       style: theme.textTheme.headlineLarge?.copyWith(
                         fontWeight: FontWeight.w900,
-                        color: Colors.black87,
+                        color: primaryText,
                       ),
                     ),
                     Text(
                       'Pinned Notes',
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade500,
+                        color: secondaryText,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -477,7 +507,7 @@ class HomePage extends StatelessWidget {
             if (pinnedCount > 0) ...[
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Divider(color: Colors.grey.shade100, thickness: 1),
+                child: Divider(color: dividerColor, thickness: 1),
               ),
               Row(
                 children: [
@@ -487,7 +517,7 @@ class HomePage extends StatelessWidget {
                           ? 'Untitled'
                           : appState.pinnedNotes.first.title,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: Colors.grey.shade600,
+                        color: subtitleText,
                         fontWeight: FontWeight.w500,
                       ),
                       maxLines: 1,
@@ -514,6 +544,7 @@ class HomePage extends StatelessWidget {
     required String label,
     required Color accentColor,
     required VoidCallback onTap,
+    bool isDark = false,
   }) {
     final theme = Theme.of(context);
 
@@ -522,15 +553,17 @@ class HomePage extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white,
           borderRadius: BorderRadius.circular(30),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -539,7 +572,7 @@ class HomePage extends StatelessWidget {
               label,
               style: theme.textTheme.bodyLarge?.copyWith(
                 fontWeight: FontWeight.w700,
-                color: Colors.black87,
+                color: isDark ? Colors.white : Colors.black87,
               ),
             ),
             const SizedBox(width: 10),

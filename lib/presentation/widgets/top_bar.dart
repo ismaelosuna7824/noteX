@@ -208,6 +208,22 @@ class _TopBarState extends State<TopBar> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // In dark mode use a slightly dark frosted glass; in light mode keep white.
+    final pillColor = isDark
+        ? Colors.black.withValues(alpha: 0.35)
+        : Colors.white.withValues(alpha: 0.85);
+    final pillShadow = isDark
+        ? Colors.black.withValues(alpha: 0.20)
+        : Colors.black.withValues(alpha: 0.06);
+    final textColor = isDark ? Colors.white : Colors.grey.shade800;
+    final iconColor = isDark ? Colors.white70 : Colors.grey.shade600;
+    final hintColor = isDark ? Colors.white38 : Colors.grey.shade400;
+    final avatarBg = isDark
+        ? Colors.white.withValues(alpha: 0.15)
+        : Colors.grey.shade200;
+    final avatarIconColor = isDark ? Colors.white60 : Colors.grey.shade500;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
@@ -232,20 +248,20 @@ class _TopBarState extends State<TopBar> {
                 controller: _searchController,
                 focusNode: _searchFocusNode,
                 onChanged: _onSearchChanged,
-                style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+                style: TextStyle(color: textColor, fontSize: 14),
                 decoration: InputDecoration(
                   hintText: 'Search notes...',
                   hintStyle: TextStyle(
-                    color: Colors.grey.shade400,
+                    color: hintColor,
                     fontSize: 14,
                   ),
                   prefixIcon: Icon(
                     Icons.search_rounded,
-                    color: Colors.grey.shade400,
+                    color: hintColor,
                     size: 20,
                   ),
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.85),
+                  fillColor: pillColor,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(30),
                     borderSide: BorderSide.none,
@@ -270,11 +286,11 @@ class _TopBarState extends State<TopBar> {
             height: 42,
             width: 42,
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.85),
+              color: pillColor,
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.06),
+                  color: pillShadow,
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
@@ -283,7 +299,7 @@ class _TopBarState extends State<TopBar> {
             child: IconButton(
               onPressed: widget.onNotificationTap,
               icon: Icon(Icons.notifications_none_rounded,
-                  size: 20, color: Colors.grey.shade600),
+                  size: 20, color: iconColor),
               padding: EdgeInsets.zero,
             ),
           ),
@@ -298,11 +314,11 @@ class _TopBarState extends State<TopBar> {
               height: 42,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.85),
+                color: pillColor,
                 borderRadius: BorderRadius.circular(30),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
+                    color: pillShadow,
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -317,13 +333,13 @@ class _TopBarState extends State<TopBar> {
                         : 'Sign In',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade800,
+                      color: textColor,
                     ),
                   ),
                   const SizedBox(width: 8),
                   CircleAvatar(
                     radius: 14,
-                    backgroundColor: Colors.grey.shade200,
+                    backgroundColor: avatarBg,
                     backgroundImage: widget.avatarUrl != null
                         ? NetworkImage(widget.avatarUrl!)
                         : null,
@@ -331,7 +347,7 @@ class _TopBarState extends State<TopBar> {
                         ? Icon(
                             Icons.person_rounded,
                             size: 16,
-                            color: Colors.grey.shade500,
+                            color: avatarIconColor,
                           )
                         : null,
                   ),
