@@ -5,6 +5,8 @@ import 'domain/repositories/note_repository.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/project_repository.dart';
 import 'domain/repositories/time_entry_repository.dart';
+import 'domain/repositories/markdown_file_repository.dart';
+import 'domain/repositories/markdown_project_repository.dart';
 import 'domain/services/sync_service.dart';
 import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
@@ -13,6 +15,8 @@ import 'infrastructure/local/database.dart';
 import 'infrastructure/local/drift_note_repository.dart';
 import 'infrastructure/local/drift_project_repository.dart';
 import 'infrastructure/local/drift_time_entry_repository.dart';
+import 'infrastructure/local/drift_markdown_file_repository.dart';
+import 'infrastructure/local/drift_markdown_project_repository.dart';
 import 'infrastructure/auth/supabase_auth_adapter.dart';
 import 'infrastructure/supabase/supabase_sync_adapter.dart';
 import 'infrastructure/network/connectivity_adapter.dart';
@@ -32,12 +36,21 @@ import 'application/use_cases/timer/stop_timer_use_case.dart';
 import 'application/use_cases/timer/get_time_entries_use_case.dart';
 import 'application/use_cases/timer/delete_time_entry_use_case.dart';
 import 'application/use_cases/timer/update_time_entry_use_case.dart';
+import 'application/use_cases/markdown/create_markdown_file_use_case.dart';
+import 'application/use_cases/markdown/update_markdown_file_use_case.dart';
+import 'application/use_cases/markdown/get_markdown_files_use_case.dart';
+import 'application/use_cases/markdown/delete_markdown_file_use_case.dart';
+import 'application/use_cases/markdown/create_markdown_project_use_case.dart';
+import 'application/use_cases/markdown/get_markdown_projects_use_case.dart';
+import 'application/use_cases/markdown/delete_markdown_project_use_case.dart';
 import 'application/services/auto_save_service.dart';
+import 'application/services/markdown_auto_save_service.dart';
 import 'application/services/sync_engine.dart';
 
 import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
+import 'presentation/state/markdown_state.dart';
 
 final getIt = GetIt.instance;
 
@@ -84,6 +97,14 @@ Future<void> setupDependencies() async {
     DriftTimeEntryRepository(database),
   );
 
+  // Infrastructure - Markdown Repositories
+  getIt.registerSingleton<MarkdownFileRepository>(
+    DriftMarkdownFileRepository(database),
+  );
+  getIt.registerSingleton<MarkdownProjectRepository>(
+    DriftMarkdownProjectRepository(database),
+  );
+
   // Infrastructure - Sync Service (Supabase adapter)
   getIt.registerSingleton<SyncService>(
     SupabaseSyncAdapter(
@@ -92,6 +113,8 @@ Future<void> setupDependencies() async {
       noteRepo: getIt<NoteRepository>(),
       projectRepo: getIt<ProjectRepository>(),
       timeEntryRepo: getIt<TimeEntryRepository>(),
+      mdFileRepo: getIt<MarkdownFileRepository>(),
+      mdProjectRepo: getIt<MarkdownProjectRepository>(),
     ),
   );
 
@@ -142,6 +165,36 @@ Future<void> setupDependencies() async {
     () => UpdateTimeEntryUseCase(getIt<TimeEntryRepository>()),
   );
 
+  // Application - Markdown Use Cases
+  getIt.registerFactory<CreateMarkdownFileUseCase>(
+    () => CreateMarkdownFileUseCase(getIt<MarkdownFileRepository>()),
+  );
+  getIt.registerFactory<UpdateMarkdownFileUseCase>(
+    () => UpdateMarkdownFileUseCase(getIt<MarkdownFileRepository>()),
+  );
+  getIt.registerFactory<GetMarkdownFilesUseCase>(
+    () => GetMarkdownFilesUseCase(getIt<MarkdownFileRepository>()),
+  );
+  getIt.registerFactory<DeleteMarkdownFileUseCase>(
+    () => DeleteMarkdownFileUseCase(
+      getIt<MarkdownFileRepository>(),
+      getIt<SyncEngine>(),
+    ),
+  );
+  getIt.registerFactory<CreateMarkdownProjectUseCase>(
+    () => CreateMarkdownProjectUseCase(getIt<MarkdownProjectRepository>()),
+  );
+  getIt.registerFactory<GetMarkdownProjectsUseCase>(
+    () => GetMarkdownProjectsUseCase(getIt<MarkdownProjectRepository>()),
+  );
+  getIt.registerFactory<DeleteMarkdownProjectUseCase>(
+    () => DeleteMarkdownProjectUseCase(
+      getIt<MarkdownProjectRepository>(),
+      getIt<MarkdownFileRepository>(),
+      getIt<SyncEngine>(),
+    ),
+  );
+
   // Application - Services
   getIt.registerSingleton<SyncEngine>(
     SyncEngine(
@@ -153,6 +206,12 @@ Future<void> setupDependencies() async {
   getIt.registerSingleton<AutoSaveService>(
     AutoSaveService(
       getIt<UpdateNoteUseCase>(),
+      getIt<SyncEngine>(),
+    ),
+  );
+  getIt.registerSingleton<MarkdownAutoSaveService>(
+    MarkdownAutoSaveService(
+      getIt<UpdateMarkdownFileUseCase>(),
       getIt<SyncEngine>(),
     ),
   );
@@ -181,6 +240,19 @@ Future<void> setupDependencies() async {
       getEntries: getIt<GetTimeEntriesUseCase>(),
       deleteEntry: getIt<DeleteTimeEntryUseCase>(),
       updateEntry: getIt<UpdateTimeEntryUseCase>(),
+    ),
+  );
+  // MarkdownState
+  getIt.registerSingleton<MarkdownState>(
+    MarkdownState(
+      createFile: getIt<CreateMarkdownFileUseCase>(),
+      getFiles: getIt<GetMarkdownFilesUseCase>(),
+      updateFile: getIt<UpdateMarkdownFileUseCase>(),
+      deleteFile: getIt<DeleteMarkdownFileUseCase>(),
+      createProject: getIt<CreateMarkdownProjectUseCase>(),
+      getProjects: getIt<GetMarkdownProjectsUseCase>(),
+      deleteProject: getIt<DeleteMarkdownProjectUseCase>(),
+      autoSaveService: getIt<MarkdownAutoSaveService>(),
     ),
   );
 }

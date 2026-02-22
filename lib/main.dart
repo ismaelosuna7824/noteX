@@ -9,6 +9,7 @@ import 'presentation/app.dart';
 import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
+import 'presentation/state/markdown_state.dart';
 import 'application/services/sync_engine.dart';
 import 'domain/repositories/auth_repository.dart';
 
@@ -40,6 +41,10 @@ void main() async {
   // Initialize timer state so HomePage has daily task stats immediately
   final timerState = getIt<TimerState>();
   await timerState.initialize();
+
+  // Initialize markdown state
+  final markdownState = getIt<MarkdownState>();
+  await markdownState.initialize();
 
   // 6. Restore persisted theme settings
   final themeState = getIt<ThemeState>();

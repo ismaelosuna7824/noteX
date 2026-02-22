@@ -22,9 +22,10 @@ class Sidebar extends StatelessWidget {
     (2, _SidebarItem(Icons.edit_note_rounded, 'Editor')),
     (3, _SidebarItem(Icons.calendar_month_rounded, 'Calendar')),
     (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
+    (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
   ];
   static const _settingsItem =
-      (5, _SidebarItem(Icons.settings_rounded, 'Settings'));
+      (6, _SidebarItem(Icons.settings_rounded, 'Settings'));
 
   @override
   Widget build(BuildContext context) {

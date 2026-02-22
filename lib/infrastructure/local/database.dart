@@ -8,6 +8,8 @@ import 'package:path/path.dart' as p;
 import '../../domain/entities/note.dart' as domain_note;
 import '../../domain/entities/project.dart' as domain_project;
 import '../../domain/entities/time_entry.dart' as domain_time;
+import '../../domain/entities/markdown_file.dart' as domain_md;
+import '../../domain/entities/markdown_project.dart' as domain_mdp;
 import '../../domain/value_objects/sync_status.dart';
 
 part 'database.g.dart';
@@ -80,6 +82,49 @@ class TimeEntries extends Table {
   Set<Column> get primaryKey => {id};
 }
 
+/// Drift table for markdown files.
+@DataClassName('MarkdownFileRow')
+class MarkdownFileEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  TextColumn get content => text().withDefault(const Constant(''))();
+  TextColumn get projectId => text().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get userId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  String get tableName => 'markdown_files';
+}
+
+/// Drift table for markdown projects (folder groupings).
+@DataClassName('MarkdownProjectRow')
+class MarkdownProjectEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get userId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  String get tableName => 'markdown_projects';
+}
+
 /// Tracks last sync timestamp per entity type per user.
 @DataClassName('SyncMetadataRow')
 class SyncMetadataEntries extends Table {
@@ -98,7 +143,14 @@ class SyncMetadataEntries extends Table {
 // Database
 // ─────────────────────────────────────────────────────────────────────────────
 
-@DriftDatabase(tables: [NoteEntries, Projects, TimeEntries, SyncMetadataEntries])
+@DriftDatabase(tables: [
+  NoteEntries,
+  Projects,
+  TimeEntries,
+  SyncMetadataEntries,
+  MarkdownFileEntries,
+  MarkdownProjectEntries,
+])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -106,7 +158,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 6;
+  int get schemaVersion => 7;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -171,6 +223,10 @@ class AppDatabase extends _$AppDatabase {
             "UPDATE time_entries SET updated_at = start_time WHERE updated_at IS NULL",
           );
         } catch (_) {}
+      }
+      if (from < 7) {
+        await m.createTable(markdownFileEntries);
+        await m.createTable(markdownProjectEntries);
       }
     },
   );
@@ -278,6 +334,71 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: Value(entry.deletedAt),
       syncStatus: Value(entry.syncStatus.name),
       userId: Value(entry.userId),
+    );
+  }
+
+  // ── Markdown Files ──────────────────────────────────────────────────────
+
+  static domain_md.MarkdownFile markdownFileToDomain(MarkdownFileRow row) {
+    return domain_md.MarkdownFile(
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      projectId: row.projectId,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      syncStatus: _parseSyncStatus(row.syncStatus),
+      version: row.version,
+      deletedAt: row.deletedAt,
+      userId: row.userId,
+    );
+  }
+
+  static MarkdownFileEntriesCompanion markdownFileToCompanion(
+      domain_md.MarkdownFile f) {
+    return MarkdownFileEntriesCompanion(
+      id: Value(f.id),
+      title: Value(f.title),
+      content: Value(f.content),
+      projectId: Value(f.projectId),
+      createdAt: Value(f.createdAt),
+      updatedAt: Value(f.updatedAt),
+      syncStatus: Value(f.syncStatus.name),
+      version: Value(f.version),
+      deletedAt: Value(f.deletedAt),
+      userId: Value(f.userId),
+    );
+  }
+
+  // ── Markdown Projects ───────────────────────────────────────────────────
+
+  static domain_mdp.MarkdownProject markdownProjectToDomain(
+      MarkdownProjectRow row) {
+    return domain_mdp.MarkdownProject(
+      id: row.id,
+      name: row.name,
+      colorValue: row.colorValue,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+      syncStatus: _parseSyncStatus(row.syncStatus),
+      userId: row.userId,
+    );
+  }
+
+  static MarkdownProjectEntriesCompanion markdownProjectToCompanion(
+      domain_mdp.MarkdownProject p) {
+    return MarkdownProjectEntriesCompanion(
+      id: Value(p.id),
+      name: Value(p.name),
+      colorValue: Value(p.colorValue),
+      createdAt: Value(p.createdAt),
+      updatedAt: Value(p.updatedAt),
+      version: Value(p.version),
+      deletedAt: Value(p.deletedAt),
+      syncStatus: Value(p.syncStatus.name),
+      userId: Value(p.userId),
     );
   }
 }

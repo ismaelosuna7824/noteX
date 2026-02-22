@@ -21,6 +21,9 @@ dependencies:
   # Rich text editor
   flutter_quill: ^11.1.0
 
+  # Markdown rendering
+  flutter_markdown: ^0.7.6
+
   # DI
   get_it: ^8.0.3
 

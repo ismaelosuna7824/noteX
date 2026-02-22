@@ -12,6 +12,7 @@ import 'notes_list_page.dart';
 import 'calendar_page.dart';
 import 'settings_page.dart';
 import 'timer_page.dart';
+import 'markdown_page.dart';
 
 /// Corner radius used for the rounded window frame.
 const double _kWindowRadius = 14.0;
@@ -131,7 +132,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                                 avatarUrl: widget.appState.userAvatar,
                                 onNotificationTap: () {},
                                 onProfileTap: () =>
-                                    widget.appState.navigateToPage(5),
+                                    widget.appState.navigateToPage(6),
                               ),
                             ),
                             Expanded(
@@ -221,6 +222,12 @@ class _AppShellState extends State<AppShell> with WindowListener {
           themeState: widget.themeState,
         );
       case 5:
+        return MarkdownPage(
+          key: const ValueKey('markdown'),
+          appState: widget.appState,
+          themeState: widget.themeState,
+        );
+      case 6:
         return SettingsPage(
           key: const ValueKey('settings'),
           appState: widget.appState,

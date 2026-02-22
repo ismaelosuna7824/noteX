@@ -4,9 +4,13 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../domain/entities/note.dart';
 import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
+import '../../domain/entities/markdown_file.dart';
+import '../../domain/entities/markdown_project.dart';
 import '../../domain/repositories/note_repository.dart';
 import '../../domain/repositories/project_repository.dart';
 import '../../domain/repositories/time_entry_repository.dart';
+import '../../domain/repositories/markdown_file_repository.dart';
+import '../../domain/repositories/markdown_project_repository.dart';
 import '../../domain/services/sync_service.dart';
 import '../../domain/value_objects/sync_result.dart';
 import '../../domain/value_objects/sync_status.dart';
@@ -22,6 +26,8 @@ class SupabaseSyncAdapter implements SyncService {
   final NoteRepository _noteRepo;
   final ProjectRepository _projectRepo;
   final TimeEntryRepository _timeEntryRepo;
+  final MarkdownFileRepository _mdFileRepo;
+  final MarkdownProjectRepository _mdProjectRepo;
 
   bool _isSyncing = false;
 
@@ -31,11 +37,15 @@ class SupabaseSyncAdapter implements SyncService {
     required NoteRepository noteRepo,
     required ProjectRepository projectRepo,
     required TimeEntryRepository timeEntryRepo,
+    required MarkdownFileRepository mdFileRepo,
+    required MarkdownProjectRepository mdProjectRepo,
   })  : _supabase = supabase,
         _db = db,
         _noteRepo = noteRepo,
         _projectRepo = projectRepo,
-        _timeEntryRepo = timeEntryRepo;
+        _timeEntryRepo = timeEntryRepo,
+        _mdFileRepo = mdFileRepo,
+        _mdProjectRepo = mdProjectRepo;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -98,6 +108,38 @@ class SupabaseSyncAdapter implements SyncService {
         }
       }
 
+      // Push pending markdown projects (before files, FK dependency)
+      final pendingMdProjects = [
+        ...await _mdProjectRepo.getBySyncStatus(SyncStatus.pendingSync),
+        ...await _mdProjectRepo.getBySyncStatus(SyncStatus.localOnly)
+      ];
+      for (final project in pendingMdProjects) {
+        try {
+          await _pushMarkdownProject(project.copyWith(userId: userId));
+          await _mdProjectRepo.save(project.markSynced());
+          pushed++;
+        } catch (e) {
+          print('====== ERROR PUSHING MARKDOWN PROJECT: $e ======');
+          errors.add('MarkdownProject ${project.id}: $e');
+        }
+      }
+
+      // Push pending markdown files (after projects)
+      final pendingMdFiles = [
+        ...await _mdFileRepo.getBySyncStatus(SyncStatus.pendingSync),
+        ...await _mdFileRepo.getBySyncStatus(SyncStatus.localOnly)
+      ];
+      for (final file in pendingMdFiles) {
+        try {
+          await _pushMarkdownFile(file.copyWith(userId: userId));
+          await _mdFileRepo.save(file.markSynced());
+          pushed++;
+        } catch (e) {
+          print('====== ERROR PUSHING MARKDOWN FILE: $e ======');
+          errors.add('MarkdownFile ${file.id}: $e');
+        }
+      }
+
       return SyncResult(
         pushed: pushed,
         conflicts: conflicts,
@@ -121,6 +163,16 @@ class SupabaseSyncAdapter implements SyncService {
   Future<void> _pushTimeEntry(TimeEntry entry) async {
     final data = _timeEntryToMap(entry);
     await _supabase.from('time_entries').upsert(data, onConflict: 'id');
+  }
+
+  Future<void> _pushMarkdownFile(MarkdownFile file) async {
+    final data = _markdownFileToMap(file);
+    await _supabase.from('markdown_files').upsert(data, onConflict: 'id');
+  }
+
+  Future<void> _pushMarkdownProject(MarkdownProject project) async {
+    final data = _markdownProjectToMap(project);
+    await _supabase.from('markdown_projects').upsert(data, onConflict: 'id');
   }
 
   // ── Pull ───────────────────────────────────────────────────────────────────
@@ -163,6 +215,28 @@ class SupabaseSyncAdapter implements SyncService {
           if (result) pulled++;
         } catch (e) {
           errors.add('Pull time entry: $e');
+        }
+      }
+
+      // Pull markdown files
+      final mdFilesData = await _fetchTable('markdown_files', since);
+      for (final row in mdFilesData) {
+        try {
+          final result = await _mergeMarkdownFile(row);
+          if (result) pulled++;
+        } catch (e) {
+          errors.add('Pull markdown file: $e');
+        }
+      }
+
+      // Pull markdown projects
+      final mdProjectsData = await _fetchTable('markdown_projects', since);
+      for (final row in mdProjectsData) {
+        try {
+          final result = await _mergeMarkdownProject(row);
+          if (result) pulled++;
+        } catch (e) {
+          errors.add('Pull markdown project: $e');
         }
       }
 
@@ -373,4 +447,105 @@ class SupabaseSyncAdapter implements SyncService {
             : null,
         userId: m['user_id'] as String?,
       );
+
+  // ── Markdown Files Serialization ────────────────────────────────────────
+
+  Map<String, dynamic> _markdownFileToMap(MarkdownFile f) => {
+        'id': f.id,
+        'user_id': f.userId,
+        'title': f.title,
+        'content': f.content,
+        'project_id': f.projectId,
+        'created_at': f.createdAt.toUtc().toIso8601String(),
+        'updated_at': f.updatedAt.toUtc().toIso8601String(),
+        'deleted_at': f.deletedAt?.toUtc().toIso8601String(),
+        'version': f.version,
+        'sync_status': 'synced',
+      };
+
+  MarkdownFile _mapToMarkdownFile(Map<String, dynamic> m) => MarkdownFile(
+        id: m['id'] as String,
+        title: m['title'] as String? ?? '',
+        content: m['content'] as String? ?? '',
+        projectId: m['project_id'] as String?,
+        createdAt: DateTime.parse(m['created_at'] as String),
+        updatedAt: DateTime.parse(m['updated_at'] as String),
+        syncStatus: SyncStatus.synced,
+        version: m['version'] as int? ?? 1,
+        deletedAt: m['deleted_at'] != null
+            ? DateTime.parse(m['deleted_at'] as String)
+            : null,
+        userId: m['user_id'] as String?,
+      );
+
+  // ── Markdown Projects Serialization ─────────────────────────────────────
+
+  Map<String, dynamic> _markdownProjectToMap(MarkdownProject p) => {
+        'id': p.id,
+        'user_id': p.userId,
+        'name': p.name,
+        'color_value': p.colorValue,
+        'created_at': p.createdAt.toUtc().toIso8601String(),
+        'updated_at': p.updatedAt.toUtc().toIso8601String(),
+        'deleted_at': p.deletedAt?.toUtc().toIso8601String(),
+        'version': p.version,
+        'sync_status': 'synced',
+      };
+
+  MarkdownProject _mapToMarkdownProject(Map<String, dynamic> m) =>
+      MarkdownProject(
+        id: m['id'] as String,
+        name: m['name'] as String,
+        colorValue: m['color_value'] as int,
+        createdAt: DateTime.parse(m['created_at'] as String),
+        updatedAt: DateTime.parse(m['updated_at'] as String),
+        syncStatus: SyncStatus.synced,
+        version: m['version'] as int? ?? 1,
+        deletedAt: m['deleted_at'] != null
+            ? DateTime.parse(m['deleted_at'] as String)
+            : null,
+        userId: m['user_id'] as String?,
+      );
+
+  // ── Markdown Merge Logic ────────────────────────────────────────────────
+
+  Future<bool> _mergeMarkdownFile(Map<String, dynamic> remoteData) async {
+    final remote = _mapToMarkdownFile(remoteData);
+    final local = await _mdFileRepo.getById(remote.id);
+
+    if (local == null) {
+      await _mdFileRepo.save(remote.markSynced());
+      return true;
+    }
+
+    if (remote.version > local.version) {
+      await _mdFileRepo.save(remote.markSynced());
+      return true;
+    } else if (remote.version == local.version &&
+        remote.updatedAt.isAfter(local.updatedAt)) {
+      await _mdFileRepo.save(remote.markSynced());
+      return true;
+    }
+    return false;
+  }
+
+  Future<bool> _mergeMarkdownProject(Map<String, dynamic> remoteData) async {
+    final remote = _mapToMarkdownProject(remoteData);
+    final local = await _mdProjectRepo.getById(remote.id);
+
+    if (local == null) {
+      await _mdProjectRepo.save(remote.markSynced());
+      return true;
+    }
+
+    if (remote.version > local.version) {
+      await _mdProjectRepo.save(remote.markSynced());
+      return true;
+    } else if (remote.version == local.version &&
+        remote.updatedAt.isAfter(local.updatedAt)) {
+      await _mdProjectRepo.save(remote.markSynced());
+      return true;
+    }
+    return false;
+  }
 }
