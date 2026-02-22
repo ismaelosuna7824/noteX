@@ -9,6 +9,7 @@ import '../../application/use_cases/get_notes_use_case.dart';
 import '../../application/use_cases/delete_note_use_case.dart';
 import '../../application/use_cases/update_note_use_case.dart';
 import '../../application/services/auto_save_service.dart';
+import '../../application/services/sync_engine.dart';
 import '../../domain/repositories/auth_repository.dart';
 import 'package:uuid/uuid.dart';
 
@@ -22,6 +23,7 @@ class AppState extends ChangeNotifier {
   final UpdateNoteUseCase _updateNote;
   final AutoSaveService autoSaveService;
   final AuthRepository _authRepository;
+  SyncEngine? _syncEngine;
 
   List<Note> _notes = [];
   Note? _currentNote;
@@ -59,6 +61,9 @@ class AppState extends ChangeNotifier {
     _authSub?.cancel();
     super.dispose();
   }
+
+  /// Late-wired to avoid circular dependency in DI.
+  set syncEngine(SyncEngine engine) => _syncEngine = engine;
 
   // Getters
   List<Note> get notes => _notes;
@@ -221,9 +226,22 @@ class AppState extends ChangeNotifier {
   }
 
   /// Sign in with Google.
-  Future<void> signIn() async {
-    await _authRepository.signInWithGoogle();
+  Future<bool> signIn() async {
+    _isLoading = true;
+    clearAuthError();
     notifyListeners();
+
+    try {
+      await _authRepository.signInWithGoogle();
+      await _onSignInSuccess();
+      return true;
+    } catch (e) {
+      _authErrorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   /// Sign in with Email and Password
@@ -234,6 +252,7 @@ class AppState extends ChangeNotifier {
 
     try {
       await _authRepository.signInWithEmail(email, password);
+      await _onSignInSuccess();
       return true;
     } catch (e) {
       _authErrorMessage = e.toString();
@@ -252,6 +271,7 @@ class AppState extends ChangeNotifier {
 
     try {
       await _authRepository.signUpWithEmail(email, password);
+      await _onSignInSuccess();
       return true;
     } catch (e) {
       _authErrorMessage = e.toString();
@@ -259,6 +279,18 @@ class AppState extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Called after any successful sign-in (Google, email, sign-up).
+  /// Detects account switch and clears local data if needed, then refreshes.
+  Future<void> _onSignInSuccess() async {
+    if (_syncEngine != null) {
+      final switched = await _syncEngine!.handleUserSwitch();
+      if (switched) {
+        // Data was cleared and re-pulled — reload everything
+        await refreshNotes();
+      }
     }
   }
 

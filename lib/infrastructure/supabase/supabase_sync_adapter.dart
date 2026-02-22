@@ -66,9 +66,10 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _noteRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final note in pendingNotes) {
+        final owned = note.copyWith(userId: userId);
         try {
-          await _pushNote(note.copyWith(userId: userId));
-          await _noteRepo.save(note.markSynced());
+          await _pushNote(owned);
+          await _noteRepo.save(owned.markSynced());
           pushed++;
         } catch (e) {
           print('====== ERROR PUSHING NOTE: $e ======');
@@ -82,9 +83,10 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _projectRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final project in pendingProjects) {
+        final owned = project.copyWith(userId: userId);
         try {
-          await _pushProject(project.copyWith(userId: userId));
-          await _projectRepo.save(project.markSynced());
+          await _pushProject(owned);
+          await _projectRepo.save(owned.markSynced());
           pushed++;
         } catch (e) {
           print('====== ERROR PUSHING PROJECT: $e ======');
@@ -98,9 +100,10 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _timeEntryRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final entry in pendingEntries) {
+        final owned = entry.copyWith(userId: userId);
         try {
-          await _pushTimeEntry(entry.copyWith(userId: userId));
-          await _timeEntryRepo.save(entry.markSynced());
+          await _pushTimeEntry(owned);
+          await _timeEntryRepo.save(owned.markSynced());
           pushed++;
         } catch (e) {
           print('====== ERROR PUSHING TIME ENTRY: $e ======');
@@ -114,9 +117,10 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _mdProjectRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final project in pendingMdProjects) {
+        final owned = project.copyWith(userId: userId);
         try {
-          await _pushMarkdownProject(project.copyWith(userId: userId));
-          await _mdProjectRepo.save(project.markSynced());
+          await _pushMarkdownProject(owned);
+          await _mdProjectRepo.save(owned.markSynced());
           pushed++;
         } catch (e) {
           print('====== ERROR PUSHING MARKDOWN PROJECT: $e ======');
@@ -130,9 +134,10 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _mdFileRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final file in pendingMdFiles) {
+        final owned = file.copyWith(userId: userId);
         try {
-          await _pushMarkdownFile(file.copyWith(userId: userId));
-          await _mdFileRepo.save(file.markSynced());
+          await _pushMarkdownFile(owned);
+          await _mdFileRepo.save(owned.markSynced());
           pushed++;
         } catch (e) {
           print('====== ERROR PUSHING MARKDOWN FILE: $e ======');
@@ -355,6 +360,20 @@ class SupabaseSyncAdapter implements SyncService {
             lastSyncedAt: timestamp,
           ),
         );
+  }
+
+  @override
+  Future<String?> getStoredUserId() async {
+    final row = await (_db.select(_db.syncMetadataEntries)
+          ..where((t) => t.entityType.equals('global'))
+          ..limit(1))
+        .getSingleOrNull();
+    return row?.userId;
+  }
+
+  @override
+  Future<void> clearLocalData() async {
+    await _db.clearAllData();
   }
 
   // ── Serialization ──────────────────────────────────────────────────────────

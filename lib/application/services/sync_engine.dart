@@ -53,6 +53,35 @@ class SyncEngine {
     _retryTimer?.cancel();
   }
 
+  /// Check if the current user is different from the last synced user.
+  /// If so, clear all local data and do a full pull for the new user.
+  /// Returns true if a user switch was detected and handled.
+  Future<bool> handleUserSwitch() async {
+    if (!_auth.isAuthenticated) return false;
+
+    final currentUserId = _auth.currentUserId!;
+
+    // Check who last synced on this device
+    final storedUserId = await _syncService.getStoredUserId();
+
+    if (storedUserId == null || storedUserId == currentUserId) {
+      // No previous sync data or same user — no switch
+      return false;
+    }
+
+    // Different user detected — wipe all local data
+    await _syncService.clearLocalData();
+
+    // Pull everything for the new user
+    if (_connectivity.isOnline) {
+      await _syncService.fullPull(currentUserId);
+      await _syncService.setLastSyncedAt(currentUserId, DateTime.now().toUtc());
+      await onSyncComplete?.call();
+    }
+
+    return true;
+  }
+
   /// Perform a full sync cycle: Push → Pull → Update timestamp.
   Future<SyncResult> sync() async {
     if (_isSyncing) return SyncResult.skipped();

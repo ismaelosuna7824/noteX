@@ -1,27 +1,22 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:convert';
-import 'package:crypto/crypto.dart';
 
-import 'package:desktop_webview_auth/desktop_webview_auth.dart';
-import 'package:desktop_webview_auth/google.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/repositories/auth_repository.dart';
 
 /// Supabase adapter for authentication.
 ///
 /// Uses supabase_flutter which automatically persists sessions.
-/// On desktop, uses desktop_webview_auth for Google OAuth.
+/// On desktop, opens the system browser for Google OAuth.
 class SupabaseAuthAdapter implements AuthRepository {
   final SupabaseClient _client;
-  final String _googleClientId;
 
   final _authStateController = StreamController<bool>.broadcast();
   StreamSubscription<AuthState>? _authSubscription;
 
-  SupabaseAuthAdapter(this._client, {required String googleClientId})
-      : _googleClientId = googleClientId;
+  SupabaseAuthAdapter(this._client);
 
   @override
   Future<void> initialize() async {
@@ -68,67 +63,60 @@ class SupabaseAuthAdapter implements AuthRepository {
   }
 
   Future<void> _signInDesktop() async {
-    // 1. Start a local server to listen for the OAuth redirect on the exact port configured in GCP
-    final int port = 54321;
-    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, port, shared: true);
-
-    // 2. Open the desktop webview with the loopback redirect URI matching the Supabase format
-    final redirectUri = 'http://localhost:$port/auth/v1/callback';
-    
-    // We need to know the nonce to pass it to Supabase
-    final String nonce = _client.auth.generateRawNonce();
-    final String hashedNonce = sha256.convert(utf8.encode(nonce)).toString();
-
-    final args = _CustomGoogleSignInArgs(
-      clientId: _googleClientId,
-      redirectUri: redirectUri,
-      scope: 'email profile',
-      nonce: hashedNonce, // Google requires the hashed version if PKCE, but Supabase checks the raw one later. Let's pass raw nonce here and to Supabase.
+    // 1. Pick a port and start a local HTTP server for the OAuth redirect
+    const int port = 54321;
+    final server = await HttpServer.bind(
+      InternetAddress.loopbackIPv4, port, shared: true,
     );
-    
-    // We run the webview signin and the local server listen in parallel
-    // The server will receive a request from the webview upon success
-    AuthResult? authResult;
-    
+
+    final redirectUri = 'http://localhost:$port/auth/callback';
+
     try {
-      final results = await Future.wait([
-        DesktopWebviewAuth.signIn(args),
-        server.first.then((HttpRequest request) async {
-          request.response
-            ..statusCode = 200
-            ..headers.contentType = ContentType.html
-            ..write('<html><body><strong>Login successful!</strong> You can close this window now.</body></html>');
-          await request.response.close();
-          return request.uri.toString();
-        }).timeout(const Duration(minutes: 5)),
-      ]);
+      // 2. Get the OAuth URL from Supabase (includes PKCE code challenge)
+      final res = await _client.auth.getOAuthSignInUrl(
+        provider: OAuthProvider.google,
+        redirectTo: redirectUri,
+        queryParams: {'access_type': 'offline', 'prompt': 'consent'},
+      );
 
-      authResult = results[0] as AuthResult?;
-      final callbackUrl = results[1] as String?;
-
-      if (authResult == null && callbackUrl != null) {
-        try {
-          authResult = await args.authorizeFromCallback(callbackUrl);
-        } catch (_) {}
+      // 3. Open the URL in the system browser
+      final url = Uri.parse(res.url);
+      if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
+        throw Exception('Could not open browser for Google Sign-In');
       }
-    } catch (e) {
-      // Ignored
+
+      // 4. Wait for the redirect callback (with timeout)
+      final request = await server.first.timeout(
+        const Duration(minutes: 5),
+        onTimeout: () => throw TimeoutException('Sign-in timed out'),
+      );
+
+      // 5. Extract the auth code from the callback URL
+      final code = request.uri.queryParameters['code'];
+
+      // Send a success page to the browser
+      request.response
+        ..statusCode = 200
+        ..headers.contentType = ContentType.html
+        ..write(
+          '<html><body style="font-family:system-ui;display:flex;'
+          'justify-content:center;align-items:center;height:100vh;margin:0">'
+          '<div style="text-align:center">'
+          '<h2>Login successful!</h2>'
+          '<p>You can close this tab and return to NoteX.</p>'
+          '</div></body></html>',
+        );
+      await request.response.close();
+
+      if (code == null || code.isEmpty) {
+        throw Exception('No authorization code received');
+      }
+
+      // 6. Exchange the PKCE code for a Supabase session
+      await _client.auth.exchangeCodeForSession(code);
     } finally {
       await server.close(force: true);
     }
-
-    if (authResult == null || (authResult.idToken == null && authResult.accessToken == null)) {
-      throw Exception('Google Sign In cancelled or failed');
-    }
-
-    // Authenticate with Supabase using the received tokens.
-    // Supabase requires the RAW nonce (if hashed during request, but GoogleSignInArgs just passes it as-is to the id_token).
-    await _client.auth.signInWithIdToken(
-      provider: OAuthProvider.google,
-      idToken: authResult.idToken ?? authResult.accessToken!,
-      accessToken: authResult.accessToken,
-      nonce: hashedNonce, // Pass the same nonce we requested so Supabase can verify it
-    );
   }
 
   @override
@@ -171,24 +159,5 @@ class SupabaseAuthAdapter implements AuthRepository {
   void dispose() {
     _authSubscription?.cancel();
     _authStateController.close();
-  }
-}
-
-class _CustomGoogleSignInArgs extends GoogleSignInArgs {
-  final String nonce;
-
-  _CustomGoogleSignInArgs({
-    required super.clientId,
-    required super.redirectUri,
-    super.scope,
-    required this.nonce,
-  });
-
-  @override
-  Map<String, String> buildQueryParameters() {
-    final params = super.buildQueryParameters();
-    // Overwrite the randomly generated nonce with our predictable one
-    params['nonce'] = nonce;
-    return params;
   }
 }

@@ -72,12 +72,8 @@ Future<void> setupDependencies() async {
 
   // Infrastructure - Supabase Auth
   final supabaseClient = Supabase.instance.client;
-  final appConfig = getIt<AppConfig>();
   getIt.registerSingleton<AuthRepository>(
-    SupabaseAuthAdapter(
-      supabaseClient,
-      googleClientId: appConfig.googleClientId,
-    ),
+    SupabaseAuthAdapter(supabaseClient),
   );
 
   // Infrastructure - Connectivity
@@ -229,6 +225,8 @@ Future<void> setupDependencies() async {
   getIt.registerSingleton<AppState>(appState);
   // Wire sync completion callback so the UI refreshes sync icons after each sync
   getIt<SyncEngine>().onSyncComplete = appState.refreshNotes;
+  // Wire sync engine to AppState for user switch detection on sign-in
+  appState.syncEngine = getIt<SyncEngine>();
   // TimerState owns a dart:async Timer → must be a singleton
   getIt.registerSingleton<TimerState>(
     TimerState(

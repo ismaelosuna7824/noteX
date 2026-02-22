@@ -8,7 +8,6 @@
 
 #include <app_links/app_links_plugin_c_api.h>
 #include <connectivity_plus/connectivity_plus_windows_plugin.h>
-#include <desktop_webview_auth/desktop_webview_auth_plugin.h>
 #include <file_selector_windows/file_selector_windows.h>
 #include <flutter_acrylic/flutter_acrylic_plugin.h>
 #include <screen_retriever/screen_retriever_plugin.h>
@@ -21,8 +20,6 @@ void RegisterPlugins(flutter::PluginRegistry* registry) {
       registry->GetRegistrarForPlugin("AppLinksPluginCApi"));
   ConnectivityPlusWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("ConnectivityPlusWindowsPlugin"));
-  DesktopWebviewAuthPluginRegisterWithRegistrar(
-      registry->GetRegistrarForPlugin("DesktopWebviewAuthPlugin"));
   FileSelectorWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FileSelectorWindows"));
   FlutterAcrylicPluginRegisterWithRegistrar(

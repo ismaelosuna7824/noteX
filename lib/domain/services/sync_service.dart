@@ -24,4 +24,11 @@ abstract class SyncService {
 
   /// Set the last sync timestamp for a user.
   Future<void> setLastSyncedAt(String userId, DateTime timestamp);
+
+  /// Returns the userId stored in local sync metadata, if any.
+  /// Used to detect account switches.
+  Future<String?> getStoredUserId();
+
+  /// Clear all local data (used when switching to a different account).
+  Future<void> clearLocalData();
 }

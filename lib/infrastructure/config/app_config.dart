@@ -12,10 +12,6 @@ class AppConfig {
   final String supabaseUrl;
   final String supabaseAnonKey;
 
-  // Google OAuth (for desktop_webview_auth)
-  final String googleClientId;
-  final String googleClientSecret;
-
   const AppConfig({
     required this.environment,
     required this.apiBaseUrl,
@@ -24,8 +20,6 @@ class AppConfig {
     this.enableLogging = true,
     this.supabaseUrl = '',
     this.supabaseAnonKey = '',
-    this.googleClientId = '',
-    this.googleClientSecret = '',
   });
 
   /// Development configuration.
@@ -34,11 +28,8 @@ class AppConfig {
       environment: 'development',
       apiBaseUrl: 'http://localhost:8080/api',
       enableLogging: true,
-      // TODO: Replace with your Supabase project credentials
       supabaseUrl: 'https://dfkgixyerekdtjikmqez.supabase.co',
       supabaseAnonKey: 'sb_publishable_uIlbvvZkbe7SZ8zUq0UVCA_T25wZMAf',
-      googleClientId: '791820780526-7qbun5ap0nho5mgce33p30lqjocs9qs5.apps.googleusercontent.com',
-      googleClientSecret: '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',
     );
   }
 
@@ -48,11 +39,8 @@ class AppConfig {
       environment: 'production',
       apiBaseUrl: 'https://api.notex.app',
       enableLogging: false,
-      // TODO: Replace with your production Supabase credentials
       supabaseUrl: 'https://dfkgixyerekdtjikmqez.supabase.co',
       supabaseAnonKey: 'sb_publishable_uIlbvvZkbe7SZ8zUq0UVCA_T25wZMAf',
-      googleClientId: '791820780526-7qbun5ap0nho5mgce33p30lqjocs9qs5.apps.googleusercontent.com',
-      googleClientSecret: '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',
     );
   }
 

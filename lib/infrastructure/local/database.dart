@@ -231,6 +231,21 @@ class AppDatabase extends _$AppDatabase {
     },
   );
 
+  // ── Clear all data (user switch) ─────────────────────────────────────────
+
+  /// Deletes all rows from every entity table and sync metadata.
+  /// Used when the user signs in with a different account.
+  Future<void> clearAllData() async {
+    await transaction(() async {
+      await delete(noteEntries).go();
+      await delete(projects).go();
+      await delete(timeEntries).go();
+      await delete(markdownFileEntries).go();
+      await delete(markdownProjectEntries).go();
+      await delete(syncMetadataEntries).go();
+    });
+  }
+
   // ── Notes ─────────────────────────────────────────────────────────────────
 
   static domain_note.Note toDomain(NoteEntry row) {
