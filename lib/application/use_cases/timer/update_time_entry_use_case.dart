@@ -1,5 +1,6 @@
 import '../../../domain/entities/time_entry.dart';
 import '../../../domain/repositories/time_entry_repository.dart';
+import '../../../domain/value_objects/sync_status.dart';
 
 class UpdateTimeEntryUseCase {
   final TimeEntryRepository _repository;
@@ -12,21 +13,16 @@ class UpdateTimeEntryUseCase {
     DateTime? startTime,
     DateTime? endTime,
   }) async {
-    final all = await _repository.getByDateRange(
-      DateTime(2000),
-      DateTime(2100),
-    );
-    final existing = all.cast<TimeEntry?>().firstWhere(
-      (e) => e?.id == entryId,
-      orElse: () => null,
-    );
+    final existing = await _repository.getById(entryId);
     if (existing == null) return null;
 
     final updated = existing.copyWith(
       description: description,
       projectId: projectId,
       startTime: startTime,
-      endTime: endTime,
+      endTime: endTime is _Unset ? null : endTime,
+      updatedAt: DateTime.now(),
+      syncStatus: SyncStatus.pendingSync,
     );
     await _repository.save(updated);
     return updated;

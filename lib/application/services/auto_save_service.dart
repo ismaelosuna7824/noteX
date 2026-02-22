@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import '../use_cases/update_note_use_case.dart';
-import '../services/sync_orchestrator.dart';
+import 'sync_engine.dart';
 
 /// Application service: Auto-save with intelligent debounce.
 ///
@@ -9,7 +9,7 @@ import '../services/sync_orchestrator.dart';
 /// Uses an 800ms debounce to avoid saving on every keystroke.
 class AutoSaveService {
   final UpdateNoteUseCase _updateNote;
-  final SyncOrchestrator _syncOrchestrator;
+  final SyncEngine _syncEngine;
 
   Timer? _debounceTimer;
   static const _debounceDuration = Duration(milliseconds: 800);
@@ -17,7 +17,7 @@ class AutoSaveService {
   /// Callback invoked after a successful save (can be async).
   Future<void> Function(String noteId)? onSaved;
 
-  AutoSaveService(this._updateNote, this._syncOrchestrator);
+  AutoSaveService(this._updateNote, this._syncEngine);
 
   /// Schedule an auto-save for the given note.
   /// Resets the debounce timer on each call.
@@ -56,7 +56,7 @@ class AutoSaveService {
     if (updated != null) {
       await onSaved?.call(noteId);
       // Trigger sync if authenticated
-      await _syncOrchestrator.syncIfAuthenticated();
+      await _syncEngine.syncIfAuthenticated();
     }
   }
 

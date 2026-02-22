@@ -14,6 +14,7 @@ class DriftNoteRepository implements NoteRepository {
   @override
   Future<List<domain.Note>> getAll() async {
     final rows = await (_db.select(_db.noteEntries)
+          ..where((t) => t.deletedAt.isNull())
           ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
         .get();
     return rows.map((row) => AppDatabase.toDomain(row)).toList();
@@ -34,6 +35,7 @@ class DriftNoteRepository implements NoteRepository {
 
     final row = await (_db.select(_db.noteEntries)
           ..where((t) =>
+              t.deletedAt.isNull() &
               t.createdAt.isBiggerOrEqualValue(startOfDay) &
               t.createdAt.isSmallerThanValue(endOfDay)))
         .getSingleOrNull();
@@ -44,6 +46,14 @@ class DriftNoteRepository implements NoteRepository {
   Future<List<domain.Note>> getBySyncStatus(SyncStatus status) async {
     final rows = await (_db.select(_db.noteEntries)
           ..where((t) => t.syncStatus.equals(status.name)))
+        .get();
+    return rows.map((row) => AppDatabase.toDomain(row)).toList();
+  }
+
+  @override
+  Future<List<domain.Note>> getModifiedSince(DateTime since) async {
+    final rows = await (_db.select(_db.noteEntries)
+          ..where((t) => t.updatedAt.isBiggerThanValue(since)))
         .get();
     return rows.map((row) => AppDatabase.toDomain(row)).toList();
   }
@@ -65,7 +75,8 @@ class DriftNoteRepository implements NoteRepository {
     final pattern = '%$query%';
     final rows = await (_db.select(_db.noteEntries)
           ..where((t) =>
-              t.title.like(pattern) | t.content.like(pattern))
+              t.deletedAt.isNull() &
+              (t.title.like(pattern) | t.content.like(pattern)))
           ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
         .get();
     return rows.map((row) => AppDatabase.toDomain(row)).toList();
@@ -74,7 +85,9 @@ class DriftNoteRepository implements NoteRepository {
   @override
   Future<int> count() async {
     final countExpr = _db.noteEntries.id.count();
-    final query = _db.selectOnly(_db.noteEntries)..addColumns([countExpr]);
+    final query = _db.selectOnly(_db.noteEntries)
+      ..addColumns([countExpr])
+      ..where(_db.noteEntries.deletedAt.isNull());
     final result = await query.getSingle();
     return result.read(countExpr) ?? 0;
   }

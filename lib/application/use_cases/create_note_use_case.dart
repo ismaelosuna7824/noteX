@@ -31,7 +31,7 @@ class CreateNoteUseCase {
       themeId: themeId,
     ).copyWith(
       title: title,
-      syncStatus: SyncStatus.localOnly,
+      syncStatus: SyncStatus.pendingSync,
     );
 
     await _repository.save(note);

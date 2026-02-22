@@ -28,4 +28,7 @@ abstract class NoteRepository {
 
   /// Get the total count of notes.
   Future<int> count();
+
+  /// Retrieve notes modified since [since].
+  Future<List<Note>> getModifiedSince(DateTime since);
 }

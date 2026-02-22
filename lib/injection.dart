@@ -1,18 +1,21 @@
 import 'package:get_it/get_it.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'domain/repositories/note_repository.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/project_repository.dart';
 import 'domain/repositories/time_entry_repository.dart';
 import 'domain/services/sync_service.dart';
+import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
 
 import 'infrastructure/local/database.dart';
 import 'infrastructure/local/drift_note_repository.dart';
 import 'infrastructure/local/drift_project_repository.dart';
 import 'infrastructure/local/drift_time_entry_repository.dart';
-import 'infrastructure/auth/firebase_auth_adapter.dart';
-import 'infrastructure/firebase/firebase_sync_adapter.dart';
+import 'infrastructure/auth/supabase_auth_adapter.dart';
+import 'infrastructure/supabase/supabase_sync_adapter.dart';
+import 'infrastructure/network/connectivity_adapter.dart';
 import 'infrastructure/api/title_api_adapter.dart';
 import 'infrastructure/config/app_config.dart';
 
@@ -30,7 +33,7 @@ import 'application/use_cases/timer/get_time_entries_use_case.dart';
 import 'application/use_cases/timer/delete_time_entry_use_case.dart';
 import 'application/use_cases/timer/update_time_entry_use_case.dart';
 import 'application/services/auto_save_service.dart';
-import 'application/services/sync_orchestrator.dart';
+import 'application/services/sync_engine.dart';
 
 import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
@@ -53,12 +56,22 @@ Future<void> setupDependencies() async {
   getIt.registerSingleton<NoteRepository>(
     DriftNoteRepository(database),
   );
+
+  // Infrastructure - Supabase Auth
+  final supabaseClient = Supabase.instance.client;
+  final appConfig = getIt<AppConfig>();
   getIt.registerSingleton<AuthRepository>(
-    FirebaseAuthAdapter(),
+    SupabaseAuthAdapter(
+      supabaseClient,
+      googleClientId: appConfig.googleClientId,
+    ),
   );
-  getIt.registerSingleton<SyncService>(
-    FirebaseSyncAdapter(),
+
+  // Infrastructure - Connectivity
+  getIt.registerSingleton<ConnectivityService>(
+    ConnectivityAdapter(),
   );
+
   getIt.registerSingleton<TitleGenerationService>(
     TitleApiAdapter(),
   );
@@ -69,6 +82,17 @@ Future<void> setupDependencies() async {
   );
   getIt.registerSingleton<TimeEntryRepository>(
     DriftTimeEntryRepository(database),
+  );
+
+  // Infrastructure - Sync Service (Supabase adapter)
+  getIt.registerSingleton<SyncService>(
+    SupabaseSyncAdapter(
+      supabase: supabaseClient,
+      db: database,
+      noteRepo: getIt<NoteRepository>(),
+      projectRepo: getIt<ProjectRepository>(),
+      timeEntryRepo: getIt<TimeEntryRepository>(),
+    ),
   );
 
   // Application - Note Use Cases
@@ -119,17 +143,17 @@ Future<void> setupDependencies() async {
   );
 
   // Application - Services
-  getIt.registerSingleton<SyncOrchestrator>(
-    SyncOrchestrator(
-      getIt<NoteRepository>(),
-      getIt<AuthRepository>(),
-      getIt<SyncService>(),
+  getIt.registerSingleton<SyncEngine>(
+    SyncEngine(
+      auth: getIt<AuthRepository>(),
+      syncService: getIt<SyncService>(),
+      connectivity: getIt<ConnectivityService>(),
     ),
   );
   getIt.registerSingleton<AutoSaveService>(
     AutoSaveService(
       getIt<UpdateNoteUseCase>(),
-      getIt<SyncOrchestrator>(),
+      getIt<SyncEngine>(),
     ),
   );
 

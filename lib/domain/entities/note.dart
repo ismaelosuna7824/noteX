@@ -14,6 +14,9 @@ class Note {
   final String? backgroundImage;
   final String? themeId;
   final bool isPinned;
+  final int version;
+  final DateTime? deletedAt;
+  final String? userId;
 
   const Note({
     required this.id,
@@ -25,6 +28,9 @@ class Note {
     this.backgroundImage,
     this.themeId,
     this.isPinned = false,
+    this.version = 1,
+    this.deletedAt,
+    this.userId,
   });
 
   /// Creates a new empty note for today.
@@ -32,6 +38,7 @@ class Note {
     required String id,
     String? backgroundImage,
     String? themeId,
+    String? userId,
   }) {
     final now = DateTime.now();
     return Note(
@@ -40,12 +47,17 @@ class Note {
       content: '[]', // Empty Quill Delta
       createdAt: now,
       updatedAt: now,
-      syncStatus: SyncStatus.localOnly,
+      syncStatus: SyncStatus.pendingSync,
       backgroundImage: backgroundImage,
       themeId: themeId,
       isPinned: false,
+      version: 1,
+      userId: userId,
     );
   }
+
+  /// Whether this note has been soft-deleted.
+  bool get isDeleted => deletedAt != null;
 
   /// Returns a copy with updated fields.
   Note copyWith({
@@ -56,6 +68,9 @@ class Note {
     String? backgroundImage,
     String? themeId,
     bool? isPinned,
+    int? version,
+    Object? deletedAt = const _Unset(),
+    Object? userId = const _Unset(),
   }) {
     return Note(
       id: id,
@@ -67,6 +82,9 @@ class Note {
       backgroundImage: backgroundImage ?? this.backgroundImage,
       themeId: themeId ?? this.themeId,
       isPinned: isPinned ?? this.isPinned,
+      version: version ?? this.version,
+      deletedAt: deletedAt is _Unset ? this.deletedAt : deletedAt as DateTime?,
+      userId: userId is _Unset ? this.userId : userId as String?,
     );
   }
 
@@ -81,6 +99,20 @@ class Note {
   /// Marks the note as synced.
   Note markSynced() {
     return copyWith(syncStatus: SyncStatus.synced);
+  }
+
+  /// Soft-delete this note and mark pending sync.
+  Note markDeleted() {
+    return copyWith(
+      deletedAt: DateTime.now(),
+      updatedAt: DateTime.now(),
+      syncStatus: SyncStatus.pendingSync,
+    );
+  }
+
+  /// Increment version for optimistic locking.
+  Note incrementVersion() {
+    return copyWith(version: version + 1);
   }
 
   /// Check if this note belongs to a specific date.
@@ -107,4 +139,9 @@ class Note {
 
   @override
   String toString() => 'Note(id: $id, title: $title)';
+}
+
+// Private sentinel for nullable copyWith fields.
+class _Unset {
+  const _Unset();
 }

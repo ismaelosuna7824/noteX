@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'injection.dart';
+import 'infrastructure/config/app_config.dart';
 import 'presentation/app.dart';
 import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
+import 'application/services/sync_engine.dart';
+import 'domain/repositories/auth_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,10 +19,21 @@ void main() async {
   await Window.initialize();
   await windowManager.ensureInitialized();
 
-  // 2. Setup dependency injection
+  // 2. Initialize Supabase (auto-restores persisted session)
+  final config = AppConfig.fromEnvironment();
+  await Supabase.initialize(
+    url: config.supabaseUrl,
+    anonKey: config.supabaseAnonKey,
+  );
+
+  // 3. Setup dependency injection
   await setupDependencies();
 
-  // 3. Initialize app state (load notes, create daily note)
+  // 4. Initialize auth (restore session)
+  final authRepo = getIt<AuthRepository>();
+  await authRepo.initialize();
+
+  // 5. Initialize app state (load notes, create daily note)
   final appState = getIt<AppState>();
   await appState.initialize();
 
@@ -26,11 +41,19 @@ void main() async {
   final timerState = getIt<TimerState>();
   await timerState.initialize();
 
-  // 4. Restore persisted theme settings
+  // 6. Restore persisted theme settings
   final themeState = getIt<ThemeState>();
   await themeState.loadFromDisk();
 
-  // 5. Configure: transparent + frameless + centered
+  // 7. Start auto-sync and trigger initial sync if already logged in
+  final syncEngine = getIt<SyncEngine>();
+  syncEngine.startAutoSync();
+  if (authRepo.isAuthenticated) {
+    // Non-blocking initial sync
+    syncEngine.sync();
+  }
+
+  // 8. Configure: transparent + frameless + centered
   const windowOptions = WindowOptions(
     size: Size(1280, 900),
     center: true,

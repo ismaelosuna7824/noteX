@@ -17,11 +17,13 @@ class StartTimerUseCase {
       await _repository.save(running.stop());
     }
 
+    final now = DateTime.now();
     final entry = TimeEntry(
       id: id,
       description: description,
       projectId: projectId,
-      startTime: DateTime.now(),
+      startTime: now,
+      updatedAt: now,
     );
     await _repository.save(entry);
     return entry;

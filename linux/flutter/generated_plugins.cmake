@@ -3,7 +3,9 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
+  desktop_webview_auth
   flutter_acrylic
+  gtk
   screen_retriever
   sqlite3_flutter_libs
   url_launcher_linux

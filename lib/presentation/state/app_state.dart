@@ -28,6 +28,7 @@ class AppState extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
   bool _showPinnedTab = false;
+  String? _authErrorMessage;
 
   AppState({
     required CreateNoteUseCase createNote,
@@ -56,6 +57,17 @@ class AppState extends ChangeNotifier {
   bool get isAuthenticated => _authRepository.isAuthenticated;
   String? get userName => _authRepository.displayName;
   String? get userAvatar => _authRepository.avatarUrl;
+  String? get authErrorMessage => _authErrorMessage;
+
+  /// Clear any existing authentication errors
+  void clearAuthError() {
+    if (_authErrorMessage != null) {
+      _authErrorMessage = null;
+      notifyListeners();
+    }
+  }
+
+  // ... (leaving getters below unchanged)
 
   /// All pinned notes.
   List<Note> get pinnedNotes => _notes.where((n) => n.isPinned).toList();
@@ -198,6 +210,42 @@ class AppState extends ChangeNotifier {
   Future<void> signIn() async {
     await _authRepository.signInWithGoogle();
     notifyListeners();
+  }
+
+  /// Sign in with Email and Password
+  Future<bool> signInWithEmail(String email, String password) async {
+    _isLoading = true;
+    clearAuthError();
+    notifyListeners();
+
+    try {
+      await _authRepository.signInWithEmail(email, password);
+      return true;
+    } catch (e) {
+      _authErrorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Sign up with Email and Password
+  Future<bool> signUpWithEmail(String email, String password) async {
+    _isLoading = true;
+    clearAuthError();
+    notifyListeners();
+
+    try {
+      await _authRepository.signUpWithEmail(email, password);
+      return true;
+    } catch (e) {
+      _authErrorMessage = e.toString();
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   /// Sign out.

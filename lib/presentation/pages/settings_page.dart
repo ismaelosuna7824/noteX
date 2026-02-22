@@ -2,8 +2,10 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:provider/provider.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import 'auth_dialog.dart';
 
 /// Dark-mode card surface — same navy used across the app.
 const _kDarkCard = Color(0xFF1A1A2E);
@@ -313,13 +315,17 @@ class _SettingsPageState extends State<SettingsPage> {
                                             ),
                                           )
                                         : FilledButton.icon(
-                                            onPressed: () =>
-                                                appState.signIn(),
+                                            onPressed: () {
+                                              showDialog(
+                                                context: context,
+                                                builder: (_) => AuthDialog(appState: appState),
+                                              );
+                                            },
                                             icon: const Icon(
                                                 Icons.login_rounded,
                                                 size: 16),
                                             label: const Text(
-                                                'Sign in with Google'),
+                                                'Sign in / Register'),
                                             style: FilledButton.styleFrom(
                                               backgroundColor: accentColor,
                                               shape: RoundedRectangleBorder(

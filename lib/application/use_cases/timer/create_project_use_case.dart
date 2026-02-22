@@ -10,11 +10,10 @@ class CreateProjectUseCase {
     required String name,
     required int colorValue,
   }) async {
-    final project = Project(
+    final project = Project.create(
       id: id,
       name: name,
       colorValue: colorValue,
-      createdAt: DateTime.now(),
     );
     await _repository.save(project);
     return project;

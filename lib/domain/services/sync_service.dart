@@ -1,19 +1,27 @@
-import '../entities/note.dart';
+import '../value_objects/sync_result.dart';
 
 /// Port (interface) for the sync engine.
 ///
 /// Handles bidirectional synchronization between local and remote storage.
+/// Implementations know about both local DB and remote backend.
 abstract class SyncService {
-  /// Push a local note to the remote server.
-  Future<void> pushNote(Note note, String userId);
-
-  /// Pull all notes for a user from the remote server.
-  Future<List<Note>> pullNotes(String userId);
-
-  /// Perform a full bidirectional sync.
-  /// Returns the list of merged/resolved notes.
-  Future<List<Note>> fullSync(List<Note> localNotes, String userId);
-
-  /// Check if sync is currently in progress.
+  /// Whether a sync is currently in progress.
   bool get isSyncing;
+
+  /// Push all locally pending changes to remote.
+  /// Returns a [SyncResult] with counts of pushed entities.
+  Future<SyncResult> pushChanges(String userId, {DateTime? since});
+
+  /// Pull remote changes since [since] and merge into local DB.
+  /// Returns a [SyncResult] with counts of pulled entities.
+  Future<SyncResult> pullChanges(String userId, {DateTime? since});
+
+  /// Full pull of all remote data (for new device / first login).
+  Future<void> fullPull(String userId);
+
+  /// Get the last sync timestamp for a user.
+  Future<DateTime?> getLastSyncedAt(String userId);
+
+  /// Set the last sync timestamp for a user.
+  Future<void> setLastSyncedAt(String userId, DateTime timestamp);
 }

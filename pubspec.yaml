@@ -46,6 +46,17 @@ dependencies:
   # Color palette extraction from images
   palette_generator_master: ^1.0.1
 
+  # Supabase (remote backend + auth)
+  supabase_flutter: ^2.8.0
+
+  # Google OAuth on desktop
+  desktop_webview_auth: ^0.0.14
+
+  # Network connectivity monitoring
+  connectivity_plus: ^6.1.0
+  crypto: ^3.0.7
+  provider: ^6.1.5+1
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

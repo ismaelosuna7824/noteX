@@ -29,6 +29,9 @@ class NoteEntries extends Table {
   TextColumn get backgroundImage => text().nullable()();
   TextColumn get themeId => text().nullable()();
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get userId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -45,6 +48,12 @@ class Projects extends Table {
   TextColumn get name => text()();
   IntColumn get colorValue => integer()();
   DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get userId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -60,16 +69,36 @@ class TimeEntries extends Table {
   TextColumn get projectId => text().nullable()();
   DateTimeColumn get startTime => dateTime()();
   DateTimeColumn get endTime => dateTime().nullable()();
+  DateTimeColumn get updatedAt => dateTime().nullable()();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get userId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
+}
+
+/// Tracks last sync timestamp per entity type per user.
+@DataClassName('SyncMetadataRow')
+class SyncMetadataEntries extends Table {
+  TextColumn get userId => text()();
+  TextColumn get entityType => text()(); // 'notes', 'projects', 'time_entries'
+  DateTimeColumn get lastSyncedAt => dateTime()();
+
+  @override
+  Set<Column> get primaryKey => {userId, entityType};
+
+  @override
+  String get tableName => 'sync_metadata';
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Database
 // ─────────────────────────────────────────────────────────────────────────────
 
-@DriftDatabase(tables: [NoteEntries, Projects, TimeEntries])
+@DriftDatabase(tables: [NoteEntries, Projects, TimeEntries, SyncMetadataEntries])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
 
@@ -77,7 +106,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 6;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -90,8 +119,58 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(timeEntries);
       }
       if (from < 4) {
-        await m.alterTable(TableMigration(projects));
-        await m.alterTable(TableMigration(timeEntries));
+        // v4 was a cleanup migration from the Firebase experiment
+      }
+      if (from < 5 || from == 5) {
+        // Helper to safely add column if it doesn't exist to prevent crashes
+        // from previous failed migrations.
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) {
+              // Ignore duplicate column errors
+              return;
+            }
+            rethrow;
+          }
+        }
+
+        // Notes — add new sync columns
+        await safeAddColumn(noteEntries, noteEntries.version);
+        await safeAddColumn(noteEntries, noteEntries.deletedAt);
+        await safeAddColumn(noteEntries, noteEntries.userId);
+
+        // Projects — add sync columns
+        await safeAddColumn(projects, projects.updatedAt);
+        await safeAddColumn(projects, projects.version);
+        await safeAddColumn(projects, projects.deletedAt);
+        await safeAddColumn(projects, projects.syncStatus);
+        await safeAddColumn(projects, projects.userId);
+
+        // Time entries — add sync columns
+        await safeAddColumn(timeEntries, timeEntries.updatedAt);
+        await safeAddColumn(timeEntries, timeEntries.version);
+        await safeAddColumn(timeEntries, timeEntries.deletedAt);
+        await safeAddColumn(timeEntries, timeEntries.syncStatus);
+        await safeAddColumn(timeEntries, timeEntries.userId);
+
+        // Sync metadata table
+        try {
+          await m.createTable(syncMetadataEntries);
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
+
+        // Backfill updatedAt for projects and time_entries
+        try {
+          await customStatement(
+            "UPDATE projects SET updated_at = created_at WHERE updated_at IS NULL",
+          );
+          await customStatement(
+            "UPDATE time_entries SET updated_at = start_time WHERE updated_at IS NULL",
+          );
+        } catch (_) {}
       }
     },
   );
@@ -109,6 +188,9 @@ class AppDatabase extends _$AppDatabase {
       backgroundImage: row.backgroundImage,
       themeId: row.themeId,
       isPinned: row.isPinned,
+      version: row.version,
+      deletedAt: row.deletedAt,
+      userId: row.userId,
     );
   }
 
@@ -123,6 +205,9 @@ class AppDatabase extends _$AppDatabase {
       backgroundImage: Value(note.backgroundImage),
       themeId: Value(note.themeId),
       isPinned: Value(note.isPinned),
+      version: Value(note.version),
+      deletedAt: Value(note.deletedAt),
+      userId: Value(note.userId),
     );
   }
 
@@ -141,6 +226,11 @@ class AppDatabase extends _$AppDatabase {
       name: row.name,
       colorValue: row.colorValue,
       createdAt: row.createdAt,
+      updatedAt: row.updatedAt ?? row.createdAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+      syncStatus: _parseSyncStatus(row.syncStatus),
+      userId: row.userId,
     );
   }
 
@@ -150,6 +240,11 @@ class AppDatabase extends _$AppDatabase {
       name: Value(p.name),
       colorValue: Value(p.colorValue),
       createdAt: Value(p.createdAt),
+      updatedAt: Value(p.updatedAt),
+      version: Value(p.version),
+      deletedAt: Value(p.deletedAt),
+      syncStatus: Value(p.syncStatus.name),
+      userId: Value(p.userId),
     );
   }
 
@@ -162,6 +257,11 @@ class AppDatabase extends _$AppDatabase {
       projectId: row.projectId,
       startTime: row.startTime,
       endTime: row.endTime,
+      updatedAt: row.updatedAt ?? row.startTime,
+      version: row.version,
+      deletedAt: row.deletedAt,
+      syncStatus: _parseSyncStatus(row.syncStatus),
+      userId: row.userId,
     );
   }
 
@@ -173,6 +273,11 @@ class AppDatabase extends _$AppDatabase {
       projectId: Value(entry.projectId),
       startTime: Value(entry.startTime),
       endTime: Value(entry.endTime),
+      updatedAt: Value(entry.updatedAt),
+      version: Value(entry.version),
+      deletedAt: Value(entry.deletedAt),
+      syncStatus: Value(entry.syncStatus.name),
+      userId: Value(entry.userId),
     );
   }
 }

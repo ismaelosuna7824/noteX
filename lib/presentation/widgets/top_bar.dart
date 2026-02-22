@@ -230,11 +230,11 @@ class _TopBarState extends State<TopBar> {
       child: Row(
         children: [
           // App logo
-          Image.asset(
-            'assets/icons/logo.png',
-            height: 48,
-            fit: BoxFit.contain,
-          ),
+          // Image.asset(
+          //   'assets/icons/logo.png',
+          //   height: 48,
+          //   fit: BoxFit.contain,
+          // ),
 
           const Spacer(),
 
