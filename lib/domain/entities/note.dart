@@ -47,7 +47,7 @@ class Note {
       content: '[]', // Empty Quill Delta
       createdAt: now,
       updatedAt: now,
-      syncStatus: SyncStatus.pendingSync,
+      syncStatus: SyncStatus.localOnly,
       backgroundImage: backgroundImage,
       themeId: themeId,
       isPinned: false,

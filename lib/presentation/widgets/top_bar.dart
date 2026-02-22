@@ -229,12 +229,6 @@ class _TopBarState extends State<TopBar> {
       padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
       child: Row(
         children: [
-          // App logo
-          // Image.asset(
-          //   'assets/icons/logo.png',
-          //   height: 48,
-          //   fit: BoxFit.contain,
-          // ),
 
           const Spacer(),
 
@@ -328,8 +322,8 @@ class _TopBarState extends State<TopBar> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    widget.userName != null
-                        ? 'Hi,${widget.userName}'
+                    widget.appState.isAuthenticated
+                        ? 'Hi, ${widget.userName ?? 'User'}'
                         : 'Sign In',
                     style: theme.textTheme.bodyMedium?.copyWith(
                       fontWeight: FontWeight.w600,

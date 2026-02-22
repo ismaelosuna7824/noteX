@@ -39,8 +39,16 @@ class SupabaseAuthAdapter implements AuthRepository {
   String? get currentUserId => _client.auth.currentUser?.id;
 
   @override
-  String? get displayName =>
-      _client.auth.currentUser?.userMetadata?['full_name'] as String?;
+  String? get displayName {
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    final fullName = user.userMetadata?['full_name'] as String?;
+    if (fullName != null && fullName.isNotEmpty) return fullName;
+    // Fallback to email prefix for email/password auth users
+    final email = user.email;
+    if (email != null && email.contains('@')) return email.split('@').first;
+    return email;
+  }
 
   @override
   String? get avatarUrl =>

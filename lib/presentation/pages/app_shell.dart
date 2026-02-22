@@ -122,14 +122,17 @@ class _AppShellState extends State<AppShell> with WindowListener {
                       Expanded(
                         child: Column(
                           children: [
-                            TopBar(
-                              appState: widget.appState,
-                              themeState: widget.themeState,
-                              userName: widget.appState.userName,
-                              avatarUrl: widget.appState.userAvatar,
-                              onNotificationTap: () {},
-                              onProfileTap: () =>
-                                  widget.appState.navigateToPage(5),
+                            ListenableBuilder(
+                              listenable: widget.appState,
+                              builder: (context, _) => TopBar(
+                                appState: widget.appState,
+                                themeState: widget.themeState,
+                                userName: widget.appState.userName,
+                                avatarUrl: widget.appState.userAvatar,
+                                onNotificationTap: () {},
+                                onProfileTap: () =>
+                                    widget.appState.navigateToPage(5),
+                              ),
                             ),
                             Expanded(
                               child: AnimatedSwitcher(

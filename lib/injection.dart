@@ -159,16 +159,17 @@ Future<void> setupDependencies() async {
 
   // Presentation - State
   getIt.registerSingleton<ThemeState>(ThemeState());
-  getIt.registerSingleton<AppState>(
-    AppState(
-      createNote: getIt<CreateNoteUseCase>(),
-      getNotes: getIt<GetNotesUseCase>(),
-      deleteNote: getIt<DeleteNoteUseCase>(),
-      updateNote: getIt<UpdateNoteUseCase>(),
-      autoSaveService: getIt<AutoSaveService>(),
-      authRepository: getIt<AuthRepository>(),
-    ),
+  final appState = AppState(
+    createNote: getIt<CreateNoteUseCase>(),
+    getNotes: getIt<GetNotesUseCase>(),
+    deleteNote: getIt<DeleteNoteUseCase>(),
+    updateNote: getIt<UpdateNoteUseCase>(),
+    autoSaveService: getIt<AutoSaveService>(),
+    authRepository: getIt<AuthRepository>(),
   );
+  getIt.registerSingleton<AppState>(appState);
+  // Wire sync completion callback so the UI refreshes sync icons after each sync
+  getIt<SyncEngine>().onSyncComplete = appState.refreshNotes;
   // TimerState owns a dart:async Timer → must be a singleton
   getIt.registerSingleton<TimerState>(
     TimerState(

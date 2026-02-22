@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/note.dart';
@@ -29,6 +31,7 @@ class AppState extends ChangeNotifier {
   bool _isLoading = false;
   bool _showPinnedTab = false;
   String? _authErrorMessage;
+  StreamSubscription<bool>? _authSub;
 
   AppState({
     required CreateNoteUseCase createNote,
@@ -44,6 +47,17 @@ class AppState extends ChangeNotifier {
         _authRepository = authRepository {
     // Wire up auto-save callback to refresh the list after saves
     autoSaveService.onSaved = _onNoteSaved;
+
+    // React to Supabase auth state changes (sign-in/sign-out come in async)
+    _authSub = _authRepository.authStateChanges.listen((_) {
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSub?.cancel();
+    super.dispose();
   }
 
   // Getters

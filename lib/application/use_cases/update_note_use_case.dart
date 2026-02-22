@@ -22,11 +22,17 @@ class UpdateNoteUseCase {
     final existing = await _repository.getById(noteId);
     if (existing == null) return null;
 
+    // Preserve localOnly status for unauthenticated users;
+    // only promote to pendingSync if the note was already tracked by sync.
+    final newSyncStatus = existing.syncStatus == SyncStatus.localOnly
+        ? SyncStatus.localOnly
+        : SyncStatus.pendingSync;
+
     final updated = existing.copyWith(
       title: title,
       content: content,
       updatedAt: DateTime.now(),
-      syncStatus: SyncStatus.pendingSync,
+      syncStatus: newSyncStatus,
       backgroundImage: backgroundImage,
       themeId: themeId,
       isPinned: isPinned,

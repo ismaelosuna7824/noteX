@@ -32,6 +32,10 @@ class SyncEngine {
 
   bool get isSyncing => _isSyncing;
 
+  /// Callback invoked after a successful sync cycle completes.
+  /// Wire this to [AppState.refreshNotes] so the UI updates sync icons.
+  Future<void> Function()? onSyncComplete;
+
   /// Start listening to connectivity for auto-sync.
   void startAutoSync() {
     _connectivitySub?.cancel();
@@ -74,7 +78,9 @@ class SyncEngine {
       _retryCount = 0;
       _retryTimer?.cancel();
 
-      return pushResult.merge(pullResult);
+      final result = pushResult.merge(pullResult);
+      await onSyncComplete?.call();
+      return result;
     } catch (e) {
       _scheduleRetry();
       return SyncResult.failed(e.toString());
@@ -102,6 +108,7 @@ class SyncEngine {
       await _syncService.setLastSyncedAt(userId, DateTime.now().toUtc());
 
       _retryCount = 0;
+      await onSyncComplete?.call();
       return pushResult;
     } catch (e) {
       return SyncResult.failed(e.toString());

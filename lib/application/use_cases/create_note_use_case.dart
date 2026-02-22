@@ -1,6 +1,5 @@
 import '../../domain/entities/note.dart';
 import '../../domain/repositories/note_repository.dart';
-import '../../domain/value_objects/sync_status.dart';
 
 /// Use case: Create a new note.
 ///
@@ -31,7 +30,6 @@ class CreateNoteUseCase {
       themeId: themeId,
     ).copyWith(
       title: title,
-      syncStatus: SyncStatus.pendingSync,
     );
 
     await _repository.save(note);

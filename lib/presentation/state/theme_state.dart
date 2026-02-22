@@ -136,10 +136,9 @@ class ThemeState extends ChangeNotifier {
       // Keep defaults — never crash on a corrupt settings file.
     }
 
-    // First launch: no saved background → pick the first preset automatically
-    // so the app always opens with a beautiful image rather than a plain gradient.
+    // First launch: no saved background → use the clay-banks photo as default.
     if (_backgroundImagePath == null) {
-      _backgroundImagePath = presetBackgrounds[0];
+      _backgroundImagePath = 'assets/images/clay-banks-hwLAI5lRhdM-unsplash.jpg';
       _isPaletteLoading = true;
       notifyListeners();
       // Extract palette async — sets accent color + clears _isPaletteLoading.
