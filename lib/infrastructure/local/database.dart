@@ -77,7 +77,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -88,6 +88,10 @@ class AppDatabase extends _$AppDatabase {
       if (from < 3) {
         await m.createTable(projects);
         await m.createTable(timeEntries);
+      }
+      if (from < 4) {
+        await m.alterTable(TableMigration(projects));
+        await m.alterTable(TableMigration(timeEntries));
       }
     },
   );

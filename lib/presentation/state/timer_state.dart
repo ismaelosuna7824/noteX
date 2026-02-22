@@ -40,6 +40,7 @@ class TimerState extends ChangeNotifier {
 
   // ── Misc ─────────────────────────────────────────────────────────────────
   bool _isLoading = false;
+  bool _isInitialized = false;
   Timer? _ticker;
 
   TimerState({
@@ -135,14 +136,29 @@ class TimerState extends ChangeNotifier {
   // ── Initialization ────────────────────────────────────────────────────────
 
   Future<void> initialize() async {
+    if (_isInitialized) {
+      try {
+        _projects = await _getProjects.getAll();
+        _runningEntry = await _getEntries.getRunning();
+        await _loadWeekEntries();
+      } catch (e) {
+        // ignore: avoid_print
+        print('[TimerState] refresh error: $e');
+      } finally {
+        Future.microtask(notifyListeners);
+      }
+      return;
+    }
+
     _isLoading = true;
-    notifyListeners();
+    Future.microtask(notifyListeners);
 
     try {
       _projects = await _getProjects.getAll();
       _runningEntry = await _getEntries.getRunning();
       await _loadWeekEntries();
       if (_runningEntry != null) _startTicker();
+      _isInitialized = true;
     } catch (e) {
       // ignore: avoid_print
       print('[TimerState] initialize error: $e');

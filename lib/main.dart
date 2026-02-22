@@ -6,6 +6,7 @@ import 'injection.dart';
 import 'presentation/app.dart';
 import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
+import 'presentation/state/timer_state.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +21,10 @@ void main() async {
   // 3. Initialize app state (load notes, create daily note)
   final appState = getIt<AppState>();
   await appState.initialize();
+
+  // Initialize timer state so HomePage has daily task stats immediately
+  final timerState = getIt<TimerState>();
+  await timerState.initialize();
 
   // 4. Restore persisted theme settings
   final themeState = getIt<ThemeState>();
