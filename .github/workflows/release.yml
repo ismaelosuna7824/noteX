@@ -28,17 +28,17 @@ jobs:
         run: flutter pub get
 
       - name: Create dart defines file
-        shell: pwsh
-        run: |
-          Set-Content -Path dart_defines.json -Value '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}'
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
 
       - name: Build Windows
         run: flutter build windows --release --dart-define-from-file=dart_defines.json
 
       - name: Archive Windows build
         shell: pwsh
-        run: |
-          Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath NoteX-windows.zip
+        run: Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath NoteX-windows.zip
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -61,8 +61,10 @@ jobs:
         run: flutter pub get
 
       - name: Create dart defines file
-        run: |
-          echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}' > dart_defines.json
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
 
       - name: Build macOS
         run: flutter build macos --release --dart-define-from-file=dart_defines.json
@@ -98,8 +100,10 @@ jobs:
         run: flutter pub get
 
       - name: Create dart defines file
-        run: |
-          echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}' > dart_defines.json
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
 
       - name: Build Linux
         run: flutter build linux --release --dart-define-from-file=dart_defines.json
