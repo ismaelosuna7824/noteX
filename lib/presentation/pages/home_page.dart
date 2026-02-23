@@ -328,7 +328,6 @@ class HomePage extends StatelessWidget {
     ThemeData theme,
     Color accentColor,
   ) {
-    // Uses a mirrored organic shape (large topRight/bottomLeft)
     final shape = RectangleShapeBorder(
       borderRadius: DynamicBorderRadius.only(
         topLeft: DynamicRadius.circular(Length(56)),
@@ -433,18 +432,15 @@ class HomePage extends StatelessWidget {
 
     final shape = RectangleShapeBorder(
       borderRadius: DynamicBorderRadius.only(
-        topLeft: DynamicRadius.circular(Length(28)),
-        topRight: DynamicRadius.circular(Length(72)),
-        bottomLeft: DynamicRadius.circular(Length(72)),
-        bottomRight: DynamicRadius.circular(Length(28)),
+        topLeft: DynamicRadius.circular(Length(24)),
+        topRight: DynamicRadius.circular(Length(24)),
+        bottomLeft: DynamicRadius.circular(Length(56)),
+        bottomRight: DynamicRadius.circular(Length(24)),
       ),
     );
 
     final primaryText = isDark ? Colors.white : Colors.black87;
     final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
-    final subtitleText = isDark ? Colors.white60 : Colors.grey.shade600;
-    final dividerColor =
-        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade100;
 
     return _PressButton(
       onTap: () => appState.navigateToPinnedNotes(),
@@ -504,34 +500,6 @@ class HomePage extends StatelessWidget {
               ],
             ),
 
-            if (pinnedCount > 0) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Divider(color: dividerColor, thickness: 1),
-              ),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      appState.pinnedNotes.first.title.isEmpty
-                          ? 'Untitled'
-                          : appState.pinnedNotes.first.title,
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: subtitleText,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  Icon(
-                    Icons.north_east_rounded,
-                    color: accentColor,
-                    size: 16,
-                  ),
-                ],
-              ),
-            ],
           ],
         ),
       ),

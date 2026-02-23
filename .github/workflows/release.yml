@@ -72,8 +72,41 @@ jobs:
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
 
+      - name: Apply macOS squircle icon shape
+        run: |
+          pip3 install Pillow --quiet
+          python3 << 'PYEOF'
+from PIL import Image, ImageDraw
+from pathlib import Path
+
+def apply_squircle(path):
+    """Apply the macOS squircle mask (~22.37% radius) to a PNG icon."""
+    img = Image.open(path).convert('RGBA')
+    size = img.size[0]
+    radius = int(size * 0.2237)
+
+    mask = Image.new('L', (size, size), 0)
+    draw = ImageDraw.Draw(mask)
+    draw.rounded_rectangle([0, 0, size - 1, size - 1], radius=radius, fill=255)
+
+    result = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    result.paste(img, mask=mask)
+    result.save(path, 'PNG')
+    print(f'  squircle applied → {path.name} ({size}x{size})')
+
+iconset = Path('macos/Runner/Assets.xcassets/AppIcon.appiconset')
+for icon in sorted(iconset.glob('*.png')):
+    apply_squircle(icon)
+print('Done.')
+PYEOF
+
       - name: Build macOS
         run: flutter build macos --release --dart-define-from-file=dart_defines.json
+
+      - name: Sign app (ad-hoc — avoids "malware" Gatekeeper message)
+        run: |
+          codesign --force --deep --sign - \
+            build/macos/Build/Products/Release/notex.app
 
       - name: Install create-dmg
         run: brew install create-dmg

@@ -14,7 +14,7 @@ class ThemeState extends ChangeNotifier {
   String _fontFamily = 'Poppins';
   String? _backgroundImagePath;
   Color _accentColor = const Color(0xFFFFD54F); // Vibrant yellow/gold default
-  bool _isDarkMode = true;
+  bool _isDarkMode = false; // Default to light mode on first launch
 
   /// 0.0 = very dark background, 1.0 = very bright background.
   /// Defaults to dark so text starts white before the first extraction.
@@ -115,7 +115,7 @@ class ThemeState extends ChangeNotifier {
       final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
 
       _fontFamily = json['fontFamily'] as String? ?? 'Poppins';
-      _isDarkMode = json['isDarkMode'] as bool? ?? true;
+      _isDarkMode = json['isDarkMode'] as bool? ?? false;
       _dominantLuminance =
           (json['dominantLuminance'] as num?)?.toDouble() ?? 0.15;
 
@@ -140,6 +140,9 @@ class ThemeState extends ChangeNotifier {
     if (_backgroundImagePath == null) {
       _backgroundImagePath = 'assets/images/clay-banks-hwLAI5lRhdM-unsplash.jpg';
       _isPaletteLoading = true;
+      // Persist immediately so the image is remembered even if palette
+      // extraction fails (e.g. on macOS release builds).
+      await _saveToDisk();
       notifyListeners();
       // Extract palette async — sets accent color + clears _isPaletteLoading.
       _extractAndApplyPalette(_backgroundImagePath!);
@@ -246,7 +249,10 @@ class ThemeState extends ChangeNotifier {
       notifyListeners();
     } catch (_) {
       // Palette extraction is best-effort — never break the UI.
+      // Still save to disk so the background image path is persisted even
+      // when extraction fails (prevents infinite retry on next launch).
       _isPaletteLoading = false;
+      await _saveToDisk();
       notifyListeners();
     }
   }
