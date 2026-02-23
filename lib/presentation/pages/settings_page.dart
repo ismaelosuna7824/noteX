@@ -2,6 +2,8 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
@@ -165,12 +167,18 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       const SizedBox(height: 16),
 
-                      // Background Image
+                      // Background Image / Video
                       _buildSection(
                         context,
                         isDark: isDark,
-                        title: 'Background Image',
-                        icon: Icons.image_rounded,
+                        title: ThemeState.isVideoFile(
+                                themeState.backgroundImagePath)
+                            ? 'Background Video'
+                            : 'Background Image',
+                        icon: ThemeState.isVideoFile(
+                                themeState.backgroundImagePath)
+                            ? Icons.videocam_rounded
+                            : Icons.image_rounded,
                         accentColor: accentColor,
                         child: _buildBackgroundPicker(context, accentColor),
                       ),
@@ -641,11 +649,36 @@ class _SettingsPageState extends State<SettingsPage> {
               final assetPath =
                   ThemeState.presetBackgrounds[index - 1];
               final isSelected = currentPath == assetPath;
+              final isVideo = ThemeState.isVideoFile(assetPath);
               return _BgThumbnail(
                 isSelected: isSelected,
                 accentColor: accentColor,
                 onTap: () => themeState.setBackgroundImage(assetPath),
-                child: Image.asset(assetPath, fit: BoxFit.cover),
+                child: isVideo
+                    ? Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          _VideoThumbnail(
+                            key: ValueKey(assetPath),
+                            videoPath: assetPath,
+                          ),
+                          Center(
+                            child: Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: const BoxDecoration(
+                                color: Colors.black45,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.play_arrow_rounded,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                            ),
+                          ),
+                        ],
+                      )
+                    : Image.asset(assetPath, fit: BoxFit.cover),
               );
             },
                 ),   // ListView.separated
@@ -663,7 +696,7 @@ class _SettingsPageState extends State<SettingsPage> {
               child: FilledButton.icon(
                 onPressed: () => _pickBackgroundImage(context),
                 icon: const Icon(Icons.upload_rounded, size: 18),
-                label: const Text('Upload Custom'),
+                label: const Text('Upload Image / Video'),
                 style: FilledButton.styleFrom(
                   backgroundColor: accentColor,
                   shape: RoundedRectangleBorder(
@@ -678,33 +711,153 @@ class _SettingsPageState extends State<SettingsPage> {
               IconButton(
                 onPressed: () => themeState.setBackgroundImage(null),
                 icon: const Icon(Icons.clear_rounded, size: 18),
-                tooltip: 'Remove custom image',
+                tooltip: 'Remove custom background',
               ),
             ],
           ],
         ),
 
-        // ── Custom image preview ───────────────────────────────────
+        // ── Custom file preview ────────────────────────────────────
         if (isCustom) ...[
           const SizedBox(height: 10),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(12),
-            child: Image.file(
-              File(currentPath),
-              height: 90,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (context, error, stackTrace) => Container(
+          if (ThemeState.isVideoFile(currentPath))
+            // Video preview: live first-frame thumbnail with overlay
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: SizedBox(
                 height: 90,
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(12),
+                width: double.infinity,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    _VideoThumbnail(
+                      key: ValueKey(currentPath),
+                      videoPath: currentPath,
+                    ),
+                    // Gradient overlay at bottom for filename
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [Colors.transparent, Colors.black87],
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.videocam_rounded,
+                                color: accentColor, size: 14),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Text(
+                                currentPath
+                                    .split(Platform.pathSeparator)
+                                    .last,
+                                style: const TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 11,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    // Play icon center
+                    Center(
+                      child: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Colors.black45,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.play_arrow_rounded,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                child: const Center(
-                  child: Icon(Icons.broken_image_rounded),
+              ),
+            )
+          else
+            // Image preview
+            ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.file(
+                File(currentPath),
+                height: 90,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 90,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.broken_image_rounded),
+                  ),
                 ),
               ),
             ),
+        ],
+
+        // ── Volume slider (video backgrounds only) ────────────────
+        if (ThemeState.isVideoFile(currentPath)) ...[
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Icon(
+                themeState.backgroundVolume == 0
+                    ? Icons.volume_off_rounded
+                    : Icons.volume_up_rounded,
+                color: accentColor,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: SliderTheme(
+                  data: SliderThemeData(
+                    activeTrackColor: accentColor,
+                    inactiveTrackColor: accentColor.withValues(alpha: 0.15),
+                    thumbColor: accentColor,
+                    overlayColor: accentColor.withValues(alpha: 0.12),
+                    trackHeight: 4,
+                    thumbShape:
+                        const RoundSliderThumbShape(enabledThumbRadius: 7),
+                  ),
+                  child: Slider(
+                    value: themeState.backgroundVolume,
+                    onChanged: (v) => themeState.setBackgroundVolume(v),
+                    min: 0,
+                    max: 1,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 6),
+              SizedBox(
+                width: 38,
+                child: Text(
+                  '${(themeState.backgroundVolume * 100).round()}%',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: accentColor,
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ],
@@ -774,7 +927,13 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _pickBackgroundImage(BuildContext context) async {
     try {
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.image,
+        type: FileType.custom,
+        allowedExtensions: [
+          // Images
+          'jpg', 'jpeg', 'png', 'webp', 'bmp', 'gif',
+          // Videos
+          'mp4', 'webm', 'mov', 'mkv',
+        ],
         allowMultiple: false,
       );
 
@@ -785,7 +944,7 @@ class _SettingsPageState extends State<SettingsPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not open file picker. Try selecting a preset image instead.'),
+            content: Text('Could not open file picker. Try selecting a preset background instead.'),
           ),
         );
       }
@@ -857,6 +1016,81 @@ class _BgThumbnail extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Video thumbnail widget ───────────────────────────────────────────────────
+//
+// Opens a video with a muted [Player], pauses on the first decoded frame,
+// and renders the paused [Video] widget as a static thumbnail. Disposed
+// automatically when scrolled off-screen or the page changes.
+
+class _VideoThumbnail extends StatefulWidget {
+  final String videoPath;
+
+  const _VideoThumbnail({super.key, required this.videoPath});
+
+  @override
+  State<_VideoThumbnail> createState() => _VideoThumbnailState();
+}
+
+class _VideoThumbnailState extends State<_VideoThumbnail> {
+  Player? _player;
+  VideoController? _controller;
+  bool _ready = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPlayer();
+  }
+
+  Future<void> _initPlayer() async {
+    final player = Player();
+    final controller = VideoController(player);
+    _player = player;
+    _controller = controller;
+
+    // Mute — this is just a thumbnail.
+    await player.setVolume(0);
+
+    // Pause as soon as the first video frame is decoded.
+    player.stream.videoParams.listen((params) {
+      if (params.w != null && params.w! > 0 && mounted && !_ready) {
+        Future.delayed(const Duration(milliseconds: 150), () {
+          if (mounted) {
+            player.pause();
+            setState(() => _ready = true);
+          }
+        });
+      }
+    });
+
+    // Asset videos use asset:/// URI, user files use raw path.
+    final uri = ThemeState.isAssetImage(widget.videoPath)
+        ? 'asset:///${widget.videoPath}'
+        : widget.videoPath;
+    await player.open(Media(uri));
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_controller == null) {
+      // Placeholder while loading
+      return Container(color: const Color(0xFF1A1A2E));
+    }
+    return Video(
+      controller: _controller!,
+      fit: BoxFit.cover,
+      controls: NoVideoControls,
+      fill: const Color(0xFF1A1A2E),
     );
   }
 }

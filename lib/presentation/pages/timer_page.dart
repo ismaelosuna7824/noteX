@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
@@ -413,7 +414,20 @@ class _ProjectChip extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(p.name, style: const TextStyle(fontSize: 13)),
+                Expanded(
+                  child: Text(p.name, style: const TextStyle(fontSize: 13)),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    Navigator.pop(context); // close menu first
+                    _showDeleteProjectDialog(context, p);
+                  },
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(Icons.delete_outline_rounded,
+                        size: 15, color: Colors.red.shade300),
+                  ),
+                ),
               ],
             ),
           ),
@@ -545,6 +559,39 @@ class _ProjectChip extends StatelessWidget {
       ),
     );
     nameController.dispose();
+  }
+
+  void _showDeleteProjectDialog(BuildContext context, Project project) {
+    final entryCount = timerState.weekEntries
+        .where((e) => e.projectId == project.id)
+        .length;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete "${project.name}"?'),
+        content: Text(
+          'This will permanently delete the project and all '
+          '$entryCount time entr${entryCount == 1 ? 'y' : 'ies'} inside it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await timerState.deleteProject(project.id);
+              onProjectSelected(null); // reset filter to All
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
   }
 }
 

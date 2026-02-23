@@ -1,3 +1,4 @@
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:get_it/get_it.dart';
@@ -133,7 +134,9 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   _buildListHeader(theme, accentColor, isDark),
                   const SizedBox(height: 8),
                   _buildProjectFilter(theme, accentColor, isDark),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+                  _buildSearchBar(accentColor, isDark),
+                  const SizedBox(height: 8),
                   Expanded(
                     child: _buildFileList(theme, accentColor, isDark),
                   ),
@@ -202,42 +205,102 @@ class _MarkdownPageState extends State<MarkdownPage> {
     final selected = _mdState.selectedProjectId;
 
     return SizedBox(
-      height: 32,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
-        children: [
-          _FilterChip(
-            label: 'All',
-            isSelected: selected == null,
-            accentColor: accentColor,
-            isDark: isDark,
-            onTap: () => _mdState.filterByProject(null),
-          ),
-          const SizedBox(width: 6),
-          _FilterChip(
-            label: 'Root',
-            isSelected: selected == '__root__',
-            accentColor: accentColor,
-            isDark: isDark,
-            onTap: () => _mdState.filterByProject('__root__'),
-          ),
-          for (final project in _mdState.projects) ...[
-            const SizedBox(width: 6),
-            GestureDetector(
-              onSecondaryTapUp: (details) =>
-                  _showProjectContextMenu(details.globalPosition, project),
-              child: _FilterChip(
-                label: project.name,
-                isSelected: selected == project.id,
-                accentColor: accentColor,
-                isDark: isDark,
-                color: project.color,
-                onTap: () => _mdState.filterByProject(project.id),
-                onLongPress: () => _showDeleteProjectDialog(project),
-              ),
+      height: 30,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+          },
+        ),
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            _FilterChip(
+              label: 'All',
+              isSelected: selected == null,
+              accentColor: accentColor,
+              isDark: isDark,
+              onTap: () => _mdState.filterByProject(null),
             ),
+            const SizedBox(width: 6),
+            _FilterChip(
+              label: 'Root',
+              isSelected: selected == '__root__',
+              accentColor: accentColor,
+              isDark: isDark,
+              onTap: () => _mdState.filterByProject('__root__'),
+            ),
+            for (final project in _mdState.projects) ...[
+              const SizedBox(width: 6),
+              GestureDetector(
+                onSecondaryTapUp: (details) =>
+                    _showProjectContextMenu(details.globalPosition, project),
+                child: _FilterChip(
+                  label: project.name,
+                  isSelected: selected == project.id,
+                  accentColor: accentColor,
+                  isDark: isDark,
+                  color: project.color,
+                  onTap: () => _mdState.filterByProject(project.id),
+                  onLongPress: () => _showDeleteProjectDialog(project),
+                ),
+              ),
+            ],
           ],
-        ],
+        ),
+      ),
+    );
+  }
+
+  // ── Search Bar ────────────────────────────────────────────────────────
+
+  Widget _buildSearchBar(Color accentColor, bool isDark) {
+    return SizedBox(
+      height: 34,
+      child: TextField(
+        onChanged: (q) => _mdState.search(q),
+        style: TextStyle(
+          fontSize: 12,
+          color: isDark ? Colors.white : Colors.black87,
+        ),
+        decoration: InputDecoration(
+          hintText: 'Search files...',
+          hintStyle: TextStyle(
+            fontSize: 12,
+            color: isDark ? Colors.white38 : Colors.grey.shade400,
+          ),
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            size: 16,
+            color: isDark ? Colors.white38 : Colors.grey.shade400,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 32,
+            minHeight: 0,
+          ),
+          filled: true,
+          fillColor: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.grey.shade100,
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(10),
+            borderSide: BorderSide(
+              color: accentColor.withValues(alpha: 0.5),
+              width: 1,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -248,18 +311,19 @@ class _MarkdownPageState extends State<MarkdownPage> {
     final files = _mdState.filteredFiles;
 
     if (files.isEmpty) {
+      final hasSearch = _mdState.searchQuery.isNotEmpty;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              Icons.article_outlined,
+              hasSearch ? Icons.search_off_rounded : Icons.article_outlined,
               size: 40,
               color: Colors.grey.shade300,
             ),
             const SizedBox(height: 8),
             Text(
-              'No markdown files',
+              hasSearch ? 'No files found' : 'No markdown files',
               style: TextStyle(
                 color: isDark ? Colors.white70 : Colors.grey.shade400,
                 fontSize: 13,

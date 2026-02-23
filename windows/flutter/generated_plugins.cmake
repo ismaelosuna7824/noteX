@@ -7,9 +7,12 @@ list(APPEND FLUTTER_PLUGIN_LIST
   connectivity_plus
   file_selector_windows
   flutter_acrylic
+  media_kit_libs_windows_video
+  media_kit_video
   screen_retriever
   sqlite3_flutter_libs
   url_launcher_windows
+  volume_controller
   window_manager
 )
 

@@ -31,6 +31,9 @@ class ThemeState extends ChangeNotifier {
   /// compare against the current value and abort if they no longer match.
   int _paletteToken = 0;
 
+  /// Volume for video backgrounds. 0.0 = muted (default), 1.0 = full volume.
+  double _backgroundVolume = 0.0;
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -48,6 +51,9 @@ class ThemeState extends ChangeNotifier {
   /// `true` when the home-page hero text should use light (white-ish) color.
   bool get textNeedsLight =>
       _backgroundImagePath == null || _dominantLuminance < 0.5;
+
+  /// Video background volume (0.0 = muted, 1.0 = full).
+  double get backgroundVolume => _backgroundVolume;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -75,8 +81,9 @@ class ThemeState extends ChangeNotifier {
     Color(0xFF636E72), // Gray
   ];
 
-  /// Bundled preset background images (from assets/images/).
+  /// Bundled preset backgrounds — images and videos (from assets/images/).
   static const List<String> presetBackgrounds = [
+    // ── Images ──
     'assets/images/anime-night-sky-illustration.jpg',
     'assets/images/anime-style-boy-girl-couple-love.jpg',
     'assets/images/anime-style-boy-girl-couple.jpg',
@@ -93,11 +100,31 @@ class ThemeState extends ChangeNotifier {
     'assets/images/1311994.jpeg',
     'assets/images/896653.jpg',
     'assets/images/clay-banks-hwLAI5lRhdM-unsplash.jpg',
+    // ── Videos ──
+    'assets/images/vecteezy_ai-generated-japanese-house-room-with-beautiful-nature-view_36627003.mp4',
+    'assets/images/vecteezy_traditional-japanese-house-street-rainy-old-asian-village_47974312.mp4',
+    'assets/images/vecteezy_a-serene-street-lined-with-traditional-wooden-houses-under_47072140.mp4',
+    'assets/images/HD Desk UI Ocarina.mp4',
+    'assets/images/zeldasunsetdeskop4k.mp4',
+    'assets/images/Bump Of Chicken - Acacia [Pokemon Gotcha!] (Jetdarc 8-bit_Chiptune Remix).mp4',
+    'assets/images/ffmpeg_260118093337_c82792_60.mp4',
+    'assets/images/inthesnow 2_1.mp4',
+    'assets/images/2020-04-11 20-26-21.mp4',
   ];
 
   /// Returns `true` when [path] refers to a bundled asset (not a disk file).
   static bool isAssetImage(String? path) =>
       path != null && path.startsWith('assets/');
+
+  /// Video extensions recognized for background playback.
+  static const _videoExtensions = {'.mp4', '.webm', '.mov', '.mkv'};
+
+  /// Returns `true` when [path] points to a video file (by extension).
+  static bool isVideoFile(String? path) {
+    if (path == null) return false;
+    final lower = path.toLowerCase();
+    return _videoExtensions.any((ext) => lower.endsWith(ext));
+  }
 
   // ── Persistence ───────────────────────────────────────────────────────────
 
@@ -118,6 +145,8 @@ class ThemeState extends ChangeNotifier {
       _isDarkMode = json['isDarkMode'] as bool? ?? false;
       _dominantLuminance =
           (json['dominantLuminance'] as num?)?.toDouble() ?? 0.15;
+      _backgroundVolume =
+          (json['backgroundVolume'] as num?)?.toDouble() ?? 0.0;
 
       final bgPath = json['backgroundImagePath'] as String?;
       if (bgPath != null) {
@@ -162,6 +191,7 @@ class ThemeState extends ChangeNotifier {
         'accentColor': _accentColor.toARGB32(),
         'dominantLuminance': _dominantLuminance,
         'heroTextColor': _heroTextColor.toARGB32(),
+        'backgroundVolume': _backgroundVolume,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -177,29 +207,42 @@ class ThemeState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Set background image and automatically extract a matching accent color.
+  /// Set background image/video and automatically extract a matching accent color.
   ///
-  /// Pass `null` to remove the background. Palette extraction runs async
-  /// and will call [notifyListeners] again once the color is ready.
+  /// Pass `null` to remove the background. For images, palette extraction runs
+  /// async. For videos, dark defaults are applied immediately.
   void setBackgroundImage(String? path) {
     _backgroundImagePath = path;
 
-    // When clearing the image, reset to defaults for the dark gradient bg.
+    // When clearing the background, reset to defaults for the dark gradient.
     if (path == null) {
       _dominantLuminance = 0.15;
       _heroTextColor = Colors.white;
       _isPaletteLoading = false;
+    } else if (isVideoFile(path)) {
+      // Videos: use dark defaults (no palette extraction from video frames).
+      _dominantLuminance = 0.15;
+      _heroTextColor = Colors.white;
+      _isPaletteLoading = false;
     } else {
-      // Show loading indicator while we extract the palette from the new image.
+      // Images: show loading indicator while we extract the palette.
       _isPaletteLoading = true;
     }
 
     _saveToDisk();
     notifyListeners();
 
-    if (path != null) {
+    // Only extract palette for actual image files, not videos.
+    if (path != null && !isVideoFile(path)) {
       _extractAndApplyPalette(path);
     }
+  }
+
+  /// Set the video background volume and persist.
+  void setBackgroundVolume(double volume) {
+    _backgroundVolume = volume.clamp(0.0, 1.0);
+    _saveToDisk();
+    notifyListeners();
   }
 
   /// Extracts the most vibrant color + the dominant luminance from [imagePath].

@@ -15,6 +15,9 @@ abstract class TimeEntryRepository {
   /// Get all non-deleted time entries.
   Future<List<TimeEntry>> getAll();
 
+  /// All non-deleted entries belonging to a given [projectId].
+  Future<List<TimeEntry>> getByProjectId(String projectId);
+
   Future<void> save(TimeEntry entry); // insert or update
   Future<void> delete(String id);
 

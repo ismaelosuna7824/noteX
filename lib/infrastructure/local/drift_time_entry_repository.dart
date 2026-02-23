@@ -53,6 +53,16 @@ class DriftTimeEntryRepository implements TimeEntryRepository {
   }
 
   @override
+  Future<List<domain.TimeEntry>> getByProjectId(String projectId) async {
+    final rows = await (_db.select(_db.timeEntries)
+          ..where(
+              (t) => t.deletedAt.isNull() & t.projectId.equals(projectId))
+          ..orderBy([(t) => OrderingTerm.desc(t.startTime)]))
+        .get();
+    return rows.map((r) => AppDatabase.timeEntryToDomain(r)).toList();
+  }
+
+  @override
   Future<List<domain.TimeEntry>> getBySyncStatus(SyncStatus status) async {
     final rows = await (_db.select(_db.timeEntries)
           ..where((t) => t.syncStatus.equals(status.name)))

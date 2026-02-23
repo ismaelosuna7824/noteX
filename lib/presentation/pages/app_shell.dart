@@ -1,5 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:media_kit/media_kit.dart';
+import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../state/app_state.dart';
@@ -39,18 +41,89 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> with WindowListener {
   bool _isMaximized = false;
 
+  // ── Video background player ─────────────────────────────────────────────
+  Player? _bgPlayer;
+  VideoController? _bgVideoController;
+  String? _currentVideoPath;
+
   @override
   void initState() {
     super.initState();
     windowManager.addListener(this);
     _syncMaximizedState();
+    widget.themeState.addListener(_syncVideoPlayer);
+    _syncVideoPlayer();
   }
 
   @override
   void dispose() {
+    widget.themeState.removeListener(_syncVideoPlayer);
+    _disposeVideoPlayer();
     windowManager.removeListener(this);
     super.dispose();
   }
+
+  @override
+  void didUpdateWidget(covariant AppShell oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.themeState != widget.themeState) {
+      oldWidget.themeState.removeListener(_syncVideoPlayer);
+      widget.themeState.addListener(_syncVideoPlayer);
+      _syncVideoPlayer();
+    }
+  }
+
+  // ── Video player lifecycle ──────────────────────────────────────────────
+
+  /// Create, update, or dispose the background video player based on the
+  /// current [ThemeState.backgroundImagePath].
+  void _syncVideoPlayer() {
+    final path = widget.themeState.backgroundImagePath;
+    final isVideo = ThemeState.isVideoFile(path);
+
+    if (!isVideo) {
+      // Background is an image or null — dispose any active player.
+      if (_bgPlayer != null) {
+        _disposeVideoPlayer();
+        if (mounted) setState(() {});
+      }
+      return;
+    }
+
+    if (_currentVideoPath != path) {
+      // New video selected — (re)create the player.
+      _disposeVideoPlayer();
+      _currentVideoPath = path;
+
+      final player = Player();
+      final controller = VideoController(player);
+
+      player.setPlaylistMode(PlaylistMode.loop);
+      player.setVolume(widget.themeState.backgroundVolume * 100);
+
+      // Asset videos use the 'asset:///' URI scheme for media_kit;
+      // user-uploaded files use the raw filesystem path.
+      final mediaUri =
+          ThemeState.isAssetImage(path!) ? 'asset:///$path' : path;
+      player.open(Media(mediaUri));
+
+      _bgPlayer = player;
+      _bgVideoController = controller;
+      if (mounted) setState(() {});
+    } else {
+      // Same video — just sync volume.
+      _bgPlayer?.setVolume(widget.themeState.backgroundVolume * 100);
+    }
+  }
+
+  void _disposeVideoPlayer() {
+    _bgPlayer?.dispose();
+    _bgPlayer = null;
+    _bgVideoController = null;
+    _currentVideoPath = null;
+  }
+
+  // ── Window state ────────────────────────────────────────────────────────
 
   Future<void> _syncMaximizedState() async {
     final maximized = await windowManager.isMaximized();
@@ -257,10 +330,20 @@ class _AppShellState extends State<AppShell> with WindowListener {
     }
   }
 
-  /// Renders the full-bleed background: asset image, file image, or gradient.
+  /// Renders the full-bleed background: video, asset image, file image, or gradient.
   Widget _buildBackground(ThemeState themeState) {
     final path = themeState.backgroundImagePath;
     if (path == null) return _buildDefaultBg(themeState.accentColor);
+
+    // Video background
+    if (ThemeState.isVideoFile(path) && _bgVideoController != null) {
+      return Video(
+        controller: _bgVideoController!,
+        fit: BoxFit.cover,
+        controls: NoVideoControls,
+        fill: Colors.black,
+      );
+    }
 
     if (ThemeState.isAssetImage(path)) {
       // Bundled preset image

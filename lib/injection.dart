@@ -162,7 +162,11 @@ Future<void> setupDependencies() async {
     () => GetProjectsUseCase(getIt<ProjectRepository>()),
   );
   getIt.registerFactory<DeleteProjectUseCase>(
-    () => DeleteProjectUseCase(getIt<ProjectRepository>()),
+    () => DeleteProjectUseCase(
+      getIt<ProjectRepository>(),
+      getIt<TimeEntryRepository>(),
+      getIt<SyncEngine>(),
+    ),
   );
   getIt.registerFactory<StartTimerUseCase>(
     () => StartTimerUseCase(getIt<TimeEntryRepository>()),

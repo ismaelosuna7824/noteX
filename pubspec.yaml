@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.10.0+1
+version: 1.11.0+1
 
 environment:
   sdk: ^3.11.0
@@ -61,6 +61,13 @@ dependencies:
 
   # HTTP client (GitHub API for auto-updates)
   http: ^1.2.2
+
+  # Video playback for background videos (Wallpaper Engine style)
+  media_kit: ^1.1.10
+  media_kit_video: ^1.1.10
+  media_kit_libs_windows_video: ^1.0.9
+  media_kit_libs_macos_video: ^1.0.7
+  media_kit_libs_linux: ^1.1.3
 
 dev_dependencies:
   flutter_test:
