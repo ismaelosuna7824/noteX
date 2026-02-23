@@ -18,7 +18,8 @@
       "Bash(Test-Path \"D:\\\\Git\\\\NoteX\\\\notex\\\\README.md\")",
       "Bash(gh release list)",
       "WebFetch(domain:api.github.com)",
-      "Bash(where:*)"
+      "Bash(where:*)",
+      "Bash(gh run list:*)"
     ]
   }
 }
