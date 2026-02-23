@@ -471,28 +471,51 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                SizedBox(
-                  width: double.infinity,
-                  child: FilledButton(
-                    onPressed: () async {
-                      final uri = Uri.parse(update.downloadUrl);
-                      if (await canLaunchUrl(uri)) {
-                        await launchUrl(uri,
-                            mode: LaunchMode.externalApplication);
-                      }
-                    },
-                    style: FilledButton.styleFrom(
-                      backgroundColor: accentColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
+                if (appState.isUpdating) ...[
+                  const SizedBox(height: 10),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: appState.updateProgress > 0
+                          ? appState.updateProgress
+                          : null,
+                      backgroundColor: accentColor.withValues(alpha: 0.15),
+                      valueColor: AlwaysStoppedAnimation(accentColor),
+                      minHeight: 6,
                     ),
-                    child: const Text('Download Update',
-                        style: TextStyle(fontSize: 12)),
                   ),
-                ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Downloading... ${(appState.updateProgress * 100).toInt()}%',
+                    style: TextStyle(fontSize: 11, color: accentColor),
+                  ),
+                ] else ...[
+                  if (appState.updateError != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      appState.updateError!,
+                      style: const TextStyle(
+                          fontSize: 11, color: Colors.redAccent),
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () => appState.applyUpdate(),
+                      icon: const Icon(Icons.download_rounded, size: 16),
+                      style: FilledButton.styleFrom(
+                        backgroundColor: accentColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      label: const Text('Update Now',
+                          style: TextStyle(fontSize: 12)),
+                    ),
+                  ),
+                ],
               ],
             ),
           ),

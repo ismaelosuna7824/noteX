@@ -146,6 +146,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                                   update: widget.appState.availableUpdate!,
                                   accentColor: widget.themeState.accentColor,
                                   onDismiss: widget.appState.dismissUpdateBanner,
+                                  appState: widget.appState,
                                 );
                               },
                             ),

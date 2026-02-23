@@ -32,6 +32,7 @@ class AppState extends ChangeNotifier {
   final GetNoteProjectsUseCase _getNoteProjects;
   final DeleteNoteProjectUseCase _deleteNoteProject;
   final CheckForUpdateUseCase _checkForUpdate;
+  final UpdateService _updateService;
   final AutoSaveService autoSaveService;
   final AuthRepository _authRepository;
   SyncEngine? _syncEngine;
@@ -51,6 +52,9 @@ class AppState extends ChangeNotifier {
   // Auto-update state
   UpdateInfo? _availableUpdate;
   bool _updateBannerDismissed = false;
+  bool _isUpdating = false;
+  double _updateProgress = 0.0;
+  String? _updateError;
 
   AppState({
     required CreateNoteUseCase createNote,
@@ -61,6 +65,7 @@ class AppState extends ChangeNotifier {
     required GetNoteProjectsUseCase getNoteProjects,
     required DeleteNoteProjectUseCase deleteNoteProject,
     required CheckForUpdateUseCase checkForUpdate,
+    required UpdateService updateService,
     required this.autoSaveService,
     required AuthRepository authRepository,
   })  : _createNote = createNote,
@@ -71,6 +76,7 @@ class AppState extends ChangeNotifier {
         _getNoteProjects = getNoteProjects,
         _deleteNoteProject = deleteNoteProject,
         _checkForUpdate = checkForUpdate,
+        _updateService = updateService,
         _authRepository = authRepository {
     // Wire up auto-save callback to refresh the list after saves
     autoSaveService.onSaved = _onNoteSaved;
@@ -107,6 +113,9 @@ class AppState extends ChangeNotifier {
   UpdateInfo? get availableUpdate => _availableUpdate;
   bool get hasUpdate => _availableUpdate != null;
   bool get showUpdateBanner => _availableUpdate != null && !_updateBannerDismissed;
+  bool get isUpdating => _isUpdating;
+  double get updateProgress => _updateProgress;
+  String? get updateError => _updateError;
 
   /// Clear any existing authentication errors
   void clearAuthError() {
@@ -436,6 +445,37 @@ class AppState extends ChangeNotifier {
       }
     } catch (_) {
       // Network errors etc. — don't bother the user.
+    }
+  }
+
+  /// Download and apply the update in-place (silent install on Windows).
+  ///
+  /// Auto-saves any pending work before launching the installer.
+  Future<void> applyUpdate() async {
+    final update = _availableUpdate;
+    if (update == null || _isUpdating) return;
+
+    _isUpdating = true;
+    _updateProgress = 0.0;
+    _updateError = null;
+    notifyListeners();
+
+    try {
+      await _updateService.applyUpdate(
+        update,
+        onProgress: (progress) {
+          _updateProgress = progress;
+          notifyListeners();
+        },
+      );
+      // On Windows applyUpdate calls exit(0), so we won't reach here.
+      // On macOS/Linux it opens the browser and returns normally.
+      _isUpdating = false;
+      notifyListeners();
+    } catch (e) {
+      _isUpdating = false;
+      _updateError = 'Update failed: $e';
+      notifyListeners();
     }
   }
 

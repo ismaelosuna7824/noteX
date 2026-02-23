@@ -264,6 +264,7 @@ Future<void> setupDependencies() async {
     autoSaveService: getIt<AutoSaveService>(),
     authRepository: getIt<AuthRepository>(),
     checkForUpdate: getIt<CheckForUpdateUseCase>(),
+    updateService: getIt<UpdateService>(),
   );
   getIt.registerSingleton<AppState>(appState);
   // Wire sync completion callback so the UI refreshes sync icons after each sync

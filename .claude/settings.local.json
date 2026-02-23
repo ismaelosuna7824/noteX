@@ -15,7 +15,9 @@
       "Bash(flutter pub remove:*)",
       "WebFetch(domain:trapeze.dev)",
       "Bash(git -C D:/Git/NoteX/notex log --oneline --all -20)",
-      "Bash(Test-Path \"D:\\\\Git\\\\NoteX\\\\notex\\\\README.md\")"
+      "Bash(Test-Path \"D:\\\\Git\\\\NoteX\\\\notex\\\\README.md\")",
+      "Bash(gh release list)",
+      "WebFetch(domain:api.github.com)"
     ]
   }
 }

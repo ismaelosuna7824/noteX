@@ -1,6 +1,8 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
+import 'dart:io'
+    show Directory, File, Platform, Process, ProcessStartMode, exit, pid;
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../domain/services/update_service.dart';
 import '../config/app_config.dart';
@@ -49,6 +51,164 @@ class GitHubUpdateAdapter implements UpdateService {
     }
   }
 
+  @override
+  Future<void> applyUpdate(
+    UpdateInfo update, {
+    void Function(double progress)? onProgress,
+  }) async {
+    if (Platform.isWindows) {
+      await _applyWindows(update, onProgress);
+    } else if (Platform.isMacOS) {
+      await _applyMacOS(update, onProgress);
+    } else {
+      // Linux / other: fall back to opening the browser
+      final uri = Uri.parse(update.downloadUrl);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      }
+    }
+  }
+
+  // ── Windows: silent Inno Setup installer ──────────────────────────────
+
+  Future<void> _applyWindows(
+    UpdateInfo update,
+    void Function(double)? onProgress,
+  ) async {
+    final installerPath =
+        '${Directory.systemTemp.path}/NoteX-windows-setup.exe';
+
+    await _downloadFile(update.downloadUrl, installerPath, onProgress);
+
+    // Launch the installer silently — Inno Setup will close the running
+    // app (via CloseApplications=yes) and restart it after upgrading.
+    await Process.start(
+      installerPath,
+      [
+        '/VERYSILENT',
+        '/SUPPRESSMSGBOXES',
+        '/CLOSEAPPLICATIONS',
+        '/RESTARTAPPLICATIONS',
+      ],
+      mode: ProcessStartMode.detached,
+    );
+
+    exit(0);
+  }
+
+  // ── macOS: mount DMG, replace .app bundle, relaunch ───────────────────
+
+  Future<void> _applyMacOS(
+    UpdateInfo update,
+    void Function(double)? onProgress,
+  ) async {
+    final dmgPath = '${Directory.systemTemp.path}/NoteX-macos.dmg';
+
+    await _downloadFile(update.downloadUrl, dmgPath, onProgress);
+
+    // Resolve the current .app bundle path from the running executable.
+    // Platform.resolvedExecutable → /Applications/notex.app/Contents/MacOS/notex
+    final executable = Platform.resolvedExecutable;
+    final appSuffix = '.app/';
+    final appEndIndex = executable.indexOf(appSuffix);
+    if (appEndIndex < 0) {
+      throw Exception('Cannot determine .app bundle path');
+    }
+    final appBundlePath = executable.substring(0, appEndIndex + 4); // includes ".app"
+    final appDir = File(appBundlePath).parent.path;
+
+    // Create an update script that runs after the app exits.
+    // macOS keeps the binary in memory after the .app is deleted, so this is safe.
+    final scriptPath = '${Directory.systemTemp.path}/notex_update.sh';
+    final currentPid = pid;
+
+    final script = '''#!/bin/bash
+# Wait for the current process to exit
+while kill -0 $currentPid 2>/dev/null; do sleep 0.3; done
+
+# Mount the DMG
+MOUNT_OUTPUT=\$(hdiutil attach "$dmgPath" -nobrowse -readonly 2>&1)
+MOUNT_POINT=\$(echo "\$MOUNT_OUTPUT" | grep -oE '/Volumes/[^\\t\\n]+' | head -1)
+
+if [ -z "\$MOUNT_POINT" ]; then
+  rm -f "$dmgPath" "$scriptPath"
+  exit 1
+fi
+
+# Find the .app inside the mounted volume
+APP_FOUND=\$(ls "\$MOUNT_POINT" | grep '\\.app\$' | head -1)
+
+if [ -z "\$APP_FOUND" ]; then
+  hdiutil detach "\$MOUNT_POINT" -quiet
+  rm -f "$dmgPath" "$scriptPath"
+  exit 1
+fi
+
+TARGET="$appDir/\$APP_FOUND"
+
+# Check if we can write directly; if not, elevate via osascript
+if [ -w "$appDir" ]; then
+  rm -rf "\$TARGET"
+  cp -Rf "\$MOUNT_POINT/\$APP_FOUND" "$appDir/"
+  xattr -cr "\$TARGET"
+else
+  osascript -e "do shell script \\"rm -rf '\$TARGET' && cp -Rf '\$MOUNT_POINT/\$APP_FOUND' '$appDir/' && xattr -cr '\$TARGET'\\" with administrator privileges"
+fi
+
+# Unmount and clean up
+hdiutil detach "\$MOUNT_POINT" -quiet
+rm -f "$dmgPath"
+
+# Relaunch
+open "\$TARGET"
+
+# Self-delete
+rm -f "$scriptPath"
+''';
+
+    await File(scriptPath).writeAsString(script);
+    await Process.run('chmod', ['+x', scriptPath]);
+
+    // Launch the update script detached so it outlives this process
+    await Process.start(
+      '/bin/bash',
+      [scriptPath],
+      mode: ProcessStartMode.detached,
+    );
+
+    exit(0);
+  }
+
+  // ── Shared: streaming download with progress ──────────────────────────
+
+  Future<void> _downloadFile(
+    String url,
+    String destPath,
+    void Function(double)? onProgress,
+  ) async {
+    final request = http.Request('GET', Uri.parse(url));
+    final streamedResponse = await request.send().timeout(
+      const Duration(minutes: 5),
+    );
+
+    if (streamedResponse.statusCode != 200) {
+      throw Exception('Download failed: HTTP ${streamedResponse.statusCode}');
+    }
+
+    final totalBytes = streamedResponse.contentLength ?? 0;
+    var receivedBytes = 0;
+    final sink = File(destPath).openWrite();
+
+    await for (final chunk in streamedResponse.stream) {
+      sink.add(chunk);
+      receivedBytes += chunk.length;
+      if (totalBytes > 0) {
+        onProgress?.call(receivedBytes / totalBytes);
+      }
+    }
+    await sink.close();
+  }
+
   /// Returns `true` when [remote] is a higher semver than [local].
   static bool _isNewer(String remote, String local) {
     final r = _parseSemver(remote);
@@ -76,9 +236,9 @@ class GitHubUpdateAdapter implements UpdateService {
   /// Searches the release assets for a file matching the current OS.
   ///
   /// Convention:
-  /// - Windows: asset name contains "windows" (e.g. NoteX-windows.zip)
-  /// - macOS:   asset name contains "macos"   (e.g. NoteX-macos.zip)
-  /// - Linux:   asset name contains "linux"   (e.g. NoteX-linux.tar.gz)
+  /// - Windows: asset name contains "windows" (e.g. NoteX-windows-setup.exe)
+  /// - macOS:   asset name contains "macos"   (e.g. NoteX-macos.dmg)
+  /// - Linux:   asset name contains "linux"   (e.g. NoteX-linux.deb)
   static String? _platformDownloadUrl(Map<String, dynamic> release) {
     final assets = release['assets'] as List<dynamic>? ?? [];
 
