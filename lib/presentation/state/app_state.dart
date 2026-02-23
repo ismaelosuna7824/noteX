@@ -12,9 +12,11 @@ import '../../application/use_cases/update_note_use_case.dart';
 import '../../application/use_cases/note/create_note_project_use_case.dart';
 import '../../application/use_cases/note/get_note_projects_use_case.dart';
 import '../../application/use_cases/note/delete_note_project_use_case.dart';
+import '../../application/use_cases/check_for_update_use_case.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
 import '../../domain/repositories/auth_repository.dart';
+import '../../domain/services/update_service.dart';
 import 'package:uuid/uuid.dart';
 
 /// Central application state using ChangeNotifier.
@@ -28,6 +30,7 @@ class AppState extends ChangeNotifier {
   final CreateNoteProjectUseCase _createNoteProject;
   final GetNoteProjectsUseCase _getNoteProjects;
   final DeleteNoteProjectUseCase _deleteNoteProject;
+  final CheckForUpdateUseCase _checkForUpdate;
   final AutoSaveService autoSaveService;
   final AuthRepository _authRepository;
   SyncEngine? _syncEngine;
@@ -44,6 +47,10 @@ class AppState extends ChangeNotifier {
   String? _authErrorMessage;
   StreamSubscription<bool>? _authSub;
 
+  // Auto-update state
+  UpdateInfo? _availableUpdate;
+  bool _updateBannerDismissed = false;
+
   AppState({
     required CreateNoteUseCase createNote,
     required GetNotesUseCase getNotes,
@@ -52,6 +59,7 @@ class AppState extends ChangeNotifier {
     required CreateNoteProjectUseCase createNoteProject,
     required GetNoteProjectsUseCase getNoteProjects,
     required DeleteNoteProjectUseCase deleteNoteProject,
+    required CheckForUpdateUseCase checkForUpdate,
     required this.autoSaveService,
     required AuthRepository authRepository,
   })  : _createNote = createNote,
@@ -61,6 +69,7 @@ class AppState extends ChangeNotifier {
         _createNoteProject = createNoteProject,
         _getNoteProjects = getNoteProjects,
         _deleteNoteProject = deleteNoteProject,
+        _checkForUpdate = checkForUpdate,
         _authRepository = authRepository {
     // Wire up auto-save callback to refresh the list after saves
     autoSaveService.onSaved = _onNoteSaved;
@@ -94,6 +103,9 @@ class AppState extends ChangeNotifier {
   String? get userName => _authRepository.displayName;
   String? get userAvatar => _authRepository.avatarUrl;
   String? get authErrorMessage => _authErrorMessage;
+  UpdateInfo? get availableUpdate => _availableUpdate;
+  bool get hasUpdate => _availableUpdate != null;
+  bool get showUpdateBanner => _availableUpdate != null && !_updateBannerDismissed;
 
   /// Clear any existing authentication errors
   void clearAuthError() {
@@ -163,6 +175,9 @@ class AppState extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+
+    // Non-blocking update check — runs in background after startup
+    checkForUpdate();
   }
 
   /// Called by AutoSaveService after a successful save.
@@ -393,6 +408,27 @@ class AppState extends ChangeNotifier {
     if (_currentNote?.id == updatedNote.id) {
       _currentNote = updatedNote;
     }
+    notifyListeners();
+  }
+
+  // ── Auto-update ──────────────────────────────────────────────────────
+
+  /// Check GitHub Releases for a newer version. Fails silently.
+  Future<void> checkForUpdate() async {
+    try {
+      _availableUpdate = await _checkForUpdate.execute();
+      if (_availableUpdate != null) {
+        _updateBannerDismissed = false;
+        notifyListeners();
+      }
+    } catch (_) {
+      // Network errors etc. — don't bother the user.
+    }
+  }
+
+  /// Hide the update banner for this session.
+  void dismissUpdateBanner() {
+    _updateBannerDismissed = true;
     notifyListeners();
   }
 }

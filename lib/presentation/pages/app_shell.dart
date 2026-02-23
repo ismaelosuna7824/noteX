@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/top_bar.dart';
+import '../widgets/update_banner.dart';
 import 'home_page.dart';
 import 'note_editor_page.dart';
 import 'notes_list_page.dart';
@@ -130,10 +131,23 @@ class _AppShellState extends State<AppShell> with WindowListener {
                                 themeState: widget.themeState,
                                 userName: widget.appState.userName,
                                 avatarUrl: widget.appState.userAvatar,
-                                onNotificationTap: () {},
                                 onProfileTap: () =>
                                     widget.appState.navigateToPage(6),
                               ),
+                            ),
+                            // Update banner (slides in when a new version is available)
+                            ListenableBuilder(
+                              listenable: widget.appState,
+                              builder: (context, _) {
+                                if (!widget.appState.showUpdateBanner) {
+                                  return const SizedBox.shrink();
+                                }
+                                return UpdateBanner(
+                                  update: widget.appState.availableUpdate!,
+                                  accentColor: widget.themeState.accentColor,
+                                  onDismiss: widget.appState.dismissUpdateBanner,
+                                );
+                              },
                             ),
                             Expanded(
                               child: AnimatedSwitcher(

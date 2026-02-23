@@ -2,9 +2,10 @@ import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../../infrastructure/config/app_config.dart';
 import 'auth_dialog.dart';
 
 /// Dark-mode card surface — same navy used across the app.
@@ -368,6 +369,19 @@ class _SettingsPageState extends State<SettingsPage> {
                           ],
                         ),
                       ),
+
+                      const SizedBox(height: 16),
+
+                      // About & Updates
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'About',
+                        icon: Icons.info_outline_rounded,
+                        accentColor: accentColor,
+                        child: _buildAboutSection(
+                          context, isDark, accentColor, mutedText),
+                      ),
                     ],
                   ),
                 ),
@@ -376,6 +390,173 @@ class _SettingsPageState extends State<SettingsPage> {
           ],
         ),
       ),
+    );
+  }
+
+  // ── About section ──────────────────────────────────────────────────────────
+
+  Widget _buildAboutSection(
+    BuildContext context,
+    bool isDark,
+    Color accentColor,
+    Color mutedText,
+  ) {
+    final hasUpdate = appState.hasUpdate;
+    final update = appState.availableUpdate;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Version info
+        Row(
+          children: [
+            Text(
+              'Version',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white70 : Colors.grey.shade700,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                'v${AppConfig.currentVersion}',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white60 : Colors.grey.shade600,
+                ),
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 12),
+
+        // Update status / check button
+        if (hasUpdate && update != null) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: accentColor.withValues(alpha: 0.2),
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.system_update_rounded,
+                        size: 16, color: accentColor),
+                    const SizedBox(width: 6),
+                    Text(
+                      'v${update.version} available',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: accentColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () async {
+                      final uri = Uri.parse(update.downloadUrl);
+                      if (await canLaunchUrl(uri)) {
+                        await launchUrl(uri,
+                            mode: LaunchMode.externalApplication);
+                      }
+                    },
+                    style: FilledButton.styleFrom(
+                      backgroundColor: accentColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                    child: const Text('Download Update',
+                        style: TextStyle(fontSize: 12)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () async {
+                await appState.checkForUpdate();
+                if (context.mounted && !appState.hasUpdate) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('You are up to date!'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                }
+              },
+              icon: const Icon(Icons.refresh_rounded, size: 16),
+              label: const Text('Check for updates'),
+              style: OutlinedButton.styleFrom(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 10),
+              ),
+            ),
+          ),
+
+        const SizedBox(height: 12),
+
+        // GitHub link
+        Center(
+          child: InkWell(
+            onTap: () async {
+              final uri = Uri.parse(
+                  'https://github.com/${AppConfig.githubOwner}/${AppConfig.githubRepo}');
+              if (await canLaunchUrl(uri)) {
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              }
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.open_in_new_rounded,
+                      size: 13, color: mutedText),
+                  const SizedBox(width: 6),
+                  Text(
+                    'View on GitHub',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: mutedText,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 

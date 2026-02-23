@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../../domain/entities/note.dart';
@@ -11,7 +12,6 @@ class TopBar extends StatefulWidget {
   final ThemeState themeState;
   final String? userName;
   final String? avatarUrl;
-  final VoidCallback? onNotificationTap;
   final VoidCallback? onProfileTap;
 
   const TopBar({
@@ -20,7 +20,6 @@ class TopBar extends StatefulWidget {
     required this.themeState,
     this.userName,
     this.avatarUrl,
-    this.onNotificationTap,
     this.onProfileTap,
   });
 
@@ -32,7 +31,9 @@ class _TopBarState extends State<TopBar> {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
+  final LayerLink _bellLayerLink = LayerLink();
   OverlayEntry? _overlayEntry;
+  OverlayEntry? _updateOverlayEntry;
   List<Note> _searchResults = [];
 
   @override
@@ -200,9 +201,175 @@ class _TopBarState extends State<TopBar> {
   @override
   void dispose() {
     _hideOverlay();
+    _hideUpdateOverlay();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();
+  }
+
+  void _toggleUpdateOverlay() {
+    if (_updateOverlayEntry != null) {
+      _hideUpdateOverlay();
+      return;
+    }
+    _showUpdateOverlay();
+  }
+
+  void _showUpdateOverlay() {
+    _hideUpdateOverlay();
+    final update = widget.appState.availableUpdate;
+    if (update == null) return;
+
+    final overlay = Overlay.of(context);
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final accentColor = widget.themeState.accentColor;
+
+    _updateOverlayEntry = OverlayEntry(
+      builder: (context) => Stack(
+        children: [
+          // Dismiss on tap outside
+          GestureDetector(
+            onTap: _hideUpdateOverlay,
+            behavior: HitTestBehavior.translucent,
+            child: const SizedBox.expand(),
+          ),
+          Positioned(
+            width: 300,
+            child: CompositedTransformFollower(
+              link: _bellLayerLink,
+              offset: const Offset(-258, 50),
+              showWhenUnlinked: false,
+              child: Material(
+                elevation: 12,
+                borderRadius: BorderRadius.circular(16),
+                shadowColor: Colors.black.withValues(alpha: 0.20),
+                child: Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: isDark
+                        ? const Color(0xFF1E2130)
+                        : Colors.white.withValues(alpha: 0.98),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: isDark ? Colors.white12 : Colors.grey.shade200,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.system_update_rounded,
+                              color: accentColor, size: 22),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Update Available',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                                color: isDark ? Colors.white : Colors.black87,
+                              ),
+                            ),
+                          ),
+                          InkWell(
+                            onTap: _hideUpdateOverlay,
+                            borderRadius: BorderRadius.circular(6),
+                            child: Padding(
+                              padding: const EdgeInsets.all(4),
+                              child: Icon(Icons.close_rounded,
+                                  size: 16,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.grey.shade500),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          'v${update.version}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                            color: accentColor,
+                          ),
+                        ),
+                      ),
+                      if (update.releaseNotes.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 120),
+                          child: SingleChildScrollView(
+                            child: Text(
+                              update.releaseNotes,
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.5,
+                                color: isDark
+                                    ? Colors.white70
+                                    : Colors.grey.shade600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: InkWell(
+                          onTap: () async {
+                            _hideUpdateOverlay();
+                            final uri = Uri.parse(update.downloadUrl);
+                            if (await canLaunchUrl(uri)) {
+                              await launchUrl(uri,
+                                  mode: LaunchMode.externalApplication);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: accentColor,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'Download Update',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 13,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+    overlay.insert(_updateOverlayEntry!);
+  }
+
+  void _hideUpdateOverlay() {
+    _updateOverlayEntry?.remove();
+    _updateOverlayEntry = null;
   }
 
   @override
@@ -275,26 +442,53 @@ class _TopBarState extends State<TopBar> {
 
           const SizedBox(width: 12),
 
-          // Notification bell
-          Container(
-            height: 42,
-            width: 42,
-            decoration: BoxDecoration(
-              color: pillColor,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: pillShadow,
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: IconButton(
-              onPressed: widget.onNotificationTap,
-              icon: Icon(Icons.notifications_none_rounded,
-                  size: 20, color: iconColor),
-              padding: EdgeInsets.zero,
+          // Notification bell (with update badge)
+          CompositedTransformTarget(
+            link: _bellLayerLink,
+            child: Container(
+              height: 42,
+              width: 42,
+              decoration: BoxDecoration(
+                color: pillColor,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: pillShadow,
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  IconButton(
+                    onPressed: widget.appState.hasUpdate
+                        ? _toggleUpdateOverlay
+                        : null,
+                    icon: Icon(Icons.notifications_none_rounded,
+                        size: 20, color: iconColor),
+                    padding: EdgeInsets.zero,
+                  ),
+                  // Red badge dot when update is available
+                  if (widget.appState.hasUpdate)
+                    Positioned(
+                      top: 9,
+                      right: 10,
+                      child: Container(
+                        width: 9,
+                        height: 9,
+                        decoration: BoxDecoration(
+                          color: Colors.red,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isDark ? Colors.black : Colors.white,
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
             ),
           ),
 

@@ -11,6 +11,7 @@ import 'domain/repositories/note_project_repository.dart';
 import 'domain/services/sync_service.dart';
 import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
+import 'domain/services/update_service.dart';
 
 import 'infrastructure/local/database.dart';
 import 'infrastructure/local/drift_note_repository.dart';
@@ -24,6 +25,7 @@ import 'infrastructure/supabase/supabase_sync_adapter.dart';
 import 'infrastructure/network/connectivity_adapter.dart';
 import 'infrastructure/api/title_api_adapter.dart';
 import 'infrastructure/config/app_config.dart';
+import 'infrastructure/update/github_update_adapter.dart';
 
 import 'application/use_cases/create_note_use_case.dart';
 import 'application/use_cases/update_note_use_case.dart';
@@ -48,6 +50,7 @@ import 'application/use_cases/markdown/delete_markdown_project_use_case.dart';
 import 'application/use_cases/note/create_note_project_use_case.dart';
 import 'application/use_cases/note/get_note_projects_use_case.dart';
 import 'application/use_cases/note/delete_note_project_use_case.dart';
+import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/services/auto_save_service.dart';
 import 'application/services/markdown_auto_save_service.dart';
 import 'application/services/sync_engine.dart';
@@ -88,6 +91,11 @@ Future<void> setupDependencies() async {
 
   getIt.registerSingleton<TitleGenerationService>(
     TitleApiAdapter(),
+  );
+
+  // Infrastructure - Update Service (GitHub Releases)
+  getIt.registerSingleton<UpdateService>(
+    GitHubUpdateAdapter(),
   );
 
   // Infrastructure - Timer Repositories
@@ -217,6 +225,11 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  // Application - Update Use Case
+  getIt.registerFactory<CheckForUpdateUseCase>(
+    () => CheckForUpdateUseCase(getIt<UpdateService>()),
+  );
+
   // Application - Services
   getIt.registerSingleton<SyncEngine>(
     SyncEngine(
@@ -250,6 +263,7 @@ Future<void> setupDependencies() async {
     deleteNoteProject: getIt<DeleteNoteProjectUseCase>(),
     autoSaveService: getIt<AutoSaveService>(),
     authRepository: getIt<AuthRepository>(),
+    checkForUpdate: getIt<CheckForUpdateUseCase>(),
   );
   getIt.registerSingleton<AppState>(appState);
   // Wire sync completion callback so the UI refreshes sync icons after each sync

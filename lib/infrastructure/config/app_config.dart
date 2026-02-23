@@ -57,4 +57,16 @@ class AppConfig {
 
   bool get isDevelopment => environment == 'development';
   bool get isProduction => environment == 'production';
+
+  // ── GitHub Release auto-update ──────────────────────────────────────────
+
+  /// Current app version — keep in sync with pubspec.yaml `version:` field.
+  static const String currentVersion = '1.0.0';
+
+  static const String githubOwner = 'ismaelosuna7824';
+  static const String githubRepo = 'noteX';
+
+  /// GitHub API endpoint for the latest release.
+  static String get githubLatestReleaseUrl =>
+      'https://api.github.com/repos/$githubOwner/$githubRepo/releases/latest';
 }
