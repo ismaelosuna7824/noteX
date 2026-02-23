@@ -15,7 +15,8 @@ import '../../application/use_cases/note/delete_note_project_use_case.dart';
 import '../../application/use_cases/check_for_update_use_case.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
-import '../../domain/repositories/auth_repository.dart';
+import '../../domain/repositories/auth_repository.dart'
+    show AuthRepository, GoogleSignInCancelledException;
 import '../../domain/services/update_service.dart';
 import 'package:uuid/uuid.dart';
 
@@ -334,6 +335,9 @@ class AppState extends ChangeNotifier {
       await _authRepository.signInWithGoogle();
       await _onSignInSuccess();
       return true;
+    } on GoogleSignInCancelledException {
+      // User cancelled — silently reset, no error message shown.
+      return false;
     } catch (e) {
       _authErrorMessage = e.toString();
       return false;
@@ -341,6 +345,15 @@ class AppState extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+  }
+
+  /// Cancel an in-progress Google Sign-In (user closed the browser window).
+  Future<void> cancelGoogleSignIn() async {
+    await _authRepository.cancelGoogleSignIn();
+    // Loading state will be reset by the finally block in [signIn()],
+    // but we reset here too in case the call order differs.
+    _isLoading = false;
+    notifyListeners();
   }
 
   /// Sign in with Email and Password

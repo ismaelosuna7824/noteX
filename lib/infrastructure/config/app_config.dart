@@ -1,6 +1,19 @@
 /// Environment-based configuration for the application.
 ///
-/// Supports different configurations for dev, staging, and production.
+/// Secrets (Supabase URL and anon key) are injected at **compile time** via
+/// `--dart-define` flags — they are never stored in source code.
+///
+/// ### Local development
+/// Copy `dart_defines.json.example` → `dart_defines.json`, fill in your real
+/// values, then build/run with:
+/// ```
+/// flutter run --dart-define-from-file=dart_defines.json
+/// flutter build windows --dart-define-from-file=dart_defines.json --release
+/// ```
+///
+/// ### CI / GitHub Actions
+/// Add `SUPABASE_URL` and `SUPABASE_ANON_KEY` as repository secrets and the
+/// workflow will pass them automatically.
 class AppConfig {
   final String environment;
   final String apiBaseUrl;
@@ -8,9 +21,15 @@ class AppConfig {
   final Duration syncInterval;
   final bool enableLogging;
 
-  // Supabase
+  // Supabase — injected at compile time, never hardcoded.
   final String supabaseUrl;
   final String supabaseAnonKey;
+
+  // ── Compile-time secrets ────────────────────────────────────────────────
+  // These are resolved once at app startup; the build fails loudly if they
+  // are missing so misconfigured builds are caught early.
+  static const _supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  static const _supabaseAnonKey = String.fromEnvironment('SUPABASE_ANON_KEY');
 
   const AppConfig({
     required this.environment,
@@ -28,8 +47,8 @@ class AppConfig {
       environment: 'development',
       apiBaseUrl: 'http://localhost:8080/api',
       enableLogging: true,
-      supabaseUrl: 'https://dfkgixyerekdtjikmqez.supabase.co',
-      supabaseAnonKey: 'sb_publishable_uIlbvvZkbe7SZ8zUq0UVCA_T25wZMAf',
+      supabaseUrl: _supabaseUrl,
+      supabaseAnonKey: _supabaseAnonKey,
     );
   }
 
@@ -39,8 +58,8 @@ class AppConfig {
       environment: 'production',
       apiBaseUrl: 'https://api.notex.app',
       enableLogging: false,
-      supabaseUrl: 'https://dfkgixyerekdtjikmqez.supabase.co',
-      supabaseAnonKey: 'sb_publishable_uIlbvvZkbe7SZ8zUq0UVCA_T25wZMAf',
+      supabaseUrl: _supabaseUrl,
+      supabaseAnonKey: _supabaseAnonKey,
     );
   }
 

@@ -17,8 +17,15 @@ class _AuthDialogState extends State<AuthDialog> {
 
   bool _isLogin = true;
 
+  /// True while we are specifically waiting for the Google OAuth browser flow.
+  bool _googleSignInPending = false;
+
   @override
   void dispose() {
+    // If the dialog is closed while Google OAuth is open, cancel the server.
+    if (_googleSignInPending) {
+      widget.appState.cancelGoogleSignIn();
+    }
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -43,10 +50,15 @@ class _AuthDialogState extends State<AuthDialog> {
   }
 
   Future<void> _signInWithGoogle() async {
+    setState(() => _googleSignInPending = true);
     final success = await widget.appState.signIn();
-    if (success && mounted) {
-      Navigator.of(context).pop();
-    }
+    if (mounted) setState(() => _googleSignInPending = false);
+    if (success && mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _cancelGoogleSignIn() async {
+    await widget.appState.cancelGoogleSignIn();
+    if (mounted) setState(() => _googleSignInPending = false);
   }
 
   @override
@@ -69,23 +81,62 @@ class _AuthDialogState extends State<AuthDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // Google Sign-In button
-                  OutlinedButton.icon(
-                    onPressed: appState.isLoading ? null : _signInWithGoogle,
-                    icon: _GoogleIcon(size: 18, isDark: isDark),
-                    label: const Text('Continue with Google'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                  // Google Sign-In button — shows a spinner + cancel link
+                  // while the browser OAuth flow is in progress.
+                  if (_googleSignInPending) ...[
+                    OutlinedButton.icon(
+                      onPressed: null, // disabled while loading
+                      icon: const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
                       ),
-                      side: BorderSide(
-                        color: isDark
-                            ? Colors.white24
-                            : Colors.grey.shade300,
+                      label: const Text('Waiting for browser…'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: BorderSide(
+                          color: isDark
+                              ? Colors.white24
+                              : Colors.grey.shade300,
+                        ),
                       ),
                     ),
-                  ),
+                    const SizedBox(height: 6),
+                    Center(
+                      child: TextButton(
+                        onPressed: _cancelGoogleSignIn,
+                        child: Text(
+                          'Cancel',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: isDark
+                                ? Colors.white54
+                                : Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ] else ...[
+                    OutlinedButton.icon(
+                      onPressed: appState.isLoading ? null : _signInWithGoogle,
+                      icon: _GoogleIcon(size: 18, isDark: isDark),
+                      label: const Text('Continue with Google'),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        side: BorderSide(
+                          color: isDark
+                              ? Colors.white24
+                              : Colors.grey.shade300,
+                        ),
+                      ),
+                    ),
+                  ],
 
                   // Divider
                   Padding(

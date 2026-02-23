@@ -8,6 +8,10 @@ on:
 permissions:
   contents: write
 
+# Secrets required (set in Settings → Secrets and variables → Actions):
+#   SUPABASE_URL       — your Supabase project URL
+#   SUPABASE_ANON_KEY  — your Supabase anon/public key
+
 jobs:
   # ── Windows Build ──────────────────────────────────────────────────────
   build-windows:
@@ -24,7 +28,10 @@ jobs:
         run: flutter pub get
 
       - name: Build Windows
-        run: flutter build windows --release
+        run: >
+          flutter build windows --release
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Archive Windows build
         run: |
@@ -52,7 +59,10 @@ jobs:
         run: flutter pub get
 
       - name: Build macOS
-        run: flutter build macos --release
+        run: >
+          flutter build macos --release
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Archive macOS build
         run: |
@@ -85,7 +95,10 @@ jobs:
         run: flutter pub get
 
       - name: Build Linux
-        run: flutter build linux --release
+        run: >
+          flutter build linux --release
+          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
+          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
 
       - name: Archive Linux build
         run: |

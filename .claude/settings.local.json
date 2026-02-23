@@ -14,7 +14,8 @@
       "Bash(ls -la \"D:\\\\Git\\\\NoteX\\\\notex\\\\lib\\\\data\"\" 2>/dev/null || echo \"data directory not found \")",
       "Bash(flutter pub remove:*)",
       "WebFetch(domain:trapeze.dev)",
-      "Bash(git -C D:/Git/NoteX/notex log --oneline --all -20)"
+      "Bash(git -C D:/Git/NoteX/notex log --oneline --all -20)",
+      "Bash(Test-Path \"D:\\\\Git\\\\NoteX\\\\notex\\\\README.md\")"
     ]
   }
 }

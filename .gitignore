@@ -43,3 +43,7 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Local secrets — never commit real keys.
+# Copy dart_defines.json.example → dart_defines.json and fill in your values.
+dart_defines.json

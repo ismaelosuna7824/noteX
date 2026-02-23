@@ -1,3 +1,8 @@
+/// Thrown when the user explicitly cancels a Google Sign-In flow.
+class GoogleSignInCancelledException implements Exception {
+  const GoogleSignInCancelledException();
+}
+
 /// Port (interface) for authentication operations.
 ///
 /// The domain only knows about this contract — not Supabase or any provider.
@@ -19,6 +24,10 @@ abstract class AuthRepository {
 
   /// Sign in with Google (OAuth flow).
   Future<void> signInWithGoogle();
+
+  /// Cancel an in-progress Google Sign-In (e.g. user closed the browser).
+  /// Throws [GoogleSignInCancelledException] to the awaiting [signInWithGoogle] caller.
+  Future<void> cancelGoogleSignIn();
 
   /// Sign up with Email and Password.
   Future<void> signUpWithEmail(String email, String password);

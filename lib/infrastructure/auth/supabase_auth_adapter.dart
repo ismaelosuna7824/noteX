@@ -4,7 +4,8 @@ import 'dart:io';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../domain/repositories/auth_repository.dart';
+import '../../domain/repositories/auth_repository.dart'
+    show AuthRepository, GoogleSignInCancelledException;
 
 /// Supabase adapter for authentication.
 ///
@@ -15,6 +16,14 @@ class SupabaseAuthAdapter implements AuthRepository {
 
   final _authStateController = StreamController<bool>.broadcast();
   StreamSubscription<AuthState>? _authSubscription;
+
+  /// Holds the local HTTP server waiting for the OAuth redirect.
+  /// Closed when the user cancels sign-in.
+  HttpServer? _pendingServer;
+
+  /// Set to true by [cancelGoogleSignIn] so the error is not surfaced as a
+  /// real auth failure.
+  bool _signInCancelled = false;
 
   SupabaseAuthAdapter(this._client);
 
@@ -62,12 +71,25 @@ class SupabaseAuthAdapter implements AuthRepository {
     }
   }
 
+  /// Cancels an in-progress desktop Google sign-in by closing the local
+  /// HTTP server. The [signInWithGoogle] Future will then throw
+  /// [GoogleSignInCancelledException].
+  @override
+  Future<void> cancelGoogleSignIn() async {
+    _signInCancelled = true;
+    await _pendingServer?.close(force: true);
+    _pendingServer = null;
+  }
+
   Future<void> _signInDesktop() async {
+    _signInCancelled = false;
+
     // 1. Pick a port and start a local HTTP server for the OAuth redirect
     const int port = 54321;
     final server = await HttpServer.bind(
       InternetAddress.loopbackIPv4, port, shared: true,
     );
+    _pendingServer = server;
 
     final redirectUri = 'http://localhost:$port/auth/callback';
 
@@ -85,7 +107,9 @@ class SupabaseAuthAdapter implements AuthRepository {
         throw Exception('Could not open browser for Google Sign-In');
       }
 
-      // 4. Wait for the redirect callback (with timeout)
+      // 4. Wait for the redirect callback (with 5-minute timeout).
+      //    If the user cancels, [cancelGoogleSignIn] closes the server which
+      //    causes server.first to throw — we catch it below.
       final request = await server.first.timeout(
         const Duration(minutes: 5),
         onTimeout: () => throw TimeoutException('Sign-in timed out'),
@@ -114,8 +138,13 @@ class SupabaseAuthAdapter implements AuthRepository {
 
       // 6. Exchange the PKCE code for a Supabase session
       await _client.auth.exchangeCodeForSession(code);
+    } catch (e) {
+      // If the user cancelled, convert any exception into the canonical type.
+      if (_signInCancelled) throw const GoogleSignInCancelledException();
+      rethrow;
     } finally {
       await server.close(force: true);
+      _pendingServer = null;
     }
   }
 
