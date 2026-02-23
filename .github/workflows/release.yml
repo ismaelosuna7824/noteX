@@ -8,7 +8,7 @@ on:
 permissions:
   contents: write
 
-# Secrets required (set in Settings → Secrets and variables → Actions):
+# Secrets required (Settings → Secrets and variables → Actions):
 #   SUPABASE_URL       — your Supabase project URL
 #   SUPABASE_ANON_KEY  — your Supabase anon/public key
 
@@ -27,16 +27,18 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Create dart defines file
+        shell: pwsh
+        run: |
+          Set-Content -Path dart_defines.json -Value '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}'
+
       - name: Build Windows
-        run: >
-          flutter build windows --release
-          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+        run: flutter build windows --release --dart-define-from-file=dart_defines.json
 
       - name: Archive Windows build
+        shell: pwsh
         run: |
           Compress-Archive -Path build\windows\x64\runner\Release\* -DestinationPath NoteX-windows.zip
-        shell: pwsh
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
@@ -58,11 +60,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Create dart defines file
+        run: |
+          echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}' > dart_defines.json
+
       - name: Build macOS
-        run: >
-          flutter build macos --release
-          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+        run: flutter build macos --release --dart-define-from-file=dart_defines.json
 
       - name: Archive macOS build
         run: |
@@ -94,11 +97,12 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Create dart defines file
+        run: |
+          echo '{"SUPABASE_URL":"${{ secrets.SUPABASE_URL }}","SUPABASE_ANON_KEY":"${{ secrets.SUPABASE_ANON_KEY }}"}' > dart_defines.json
+
       - name: Build Linux
-        run: >
-          flutter build linux --release
-          --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }}
-          --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}
+        run: flutter build linux --release --dart-define-from-file=dart_defines.json
 
       - name: Archive Linux build
         run: |

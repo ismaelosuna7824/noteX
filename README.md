@@ -120,20 +120,42 @@ The repository includes a GitHub Actions workflow (`.github/workflows/release.ym
 
 ### How to publish a new version
 
-1. Update `version` in `pubspec.yaml` and `currentVersion` in `lib/infrastructure/config/app_config.dart`.
-2. Commit and push.
-3. Create and push the tag:
+> ⚠️ The tag version **must match** `currentVersion` in `AppConfig` — otherwise the auto-updater shows a false "update available" banner to users who already have the latest build.
 
-   **PowerShell (Windows)**
-   ```powershell
-   git tag v1.1.0
-   git push origin v1.1.0
-   ```
+**Step 1 — Bump the two version strings**
 
-   **Bash (macOS / Linux)**
-   ```bash
-   git tag v1.1.0 && git push origin v1.1.0
-   ```
+`pubspec.yaml`:
+```yaml
+version: 1.1.0+2   # number before + = public version, after + = build number
+```
+
+`lib/infrastructure/config/app_config.dart`:
+```dart
+static const String currentVersion = '1.1.0';  // must match the tag
+```
+
+**Step 2 — Commit and push**
+
+```bash
+git add pubspec.yaml lib/infrastructure/config/app_config.dart
+git commit -m "chore: bump version to 1.1.0"
+git push
+```
+
+**Step 3 — Tag and push**
+
+PowerShell (Windows):
+```powershell
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+Bash (macOS / Linux):
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+The GitHub Actions workflow picks up the tag, builds for all three platforms, and creates the Release automatically.
 
 ### Required repository secrets
 
