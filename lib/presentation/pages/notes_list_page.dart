@@ -1,6 +1,8 @@
 import 'dart:convert';
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import '../../domain/entities/note_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/note_card.dart';
@@ -187,7 +189,11 @@ class _NotesListPageState extends State<NotesListPage> {
                     ],
                   ),
 
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
+
+                  // Project filter chips (always visible so user can create first project)
+                  _buildProjectChips(theme, accentColor),
+                  const SizedBox(height: 8),
 
                   // Notes list
                   Expanded(
@@ -250,6 +256,255 @@ class _NotesListPageState extends State<NotesListPage> {
           // Preview/edit panel
           Expanded(
             child: _buildEditorPanel(context, theme, accentColor),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProjectChips(ThemeData theme, Color accentColor) {
+    final isDark = theme.brightness == Brightness.dark;
+    final selected = widget.appState.selectedNoteProjectId;
+    final projects = widget.appState.noteProjects;
+
+    return SizedBox(
+      height: 30,
+      child: ScrollConfiguration(
+        behavior: ScrollConfiguration.of(context).copyWith(
+          dragDevices: {
+            PointerDeviceKind.touch,
+            PointerDeviceKind.mouse,
+          },
+        ),
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            // "All" chip
+            _buildChip(
+              label: 'All',
+              isSelected: selected == null,
+              color: accentColor,
+              isDark: isDark,
+              onTap: () => widget.appState.filterByNoteProject(null),
+            ),
+            const SizedBox(width: 6),
+            // Per-project chips
+            for (final p in projects) ...[
+              GestureDetector(
+                onSecondaryTapUp: (details) =>
+                    _showProjectContextMenu(details.globalPosition, p),
+                child: _buildChip(
+                  label: p.name,
+                  isSelected: selected == p.id,
+                  color: p.color,
+                  isDark: isDark,
+                  onTap: () => widget.appState.filterByNoteProject(p.id),
+                  onLongPress: () => _showDeleteProjectDialog(p),
+                ),
+              ),
+              const SizedBox(width: 6),
+            ],
+            // "Uncategorized" chip
+            _buildChip(
+              label: 'Uncategorized',
+              isSelected: selected == '__root__',
+              color: isDark ? Colors.white54 : Colors.grey,
+              isDark: isDark,
+              onTap: () => widget.appState.filterByNoteProject('__root__'),
+            ),
+            const SizedBox(width: 6),
+            // "+" button to create project
+            InkWell(
+              onTap: () => _showCreateProjectDialog(accentColor),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(Icons.add, size: 14,
+                    color: isDark ? Colors.white54 : Colors.grey.shade500),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildChip({
+    required String label,
+    required bool isSelected,
+    required Color color,
+    required bool isDark,
+    required VoidCallback onTap,
+    VoidCallback? onLongPress,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? color.withValues(alpha: 0.2)
+              : (isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.grey.shade100),
+          borderRadius: BorderRadius.circular(14),
+          border: isSelected
+              ? Border.all(color: color.withValues(alpha: 0.5), width: 1)
+              : null,
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            color: isSelected
+                ? color
+                : (isDark ? Colors.white54 : Colors.grey.shade600),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showCreateProjectDialog(Color accentColor) {
+    final nameController = TextEditingController();
+    int selectedColor = accentColor.toARGB32();
+    final colorOptions = [
+      accentColor.toARGB32(),
+      Colors.red.toARGB32(),
+      Colors.orange.toARGB32(),
+      Colors.green.toARGB32(),
+      Colors.blue.toARGB32(),
+      Colors.purple.toARGB32(),
+      Colors.pink.toARGB32(),
+      Colors.teal.toARGB32(),
+    ];
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('New Project'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nameController,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'Project name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: colorOptions.map((c) {
+                  return GestureDetector(
+                    onTap: () => setDialogState(() => selectedColor = c),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: BoxDecoration(
+                        color: Color(c),
+                        shape: BoxShape.circle,
+                        border: selectedColor == c
+                            ? Border.all(
+                                color: Theme.of(ctx).brightness ==
+                                        Brightness.dark
+                                    ? Colors.white
+                                    : Colors.black,
+                                width: 2)
+                            : null,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                if (name.isEmpty) return;
+                await widget.appState.createNoteProject(
+                  name: name,
+                  colorValue: selectedColor,
+                );
+                if (ctx.mounted) Navigator.pop(ctx);
+                setState(() {});
+              },
+              child: const Text('Create'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showProjectContextMenu(
+      Offset position, NoteProject project) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          position.dx, position.dy, position.dx, position.dy),
+      items: [
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_rounded, size: 16, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete project',
+                  style: TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (result == 'delete') {
+      _showDeleteProjectDialog(project);
+    }
+  }
+
+  void _showDeleteProjectDialog(NoteProject project) {
+    final noteCount = widget.appState.notes
+        .where((n) => n.projectId == project.id)
+        .length;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete "${project.name}"?'),
+        content: Text(
+          'This will permanently delete the project and all '
+          '$noteCount note${noteCount == 1 ? '' : 's'} inside it.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              await widget.appState.deleteNoteProject(project.id);
+              if (ctx.mounted) Navigator.pop(ctx);
+              setState(() {});
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
           ),
         ],
       ),

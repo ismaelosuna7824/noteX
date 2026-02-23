@@ -42,6 +42,22 @@ create table public.time_entries (
   sync_status text not null default 'synced'
 );
 
+-- Create the `note_projects` table
+create table public.note_projects (
+  id uuid primary key,
+  user_id uuid references auth.users not null,
+  name text not null,
+  color_value bigint not null,
+  created_at timestamp with time zone not null,
+  updated_at timestamp with time zone not null,
+  deleted_at timestamp with time zone,
+  version integer not null default 1,
+  sync_status text not null default 'synced'
+);
+
+-- Add project_id to notes (must be after note_projects is created)
+alter table public.notes add column project_id uuid references public.note_projects(id);
+
 -- Create the `markdown_projects` table
 create table public.markdown_projects (
   id uuid primary key,
@@ -73,6 +89,7 @@ create table public.markdown_files (
 alter table public.notes enable row level security;
 alter table public.projects enable row level security;
 alter table public.time_entries enable row level security;
+alter table public.note_projects enable row level security;
 alter table public.markdown_projects enable row level security;
 alter table public.markdown_files enable row level security;
 
@@ -93,6 +110,12 @@ create policy "Users can view their own time entries" on public.time_entries for
 create policy "Users can insert their own time entries" on public.time_entries for insert with check (auth.uid() = user_id);
 create policy "Users can update their own time entries" on public.time_entries for update using (auth.uid() = user_id);
 create policy "Users can delete their own time entries" on public.time_entries for delete using (auth.uid() = user_id);
+
+-- Create Policies for `note_projects`
+create policy "Users can view their own note projects" on public.note_projects for select using (auth.uid() = user_id);
+create policy "Users can insert their own note projects" on public.note_projects for insert with check (auth.uid() = user_id);
+create policy "Users can update their own note projects" on public.note_projects for update using (auth.uid() = user_id);
+create policy "Users can delete their own note projects" on public.note_projects for delete using (auth.uid() = user_id);
 
 -- Create Policies for `markdown_projects`
 create policy "Users can view their own markdown projects" on public.markdown_projects for select using (auth.uid() = user_id);
@@ -115,6 +138,11 @@ create policy "Users can delete their own markdown files" on public.markdown_fil
 -- notes
 create index idx_notes_user_id on public.notes (user_id);
 create index idx_notes_user_updated on public.notes (user_id, updated_at);
+create index idx_notes_project_id on public.notes (project_id);
+
+-- note_projects
+create index idx_note_projects_user_id on public.note_projects (user_id);
+create index idx_note_projects_user_updated on public.note_projects (user_id, updated_at);
 
 -- projects
 create index idx_projects_user_id on public.projects (user_id);

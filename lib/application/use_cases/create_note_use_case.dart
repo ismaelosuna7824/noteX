@@ -17,6 +17,7 @@ class CreateNoteUseCase {
     String? title,
     String? backgroundImage,
     String? themeId,
+    String? projectId,
     bool ensureDaily = false,
   }) async {
     if (ensureDaily) {
@@ -28,6 +29,7 @@ class CreateNoteUseCase {
       id: id,
       backgroundImage: backgroundImage,
       themeId: themeId,
+      projectId: projectId,
     ).copyWith(
       title: title,
     );

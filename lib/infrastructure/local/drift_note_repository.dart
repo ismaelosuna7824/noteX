@@ -51,6 +51,16 @@ class DriftNoteRepository implements NoteRepository {
   }
 
   @override
+  Future<List<domain.Note>> getByProjectId(String projectId) async {
+    final rows = await (_db.select(_db.noteEntries)
+          ..where(
+              (t) => t.deletedAt.isNull() & t.projectId.equals(projectId))
+          ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+        .get();
+    return rows.map((row) => AppDatabase.toDomain(row)).toList();
+  }
+
+  @override
   Future<List<domain.Note>> getModifiedSince(DateTime since) async {
     final rows = await (_db.select(_db.noteEntries)
           ..where((t) => t.updatedAt.isBiggerThanValue(since)))

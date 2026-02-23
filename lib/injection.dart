@@ -7,6 +7,7 @@ import 'domain/repositories/project_repository.dart';
 import 'domain/repositories/time_entry_repository.dart';
 import 'domain/repositories/markdown_file_repository.dart';
 import 'domain/repositories/markdown_project_repository.dart';
+import 'domain/repositories/note_project_repository.dart';
 import 'domain/services/sync_service.dart';
 import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
@@ -17,6 +18,7 @@ import 'infrastructure/local/drift_project_repository.dart';
 import 'infrastructure/local/drift_time_entry_repository.dart';
 import 'infrastructure/local/drift_markdown_file_repository.dart';
 import 'infrastructure/local/drift_markdown_project_repository.dart';
+import 'infrastructure/local/drift_note_project_repository.dart';
 import 'infrastructure/auth/supabase_auth_adapter.dart';
 import 'infrastructure/supabase/supabase_sync_adapter.dart';
 import 'infrastructure/network/connectivity_adapter.dart';
@@ -43,6 +45,9 @@ import 'application/use_cases/markdown/delete_markdown_file_use_case.dart';
 import 'application/use_cases/markdown/create_markdown_project_use_case.dart';
 import 'application/use_cases/markdown/get_markdown_projects_use_case.dart';
 import 'application/use_cases/markdown/delete_markdown_project_use_case.dart';
+import 'application/use_cases/note/create_note_project_use_case.dart';
+import 'application/use_cases/note/get_note_projects_use_case.dart';
+import 'application/use_cases/note/delete_note_project_use_case.dart';
 import 'application/services/auto_save_service.dart';
 import 'application/services/markdown_auto_save_service.dart';
 import 'application/services/sync_engine.dart';
@@ -101,6 +106,11 @@ Future<void> setupDependencies() async {
     DriftMarkdownProjectRepository(database),
   );
 
+  // Infrastructure - Note Project Repository
+  getIt.registerSingleton<NoteProjectRepository>(
+    DriftNoteProjectRepository(database),
+  );
+
   // Infrastructure - Sync Service (Supabase adapter)
   getIt.registerSingleton<SyncService>(
     SupabaseSyncAdapter(
@@ -111,6 +121,7 @@ Future<void> setupDependencies() async {
       timeEntryRepo: getIt<TimeEntryRepository>(),
       mdFileRepo: getIt<MarkdownFileRepository>(),
       mdProjectRepo: getIt<MarkdownProjectRepository>(),
+      noteProjectRepo: getIt<NoteProjectRepository>(),
     ),
   );
 
@@ -191,6 +202,21 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  // Application - Note Project Use Cases
+  getIt.registerFactory<CreateNoteProjectUseCase>(
+    () => CreateNoteProjectUseCase(getIt<NoteProjectRepository>()),
+  );
+  getIt.registerFactory<GetNoteProjectsUseCase>(
+    () => GetNoteProjectsUseCase(getIt<NoteProjectRepository>()),
+  );
+  getIt.registerFactory<DeleteNoteProjectUseCase>(
+    () => DeleteNoteProjectUseCase(
+      getIt<NoteProjectRepository>(),
+      getIt<NoteRepository>(),
+      getIt<SyncEngine>(),
+    ),
+  );
+
   // Application - Services
   getIt.registerSingleton<SyncEngine>(
     SyncEngine(
@@ -219,6 +245,9 @@ Future<void> setupDependencies() async {
     getNotes: getIt<GetNotesUseCase>(),
     deleteNote: getIt<DeleteNoteUseCase>(),
     updateNote: getIt<UpdateNoteUseCase>(),
+    createNoteProject: getIt<CreateNoteProjectUseCase>(),
+    getNoteProjects: getIt<GetNoteProjectsUseCase>(),
+    deleteNoteProject: getIt<DeleteNoteProjectUseCase>(),
     autoSaveService: getIt<AutoSaveService>(),
     authRepository: getIt<AuthRepository>(),
   );

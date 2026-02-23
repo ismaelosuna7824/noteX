@@ -143,6 +143,17 @@ class $NoteEntriesTable extends NoteEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -157,6 +168,7 @@ class $NoteEntriesTable extends NoteEntries
     version,
     deletedAt,
     userId,
+    projectId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -248,6 +260,12 @@ class $NoteEntriesTable extends NoteEntries
         userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
       );
     }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
     return context;
   }
 
@@ -305,6 +323,10 @@ class $NoteEntriesTable extends NoteEntries
         DriftSqlType.string,
         data['${effectivePrefix}user_id'],
       ),
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
     );
   }
 
@@ -327,6 +349,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
   final int version;
   final DateTime? deletedAt;
   final String? userId;
+  final String? projectId;
   const NoteEntry({
     required this.id,
     required this.title,
@@ -340,6 +363,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     required this.version,
     this.deletedAt,
     this.userId,
+    this.projectId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -363,6 +387,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     }
     if (!nullToAbsent || userId != null) {
       map['user_id'] = Variable<String>(userId);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
     }
     return map;
   }
@@ -389,6 +416,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       userId: userId == null && nullToAbsent
           ? const Value.absent()
           : Value(userId),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
     );
   }
 
@@ -410,6 +440,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       userId: serializer.fromJson<String?>(json['userId']),
+      projectId: serializer.fromJson<String?>(json['projectId']),
     );
   }
   @override
@@ -428,6 +459,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'userId': serializer.toJson<String?>(userId),
+      'projectId': serializer.toJson<String?>(projectId),
     };
   }
 
@@ -444,6 +476,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
     Value<String?> userId = const Value.absent(),
+    Value<String?> projectId = const Value.absent(),
   }) => NoteEntry(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -459,6 +492,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     userId: userId.present ? userId.value : this.userId,
+    projectId: projectId.present ? projectId.value : this.projectId,
   );
   NoteEntry copyWithCompanion(NoteEntriesCompanion data) {
     return NoteEntry(
@@ -478,6 +512,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       userId: data.userId.present ? data.userId.value : this.userId,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
     );
   }
 
@@ -495,7 +530,8 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           ..write('isPinned: $isPinned, ')
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
-          ..write('userId: $userId')
+          ..write('userId: $userId, ')
+          ..write('projectId: $projectId')
           ..write(')'))
         .toString();
   }
@@ -514,6 +550,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     version,
     deletedAt,
     userId,
+    projectId,
   );
   @override
   bool operator ==(Object other) =>
@@ -530,7 +567,8 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           other.isPinned == this.isPinned &&
           other.version == this.version &&
           other.deletedAt == this.deletedAt &&
-          other.userId == this.userId);
+          other.userId == this.userId &&
+          other.projectId == this.projectId);
 }
 
 class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
@@ -546,6 +584,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
   final Value<int> version;
   final Value<DateTime?> deletedAt;
   final Value<String?> userId;
+  final Value<String?> projectId;
   final Value<int> rowid;
   const NoteEntriesCompanion({
     this.id = const Value.absent(),
@@ -560,6 +599,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.userId = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NoteEntriesCompanion.insert({
@@ -575,6 +615,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
     this.userId = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        createdAt = Value(createdAt),
@@ -592,6 +633,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Expression<int>? version,
     Expression<DateTime>? deletedAt,
     Expression<String>? userId,
+    Expression<String>? projectId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -607,6 +649,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (userId != null) 'user_id': userId,
+      if (projectId != null) 'project_id': projectId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -624,6 +667,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Value<int>? version,
     Value<DateTime?>? deletedAt,
     Value<String?>? userId,
+    Value<String?>? projectId,
     Value<int>? rowid,
   }) {
     return NoteEntriesCompanion(
@@ -639,6 +683,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
       userId: userId ?? this.userId,
+      projectId: projectId ?? this.projectId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -682,6 +727,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     if (userId.present) {
       map['user_id'] = Variable<String>(userId.value);
     }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -703,6 +751,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('userId: $userId, ')
+          ..write('projectId: $projectId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -3315,6 +3364,564 @@ class MarkdownProjectEntriesCompanion
   }
 }
 
+class $NoteProjectEntriesTable extends NoteProjectEntries
+    with TableInfo<$NoteProjectEntriesTable, NoteProjectRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $NoteProjectEntriesTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _nameMeta = const VerificationMeta('name');
+  @override
+  late final GeneratedColumn<String> name = GeneratedColumn<String>(
+    'name',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _colorValueMeta = const VerificationMeta(
+    'colorValue',
+  );
+  @override
+  late final GeneratedColumn<int> colorValue = GeneratedColumn<int>(
+    'color_value',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _createdAtMeta = const VerificationMeta(
+    'createdAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> createdAt = GeneratedColumn<DateTime>(
+    'created_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _updatedAtMeta = const VerificationMeta(
+    'updatedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> updatedAt = GeneratedColumn<DateTime>(
+    'updated_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _versionMeta = const VerificationMeta(
+    'version',
+  );
+  @override
+  late final GeneratedColumn<int> version = GeneratedColumn<int>(
+    'version',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(1),
+  );
+  static const VerificationMeta _deletedAtMeta = const VerificationMeta(
+    'deletedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> deletedAt = GeneratedColumn<DateTime>(
+    'deleted_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _syncStatusMeta = const VerificationMeta(
+    'syncStatus',
+  );
+  @override
+  late final GeneratedColumn<String> syncStatus = GeneratedColumn<String>(
+    'sync_status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('localOnly'),
+  );
+  static const VerificationMeta _userIdMeta = const VerificationMeta('userId');
+  @override
+  late final GeneratedColumn<String> userId = GeneratedColumn<String>(
+    'user_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    name,
+    colorValue,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+    syncStatus,
+    userId,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'note_projects';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<NoteProjectRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('name')) {
+      context.handle(
+        _nameMeta,
+        name.isAcceptableOrUnknown(data['name']!, _nameMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_nameMeta);
+    }
+    if (data.containsKey('color_value')) {
+      context.handle(
+        _colorValueMeta,
+        colorValue.isAcceptableOrUnknown(data['color_value']!, _colorValueMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_colorValueMeta);
+    }
+    if (data.containsKey('created_at')) {
+      context.handle(
+        _createdAtMeta,
+        createdAt.isAcceptableOrUnknown(data['created_at']!, _createdAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_createdAtMeta);
+    }
+    if (data.containsKey('updated_at')) {
+      context.handle(
+        _updatedAtMeta,
+        updatedAt.isAcceptableOrUnknown(data['updated_at']!, _updatedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_updatedAtMeta);
+    }
+    if (data.containsKey('version')) {
+      context.handle(
+        _versionMeta,
+        version.isAcceptableOrUnknown(data['version']!, _versionMeta),
+      );
+    }
+    if (data.containsKey('deleted_at')) {
+      context.handle(
+        _deletedAtMeta,
+        deletedAt.isAcceptableOrUnknown(data['deleted_at']!, _deletedAtMeta),
+      );
+    }
+    if (data.containsKey('sync_status')) {
+      context.handle(
+        _syncStatusMeta,
+        syncStatus.isAcceptableOrUnknown(data['sync_status']!, _syncStatusMeta),
+      );
+    }
+    if (data.containsKey('user_id')) {
+      context.handle(
+        _userIdMeta,
+        userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  NoteProjectRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return NoteProjectRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      name: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}name'],
+      )!,
+      colorValue: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}color_value'],
+      )!,
+      createdAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}created_at'],
+      )!,
+      updatedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}updated_at'],
+      )!,
+      version: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}version'],
+      )!,
+      deletedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}deleted_at'],
+      ),
+      syncStatus: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}sync_status'],
+      )!,
+      userId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}user_id'],
+      ),
+    );
+  }
+
+  @override
+  $NoteProjectEntriesTable createAlias(String alias) {
+    return $NoteProjectEntriesTable(attachedDatabase, alias);
+  }
+}
+
+class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
+  final String id;
+  final String name;
+  final int colorValue;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final int version;
+  final DateTime? deletedAt;
+  final String syncStatus;
+  final String? userId;
+  const NoteProjectRow({
+    required this.id,
+    required this.name,
+    required this.colorValue,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.version,
+    this.deletedAt,
+    required this.syncStatus,
+    this.userId,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['name'] = Variable<String>(name);
+    map['color_value'] = Variable<int>(colorValue);
+    map['created_at'] = Variable<DateTime>(createdAt);
+    map['updated_at'] = Variable<DateTime>(updatedAt);
+    map['version'] = Variable<int>(version);
+    if (!nullToAbsent || deletedAt != null) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt);
+    }
+    map['sync_status'] = Variable<String>(syncStatus);
+    if (!nullToAbsent || userId != null) {
+      map['user_id'] = Variable<String>(userId);
+    }
+    return map;
+  }
+
+  NoteProjectEntriesCompanion toCompanion(bool nullToAbsent) {
+    return NoteProjectEntriesCompanion(
+      id: Value(id),
+      name: Value(name),
+      colorValue: Value(colorValue),
+      createdAt: Value(createdAt),
+      updatedAt: Value(updatedAt),
+      version: Value(version),
+      deletedAt: deletedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(deletedAt),
+      syncStatus: Value(syncStatus),
+      userId: userId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(userId),
+    );
+  }
+
+  factory NoteProjectRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return NoteProjectRow(
+      id: serializer.fromJson<String>(json['id']),
+      name: serializer.fromJson<String>(json['name']),
+      colorValue: serializer.fromJson<int>(json['colorValue']),
+      createdAt: serializer.fromJson<DateTime>(json['createdAt']),
+      updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
+      version: serializer.fromJson<int>(json['version']),
+      deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
+      syncStatus: serializer.fromJson<String>(json['syncStatus']),
+      userId: serializer.fromJson<String?>(json['userId']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'name': serializer.toJson<String>(name),
+      'colorValue': serializer.toJson<int>(colorValue),
+      'createdAt': serializer.toJson<DateTime>(createdAt),
+      'updatedAt': serializer.toJson<DateTime>(updatedAt),
+      'version': serializer.toJson<int>(version),
+      'deletedAt': serializer.toJson<DateTime?>(deletedAt),
+      'syncStatus': serializer.toJson<String>(syncStatus),
+      'userId': serializer.toJson<String?>(userId),
+    };
+  }
+
+  NoteProjectRow copyWith({
+    String? id,
+    String? name,
+    int? colorValue,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    int? version,
+    Value<DateTime?> deletedAt = const Value.absent(),
+    String? syncStatus,
+    Value<String?> userId = const Value.absent(),
+  }) => NoteProjectRow(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    colorValue: colorValue ?? this.colorValue,
+    createdAt: createdAt ?? this.createdAt,
+    updatedAt: updatedAt ?? this.updatedAt,
+    version: version ?? this.version,
+    deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
+    syncStatus: syncStatus ?? this.syncStatus,
+    userId: userId.present ? userId.value : this.userId,
+  );
+  NoteProjectRow copyWithCompanion(NoteProjectEntriesCompanion data) {
+    return NoteProjectRow(
+      id: data.id.present ? data.id.value : this.id,
+      name: data.name.present ? data.name.value : this.name,
+      colorValue: data.colorValue.present
+          ? data.colorValue.value
+          : this.colorValue,
+      createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
+      updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
+      version: data.version.present ? data.version.value : this.version,
+      deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
+      syncStatus: data.syncStatus.present
+          ? data.syncStatus.value
+          : this.syncStatus,
+      userId: data.userId.present ? data.userId.value : this.userId,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NoteProjectRow(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('userId: $userId')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    name,
+    colorValue,
+    createdAt,
+    updatedAt,
+    version,
+    deletedAt,
+    syncStatus,
+    userId,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is NoteProjectRow &&
+          other.id == this.id &&
+          other.name == this.name &&
+          other.colorValue == this.colorValue &&
+          other.createdAt == this.createdAt &&
+          other.updatedAt == this.updatedAt &&
+          other.version == this.version &&
+          other.deletedAt == this.deletedAt &&
+          other.syncStatus == this.syncStatus &&
+          other.userId == this.userId);
+}
+
+class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
+  final Value<String> id;
+  final Value<String> name;
+  final Value<int> colorValue;
+  final Value<DateTime> createdAt;
+  final Value<DateTime> updatedAt;
+  final Value<int> version;
+  final Value<DateTime?> deletedAt;
+  final Value<String> syncStatus;
+  final Value<String?> userId;
+  final Value<int> rowid;
+  const NoteProjectEntriesCompanion({
+    this.id = const Value.absent(),
+    this.name = const Value.absent(),
+    this.colorValue = const Value.absent(),
+    this.createdAt = const Value.absent(),
+    this.updatedAt = const Value.absent(),
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  NoteProjectEntriesCompanion.insert({
+    required String id,
+    required String name,
+    required int colorValue,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    this.version = const Value.absent(),
+    this.deletedAt = const Value.absent(),
+    this.syncStatus = const Value.absent(),
+    this.userId = const Value.absent(),
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       name = Value(name),
+       colorValue = Value(colorValue),
+       createdAt = Value(createdAt),
+       updatedAt = Value(updatedAt);
+  static Insertable<NoteProjectRow> custom({
+    Expression<String>? id,
+    Expression<String>? name,
+    Expression<int>? colorValue,
+    Expression<DateTime>? createdAt,
+    Expression<DateTime>? updatedAt,
+    Expression<int>? version,
+    Expression<DateTime>? deletedAt,
+    Expression<String>? syncStatus,
+    Expression<String>? userId,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (name != null) 'name': name,
+      if (colorValue != null) 'color_value': colorValue,
+      if (createdAt != null) 'created_at': createdAt,
+      if (updatedAt != null) 'updated_at': updatedAt,
+      if (version != null) 'version': version,
+      if (deletedAt != null) 'deleted_at': deletedAt,
+      if (syncStatus != null) 'sync_status': syncStatus,
+      if (userId != null) 'user_id': userId,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  NoteProjectEntriesCompanion copyWith({
+    Value<String>? id,
+    Value<String>? name,
+    Value<int>? colorValue,
+    Value<DateTime>? createdAt,
+    Value<DateTime>? updatedAt,
+    Value<int>? version,
+    Value<DateTime?>? deletedAt,
+    Value<String>? syncStatus,
+    Value<String?>? userId,
+    Value<int>? rowid,
+  }) {
+    return NoteProjectEntriesCompanion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      colorValue: colorValue ?? this.colorValue,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      version: version ?? this.version,
+      deletedAt: deletedAt ?? this.deletedAt,
+      syncStatus: syncStatus ?? this.syncStatus,
+      userId: userId ?? this.userId,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (name.present) {
+      map['name'] = Variable<String>(name.value);
+    }
+    if (colorValue.present) {
+      map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (createdAt.present) {
+      map['created_at'] = Variable<DateTime>(createdAt.value);
+    }
+    if (updatedAt.present) {
+      map['updated_at'] = Variable<DateTime>(updatedAt.value);
+    }
+    if (version.present) {
+      map['version'] = Variable<int>(version.value);
+    }
+    if (deletedAt.present) {
+      map['deleted_at'] = Variable<DateTime>(deletedAt.value);
+    }
+    if (syncStatus.present) {
+      map['sync_status'] = Variable<String>(syncStatus.value);
+    }
+    if (userId.present) {
+      map['user_id'] = Variable<String>(userId.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('NoteProjectEntriesCompanion(')
+          ..write('id: $id, ')
+          ..write('name: $name, ')
+          ..write('colorValue: $colorValue, ')
+          ..write('createdAt: $createdAt, ')
+          ..write('updatedAt: $updatedAt, ')
+          ..write('version: $version, ')
+          ..write('deletedAt: $deletedAt, ')
+          ..write('syncStatus: $syncStatus, ')
+          ..write('userId: $userId, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -3327,6 +3934,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $MarkdownFileEntriesTable(this);
   late final $MarkdownProjectEntriesTable markdownProjectEntries =
       $MarkdownProjectEntriesTable(this);
+  late final $NoteProjectEntriesTable noteProjectEntries =
+      $NoteProjectEntriesTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -3338,6 +3947,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     syncMetadataEntries,
     markdownFileEntries,
     markdownProjectEntries,
+    noteProjectEntries,
   ];
 }
 
@@ -3355,6 +3965,7 @@ typedef $$NoteEntriesTableCreateCompanionBuilder =
       Value<int> version,
       Value<DateTime?> deletedAt,
       Value<String?> userId,
+      Value<String?> projectId,
       Value<int> rowid,
     });
 typedef $$NoteEntriesTableUpdateCompanionBuilder =
@@ -3371,6 +3982,7 @@ typedef $$NoteEntriesTableUpdateCompanionBuilder =
       Value<int> version,
       Value<DateTime?> deletedAt,
       Value<String?> userId,
+      Value<String?> projectId,
       Value<int> rowid,
     });
 
@@ -3440,6 +4052,11 @@ class $$NoteEntriesTableFilterComposer
 
   ColumnFilters<String> get userId => $composableBuilder(
     column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -3512,6 +4129,11 @@ class $$NoteEntriesTableOrderingComposer
     column: $table.userId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NoteEntriesTableAnnotationComposer
@@ -3562,6 +4184,9 @@ class $$NoteEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get userId =>
       $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
 }
 
 class $$NoteEntriesTableTableManager
@@ -3607,6 +4232,7 @@ class $$NoteEntriesTableTableManager
                 Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteEntriesCompanion(
                 id: id,
@@ -3621,6 +4247,7 @@ class $$NoteEntriesTableTableManager
                 version: version,
                 deletedAt: deletedAt,
                 userId: userId,
+                projectId: projectId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -3637,6 +4264,7 @@ class $$NoteEntriesTableTableManager
                 Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteEntriesCompanion.insert(
                 id: id,
@@ -3651,6 +4279,7 @@ class $$NoteEntriesTableTableManager
                 version: version,
                 deletedAt: deletedAt,
                 userId: userId,
+                projectId: projectId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -5045,6 +5674,295 @@ typedef $$MarkdownProjectEntriesTableProcessedTableManager =
       MarkdownProjectRow,
       PrefetchHooks Function()
     >;
+typedef $$NoteProjectEntriesTableCreateCompanionBuilder =
+    NoteProjectEntriesCompanion Function({
+      required String id,
+      required String name,
+      required int colorValue,
+      required DateTime createdAt,
+      required DateTime updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<String> syncStatus,
+      Value<String?> userId,
+      Value<int> rowid,
+    });
+typedef $$NoteProjectEntriesTableUpdateCompanionBuilder =
+    NoteProjectEntriesCompanion Function({
+      Value<String> id,
+      Value<String> name,
+      Value<int> colorValue,
+      Value<DateTime> createdAt,
+      Value<DateTime> updatedAt,
+      Value<int> version,
+      Value<DateTime?> deletedAt,
+      Value<String> syncStatus,
+      Value<String?> userId,
+      Value<int> rowid,
+    });
+
+class $$NoteProjectEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $NoteProjectEntriesTable> {
+  $$NoteProjectEntriesTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$NoteProjectEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $NoteProjectEntriesTable> {
+  $$NoteProjectEntriesTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get name => $composableBuilder(
+    column: $table.name,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get createdAt => $composableBuilder(
+    column: $table.createdAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get updatedAt => $composableBuilder(
+    column: $table.updatedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get version => $composableBuilder(
+    column: $table.version,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get deletedAt => $composableBuilder(
+    column: $table.deletedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get userId => $composableBuilder(
+    column: $table.userId,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$NoteProjectEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $NoteProjectEntriesTable> {
+  $$NoteProjectEntriesTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get name =>
+      $composableBuilder(column: $table.name, builder: (column) => column);
+
+  GeneratedColumn<int> get colorValue => $composableBuilder(
+    column: $table.colorValue,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get createdAt =>
+      $composableBuilder(column: $table.createdAt, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get updatedAt =>
+      $composableBuilder(column: $table.updatedAt, builder: (column) => column);
+
+  GeneratedColumn<int> get version =>
+      $composableBuilder(column: $table.version, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get deletedAt =>
+      $composableBuilder(column: $table.deletedAt, builder: (column) => column);
+
+  GeneratedColumn<String> get syncStatus => $composableBuilder(
+    column: $table.syncStatus,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get userId =>
+      $composableBuilder(column: $table.userId, builder: (column) => column);
+}
+
+class $$NoteProjectEntriesTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $NoteProjectEntriesTable,
+          NoteProjectRow,
+          $$NoteProjectEntriesTableFilterComposer,
+          $$NoteProjectEntriesTableOrderingComposer,
+          $$NoteProjectEntriesTableAnnotationComposer,
+          $$NoteProjectEntriesTableCreateCompanionBuilder,
+          $$NoteProjectEntriesTableUpdateCompanionBuilder,
+          (
+            NoteProjectRow,
+            BaseReferences<
+              _$AppDatabase,
+              $NoteProjectEntriesTable,
+              NoteProjectRow
+            >,
+          ),
+          NoteProjectRow,
+          PrefetchHooks Function()
+        > {
+  $$NoteProjectEntriesTableTableManager(
+    _$AppDatabase db,
+    $NoteProjectEntriesTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$NoteProjectEntriesTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$NoteProjectEntriesTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$NoteProjectEntriesTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> name = const Value.absent(),
+                Value<int> colorValue = const Value.absent(),
+                Value<DateTime> createdAt = const Value.absent(),
+                Value<DateTime> updatedAt = const Value.absent(),
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<String?> userId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NoteProjectEntriesCompanion(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                syncStatus: syncStatus,
+                userId: userId,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String name,
+                required int colorValue,
+                required DateTime createdAt,
+                required DateTime updatedAt,
+                Value<int> version = const Value.absent(),
+                Value<DateTime?> deletedAt = const Value.absent(),
+                Value<String> syncStatus = const Value.absent(),
+                Value<String?> userId = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => NoteProjectEntriesCompanion.insert(
+                id: id,
+                name: name,
+                colorValue: colorValue,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                version: version,
+                deletedAt: deletedAt,
+                syncStatus: syncStatus,
+                userId: userId,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map((e) => (e.readTable(table), BaseReferences(db, table, e)))
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$NoteProjectEntriesTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $NoteProjectEntriesTable,
+      NoteProjectRow,
+      $$NoteProjectEntriesTableFilterComposer,
+      $$NoteProjectEntriesTableOrderingComposer,
+      $$NoteProjectEntriesTableAnnotationComposer,
+      $$NoteProjectEntriesTableCreateCompanionBuilder,
+      $$NoteProjectEntriesTableUpdateCompanionBuilder,
+      (
+        NoteProjectRow,
+        BaseReferences<_$AppDatabase, $NoteProjectEntriesTable, NoteProjectRow>,
+      ),
+      NoteProjectRow,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -5064,4 +5982,6 @@ class $AppDatabaseManager {
         _db,
         _db.markdownProjectEntries,
       );
+  $$NoteProjectEntriesTableTableManager get noteProjectEntries =>
+      $$NoteProjectEntriesTableTableManager(_db, _db.noteProjectEntries);
 }

@@ -17,6 +17,7 @@ class Note {
   final int version;
   final DateTime? deletedAt;
   final String? userId;
+  final String? projectId;
 
   const Note({
     required this.id,
@@ -31,6 +32,7 @@ class Note {
     this.version = 1,
     this.deletedAt,
     this.userId,
+    this.projectId,
   });
 
   /// Creates a new empty note for today.
@@ -39,6 +41,7 @@ class Note {
     String? backgroundImage,
     String? themeId,
     String? userId,
+    String? projectId,
   }) {
     final now = DateTime.now();
     return Note(
@@ -53,6 +56,7 @@ class Note {
       isPinned: false,
       version: 1,
       userId: userId,
+      projectId: projectId,
     );
   }
 
@@ -71,6 +75,7 @@ class Note {
     int? version,
     Object? deletedAt = const _Unset(),
     Object? userId = const _Unset(),
+    Object? projectId = const _Unset(),
   }) {
     return Note(
       id: id,
@@ -85,6 +90,8 @@ class Note {
       version: version ?? this.version,
       deletedAt: deletedAt is _Unset ? this.deletedAt : deletedAt as DateTime?,
       userId: userId is _Unset ? this.userId : userId as String?,
+      projectId:
+          projectId is _Unset ? this.projectId : projectId as String?,
     );
   }
 

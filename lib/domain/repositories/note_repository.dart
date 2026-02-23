@@ -26,6 +26,9 @@ abstract class NoteRepository {
   /// Search notes by [query] in title or content.
   Future<List<Note>> search(String query);
 
+  /// Retrieve notes belonging to a specific project.
+  Future<List<Note>> getByProjectId(String projectId);
+
   /// Get the total count of notes.
   Future<int> count();
 

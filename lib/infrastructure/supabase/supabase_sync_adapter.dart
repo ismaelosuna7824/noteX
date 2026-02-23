@@ -6,11 +6,13 @@ import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
 import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
+import '../../domain/entities/note_project.dart';
 import '../../domain/repositories/note_repository.dart';
 import '../../domain/repositories/project_repository.dart';
 import '../../domain/repositories/time_entry_repository.dart';
 import '../../domain/repositories/markdown_file_repository.dart';
 import '../../domain/repositories/markdown_project_repository.dart';
+import '../../domain/repositories/note_project_repository.dart';
 import '../../domain/services/sync_service.dart';
 import '../../domain/value_objects/sync_result.dart';
 import '../../domain/value_objects/sync_status.dart';
@@ -28,6 +30,7 @@ class SupabaseSyncAdapter implements SyncService {
   final TimeEntryRepository _timeEntryRepo;
   final MarkdownFileRepository _mdFileRepo;
   final MarkdownProjectRepository _mdProjectRepo;
+  final NoteProjectRepository _noteProjectRepo;
 
   bool _isSyncing = false;
 
@@ -39,13 +42,15 @@ class SupabaseSyncAdapter implements SyncService {
     required TimeEntryRepository timeEntryRepo,
     required MarkdownFileRepository mdFileRepo,
     required MarkdownProjectRepository mdProjectRepo,
+    required NoteProjectRepository noteProjectRepo,
   })  : _supabase = supabase,
         _db = db,
         _noteRepo = noteRepo,
         _projectRepo = projectRepo,
         _timeEntryRepo = timeEntryRepo,
         _mdFileRepo = mdFileRepo,
-        _mdProjectRepo = mdProjectRepo;
+        _mdProjectRepo = mdProjectRepo,
+        _noteProjectRepo = noteProjectRepo;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -60,6 +65,23 @@ class SupabaseSyncAdapter implements SyncService {
     final errors = <String>[];
 
     try {
+      // Push pending note projects (before notes, FK dependency)
+      final pendingNoteProjects = [
+        ...await _noteProjectRepo.getBySyncStatus(SyncStatus.pendingSync),
+        ...await _noteProjectRepo.getBySyncStatus(SyncStatus.localOnly)
+      ];
+      for (final project in pendingNoteProjects) {
+        final owned = project.copyWith(userId: userId);
+        try {
+          await _pushNoteProject(owned);
+          await _noteProjectRepo.save(owned.markSynced());
+          pushed++;
+        } catch (e) {
+          print('====== ERROR PUSHING NOTE PROJECT: $e ======');
+          errors.add('NoteProject ${project.id}: $e');
+        }
+      }
+
       // Push pending notes
       final pendingNotes = [
         ...await _noteRepo.getBySyncStatus(SyncStatus.pendingSync),
@@ -180,6 +202,11 @@ class SupabaseSyncAdapter implements SyncService {
     await _supabase.from('markdown_projects').upsert(data, onConflict: 'id');
   }
 
+  Future<void> _pushNoteProject(NoteProject project) async {
+    final data = _noteProjectToMap(project);
+    await _supabase.from('note_projects').upsert(data, onConflict: 'id');
+  }
+
   // ── Pull ───────────────────────────────────────────────────────────────────
 
   @override
@@ -242,6 +269,17 @@ class SupabaseSyncAdapter implements SyncService {
           if (result) pulled++;
         } catch (e) {
           errors.add('Pull markdown project: $e');
+        }
+      }
+
+      // Pull note projects
+      final noteProjectsData = await _fetchTable('note_projects', since);
+      for (final row in noteProjectsData) {
+        try {
+          final result = await _mergeNoteProject(row);
+          if (result) pulled++;
+        } catch (e) {
+          errors.add('Pull note project: $e');
         }
       }
 
@@ -386,6 +424,7 @@ class SupabaseSyncAdapter implements SyncService {
         'background_image': note.backgroundImage,
         'theme_id': note.themeId,
         'is_pinned': note.isPinned,
+        'project_id': note.projectId,
         'created_at': note.createdAt.toUtc().toIso8601String(),
         'updated_at': note.updatedAt.toUtc().toIso8601String(),
         'deleted_at': note.deletedAt?.toUtc().toIso8601String(),
@@ -408,6 +447,7 @@ class SupabaseSyncAdapter implements SyncService {
             ? DateTime.parse(m['deleted_at'] as String)
             : null,
         userId: m['user_id'] as String?,
+        projectId: m['project_id'] as String?,
       );
 
   Map<String, dynamic> _projectToMap(Project p) => {
@@ -563,6 +603,56 @@ class SupabaseSyncAdapter implements SyncService {
     } else if (remote.version == local.version &&
         remote.updatedAt.isAfter(local.updatedAt)) {
       await _mdProjectRepo.save(remote.markSynced());
+      return true;
+    }
+    return false;
+  }
+
+  // ── Note Projects Serialization ───────────────────────────────────────
+
+  Map<String, dynamic> _noteProjectToMap(NoteProject p) => {
+        'id': p.id,
+        'user_id': p.userId,
+        'name': p.name,
+        'color_value': p.colorValue,
+        'created_at': p.createdAt.toUtc().toIso8601String(),
+        'updated_at': p.updatedAt.toUtc().toIso8601String(),
+        'deleted_at': p.deletedAt?.toUtc().toIso8601String(),
+        'version': p.version,
+        'sync_status': 'synced',
+      };
+
+  NoteProject _mapToNoteProject(Map<String, dynamic> m) => NoteProject(
+        id: m['id'] as String,
+        name: m['name'] as String,
+        colorValue: m['color_value'] as int,
+        createdAt: DateTime.parse(m['created_at'] as String),
+        updatedAt: DateTime.parse(m['updated_at'] as String),
+        syncStatus: SyncStatus.synced,
+        version: m['version'] as int? ?? 1,
+        deletedAt: m['deleted_at'] != null
+            ? DateTime.parse(m['deleted_at'] as String)
+            : null,
+        userId: m['user_id'] as String?,
+      );
+
+  // ── Note Project Merge Logic ──────────────────────────────────────────
+
+  Future<bool> _mergeNoteProject(Map<String, dynamic> remoteData) async {
+    final remote = _mapToNoteProject(remoteData);
+    final local = await _noteProjectRepo.getById(remote.id);
+
+    if (local == null) {
+      await _noteProjectRepo.save(remote.markSynced());
+      return true;
+    }
+
+    if (remote.version > local.version) {
+      await _noteProjectRepo.save(remote.markSynced());
+      return true;
+    } else if (remote.version == local.version &&
+        remote.updatedAt.isAfter(local.updatedAt)) {
+      await _noteProjectRepo.save(remote.markSynced());
       return true;
     }
     return false;

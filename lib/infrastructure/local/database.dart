@@ -10,6 +10,7 @@ import '../../domain/entities/project.dart' as domain_project;
 import '../../domain/entities/time_entry.dart' as domain_time;
 import '../../domain/entities/markdown_file.dart' as domain_md;
 import '../../domain/entities/markdown_project.dart' as domain_mdp;
+import '../../domain/entities/note_project.dart' as domain_np;
 import '../../domain/value_objects/sync_status.dart';
 
 part 'database.g.dart';
@@ -34,6 +35,7 @@ class NoteEntries extends Table {
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
   TextColumn get userId => text().nullable()();
+  TextColumn get projectId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -125,6 +127,27 @@ class MarkdownProjectEntries extends Table {
   String get tableName => 'markdown_projects';
 }
 
+/// Drift table for note projects (folder groupings for notes).
+@DataClassName('NoteProjectRow')
+class NoteProjectEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get name => text()();
+  IntColumn get colorValue => integer()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get userId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  String get tableName => 'note_projects';
+}
+
 /// Tracks last sync timestamp per entity type per user.
 @DataClassName('SyncMetadataRow')
 class SyncMetadataEntries extends Table {
@@ -150,6 +173,7 @@ class SyncMetadataEntries extends Table {
   SyncMetadataEntries,
   MarkdownFileEntries,
   MarkdownProjectEntries,
+  NoteProjectEntries,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -158,7 +182,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 7;
+  int get schemaVersion => 8;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -228,6 +252,10 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(markdownFileEntries);
         await m.createTable(markdownProjectEntries);
       }
+      if (from < 8) {
+        await m.createTable(noteProjectEntries);
+        await m.addColumn(noteEntries, noteEntries.projectId);
+      }
     },
   );
 
@@ -242,6 +270,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(timeEntries).go();
       await delete(markdownFileEntries).go();
       await delete(markdownProjectEntries).go();
+      await delete(noteProjectEntries).go();
       await delete(syncMetadataEntries).go();
     });
   }
@@ -262,6 +291,7 @@ class AppDatabase extends _$AppDatabase {
       version: row.version,
       deletedAt: row.deletedAt,
       userId: row.userId,
+      projectId: row.projectId,
     );
   }
 
@@ -279,6 +309,7 @@ class AppDatabase extends _$AppDatabase {
       version: Value(note.version),
       deletedAt: Value(note.deletedAt),
       userId: Value(note.userId),
+      projectId: Value(note.projectId),
     );
   }
 
@@ -405,6 +436,37 @@ class AppDatabase extends _$AppDatabase {
   static MarkdownProjectEntriesCompanion markdownProjectToCompanion(
       domain_mdp.MarkdownProject p) {
     return MarkdownProjectEntriesCompanion(
+      id: Value(p.id),
+      name: Value(p.name),
+      colorValue: Value(p.colorValue),
+      createdAt: Value(p.createdAt),
+      updatedAt: Value(p.updatedAt),
+      version: Value(p.version),
+      deletedAt: Value(p.deletedAt),
+      syncStatus: Value(p.syncStatus.name),
+      userId: Value(p.userId),
+    );
+  }
+
+  // ── Note Projects ─────────────────────────────────────────────────────
+
+  static domain_np.NoteProject noteProjectToDomain(NoteProjectRow row) {
+    return domain_np.NoteProject(
+      id: row.id,
+      name: row.name,
+      colorValue: row.colorValue,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+      syncStatus: _parseSyncStatus(row.syncStatus),
+      userId: row.userId,
+    );
+  }
+
+  static NoteProjectEntriesCompanion noteProjectToCompanion(
+      domain_np.NoteProject p) {
+    return NoteProjectEntriesCompanion(
       id: Value(p.id),
       name: Value(p.name),
       colorValue: Value(p.colorValue),

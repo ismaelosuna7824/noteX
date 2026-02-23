@@ -3,11 +3,15 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/note.dart';
+import '../../domain/entities/note_project.dart';
 import '../../domain/value_objects/view_mode.dart';
 import '../../application/use_cases/create_note_use_case.dart';
 import '../../application/use_cases/get_notes_use_case.dart';
 import '../../application/use_cases/delete_note_use_case.dart';
 import '../../application/use_cases/update_note_use_case.dart';
+import '../../application/use_cases/note/create_note_project_use_case.dart';
+import '../../application/use_cases/note/get_note_projects_use_case.dart';
+import '../../application/use_cases/note/delete_note_project_use_case.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
 import '../../domain/repositories/auth_repository.dart';
@@ -21,15 +25,20 @@ class AppState extends ChangeNotifier {
   final GetNotesUseCase _getNotes;
   final DeleteNoteUseCase _deleteNote;
   final UpdateNoteUseCase _updateNote;
+  final CreateNoteProjectUseCase _createNoteProject;
+  final GetNoteProjectsUseCase _getNoteProjects;
+  final DeleteNoteProjectUseCase _deleteNoteProject;
   final AutoSaveService autoSaveService;
   final AuthRepository _authRepository;
   SyncEngine? _syncEngine;
 
   List<Note> _notes = [];
+  List<NoteProject> _noteProjects = [];
   Note? _currentNote;
   ViewMode _viewMode = ViewMode.list;
   int _selectedPageIndex = 0;
   String _searchQuery = '';
+  String? _selectedNoteProjectId; // null = all, '__root__' = uncategorized
   bool _isLoading = false;
   bool _showPinnedTab = false;
   String? _authErrorMessage;
@@ -40,12 +49,18 @@ class AppState extends ChangeNotifier {
     required GetNotesUseCase getNotes,
     required DeleteNoteUseCase deleteNote,
     required UpdateNoteUseCase updateNote,
+    required CreateNoteProjectUseCase createNoteProject,
+    required GetNoteProjectsUseCase getNoteProjects,
+    required DeleteNoteProjectUseCase deleteNoteProject,
     required this.autoSaveService,
     required AuthRepository authRepository,
   })  : _createNote = createNote,
         _getNotes = getNotes,
         _deleteNote = deleteNote,
         _updateNote = updateNote,
+        _createNoteProject = createNoteProject,
+        _getNoteProjects = getNoteProjects,
+        _deleteNoteProject = deleteNoteProject,
         _authRepository = authRepository {
     // Wire up auto-save callback to refresh the list after saves
     autoSaveService.onSaved = _onNoteSaved;
@@ -67,10 +82,12 @@ class AppState extends ChangeNotifier {
 
   // Getters
   List<Note> get notes => _notes;
+  List<NoteProject> get noteProjects => _noteProjects;
   Note? get currentNote => _currentNote;
   ViewMode get viewMode => _viewMode;
   int get selectedPageIndex => _selectedPageIndex;
   String get searchQuery => _searchQuery;
+  String? get selectedNoteProjectId => _selectedNoteProjectId;
   bool get isLoading => _isLoading;
   bool get showPinnedTab => _showPinnedTab;
   bool get isAuthenticated => _authRepository.isAuthenticated;
@@ -91,15 +108,27 @@ class AppState extends ChangeNotifier {
   /// All pinned notes.
   List<Note> get pinnedNotes => _notes.where((n) => n.isPinned).toList();
 
-  /// Filtered notes for display (applies search query if set).
+  /// Filtered notes for display (applies project filter + search query).
   List<Note> get filteredNotes {
-    if (_searchQuery.isEmpty) return _notes;
-    final q = _searchQuery.toLowerCase();
-    return _notes
-        .where((n) =>
-            n.title.toLowerCase().contains(q) ||
-            n.content.toLowerCase().contains(q))
-        .toList();
+    var result = _notes;
+    // Filter by project
+    if (_selectedNoteProjectId == '__root__') {
+      result = result.where((n) => n.projectId == null).toList();
+    } else if (_selectedNoteProjectId != null) {
+      result = result
+          .where((n) => n.projectId == _selectedNoteProjectId)
+          .toList();
+    }
+    // Filter by search
+    if (_searchQuery.isNotEmpty) {
+      final q = _searchQuery.toLowerCase();
+      result = result
+          .where((n) =>
+              n.title.toLowerCase().contains(q) ||
+              n.content.toLowerCase().contains(q))
+          .toList();
+    }
+    return result;
   }
 
   /// Initialize: load notes and ensure a daily note exists.
@@ -109,6 +138,7 @@ class AppState extends ChangeNotifier {
 
     try {
       _notes = await _getNotes.getAll();
+      _noteProjects = await _getNoteProjects.getAll();
 
       // Auto-create daily note if none exists for today
       final today = DateTime.now();
@@ -144,9 +174,10 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  /// Refresh the notes list from the repository.
+  /// Refresh the notes list and projects from the repository.
   Future<void> refreshNotes() async {
     _notes = await _getNotes.getAll();
+    _noteProjects = await _getNoteProjects.getAll();
     notifyListeners();
   }
 
@@ -181,9 +212,18 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Create a new note.
-  Future<Note> createNewNote() async {
-    final note = await _createNote.execute(id: const Uuid().v4());
+  /// Create a new note, inheriting the current project filter.
+  Future<Note> createNewNote({String? projectId}) async {
+    // Use passed projectId, or inherit from filter (unless 'all' or '__root__')
+    final effectiveProjectId = projectId ??
+        (_selectedNoteProjectId != null &&
+                _selectedNoteProjectId != '__root__'
+            ? _selectedNoteProjectId
+            : null);
+    final note = await _createNote.execute(
+      id: const Uuid().v4(),
+      projectId: effectiveProjectId,
+    );
     await refreshNotes();
     _currentNote = note;
     _selectedPageIndex = 2; // Navigate to editor
@@ -223,6 +263,50 @@ class AppState extends ChangeNotifier {
       _currentNote = _notes.isNotEmpty ? _notes.first : null;
     }
     notifyListeners();
+  }
+
+  // ── Note Project operations ──────────────────────────────────────────
+
+  /// Filter notes by project.
+  void filterByNoteProject(String? projectId) {
+    _selectedNoteProjectId = projectId;
+    notifyListeners();
+  }
+
+  /// Create a new note project.
+  Future<NoteProject> createNoteProject({
+    required String name,
+    required int colorValue,
+  }) async {
+    final p = await _createNoteProject.execute(
+      id: const Uuid().v4(),
+      name: name,
+      colorValue: colorValue,
+    );
+    _noteProjects = await _getNoteProjects.getAll();
+    notifyListeners();
+    return p;
+  }
+
+  /// Delete a note project and its notes.
+  Future<void> deleteNoteProject(String projectId) async {
+    await _deleteNoteProject.execute(projectId);
+    _noteProjects = await _getNoteProjects.getAll();
+    _notes = await _getNotes.getAll();
+    if (_selectedNoteProjectId == projectId) _selectedNoteProjectId = null;
+    if (_currentNote?.projectId == projectId) {
+      _currentNote = _notes.isNotEmpty ? _notes.first : null;
+    }
+    notifyListeners();
+  }
+
+  /// Find a note project by id.
+  NoteProject? noteProjectForId(String? id) {
+    if (id == null) return null;
+    return _noteProjects.cast<NoteProject?>().firstWhere(
+          (p) => p?.id == id,
+          orElse: () => null,
+        );
   }
 
   /// Sign in with Google.
