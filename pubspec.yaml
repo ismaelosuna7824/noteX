@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.14.0+1
+version: 1.15.0+1
 
 environment:
   sdk: ^3.11.0
@@ -95,7 +95,7 @@ msix_config:
   display_name: NoteX
   publisher_display_name: ismaelosuna7824
   identity_name: ismaelosuna7824.NoteX
-  msix_version: 1.14.0.0
+  msix_version: 1.15.0.0
   logo_path: assets/icons/logo.png
   capabilities: internetClient
   languages: en-us
