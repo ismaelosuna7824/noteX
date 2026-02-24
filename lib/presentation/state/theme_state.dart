@@ -133,6 +133,16 @@ class ThemeState extends ChangeNotifier {
     RemoteBackground(name: 'Screen Clean',        filename: 'screenclean.mp4'),
     RemoteBackground(name: 'Totoro Cave',         filename: 'default.mp4'),
     RemoteBackground(name: 'Abstract',            filename: 'a7UX9KlNBdHrbAu94DiX.mp4'),
+    RemoteBackground(name: 'Night Drive 2',       filename: '2017-06-21.02-59-31.mp4'),
+    RemoteBackground(name: 'Cat',                 filename: 'cat.mp4'),
+    RemoteBackground(name: 'Fire',                filename: 'fire.mp4'),
+    RemoteBackground(name: 'Minecraft',           filename: 'mc.mp4'),
+    RemoteBackground(name: 'No Game No Life',     filename: 'nogame.mp4'),
+    RemoteBackground(name: 'SSR',                 filename: 'ssr.mp4'),
+    RemoteBackground(name: 'Tree',                filename: 'tree.mp4'),
+    RemoteBackground(name: 'Woman 3',             filename: 'woam3.mp4'),
+    RemoteBackground(name: 'Woman',               filename: 'woman.mp4'),
+    RemoteBackground(name: 'Woman 2',             filename: 'woman2.mp4'),
   ];
 
   /// Returns `true` when [path] refers to a bundled asset (not a disk file).
