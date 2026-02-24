@@ -85,8 +85,7 @@ class SupabaseAuthAdapter implements AuthRepository {
     _signInCancelled = false;
 
     // 1. Pick a port and start a local HTTP server for the OAuth redirect.
-    //    Avoid 54321 — it conflicts with Supabase CLI local dev server.
-    const int port = 21987;
+    const int port = 54321;
 
     _log('Binding HTTP server on 127.0.0.1:$port ...');
     late final HttpServer server;
