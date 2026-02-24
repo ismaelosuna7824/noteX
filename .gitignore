@@ -50,12 +50,8 @@ dart_defines.json
 
 # Build artifacts — never commit
 *.pfx
-*.msix
 *.cer
-*-b64.txt
-notex-sign.pfx
-NoteX-cert.cer
-Install-NoteX.ps1
+*.msix
 
 # Video backgrounds — hosted on GitHub Releases, not bundled in the app
 assets/images/*.mp4

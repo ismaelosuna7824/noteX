@@ -14,7 +14,7 @@ permissions:
 #   SUPABASE_ANON_KEY  — your Supabase anon/public key
 
 jobs:
-  # ── Windows — MSIX package ─────────────────────────────────────────────
+  # ── Windows — Inno Setup .exe installer ──────────────────────────────────
   build-windows:
     runs-on: windows-latest
     steps:
@@ -37,41 +37,14 @@ jobs:
       - name: Build Windows
         run: flutter build windows --release --dart-define-from-file=dart_defines.json
 
-      - name: Create MSIX package
-        shell: pwsh
-        env:
-          CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT }}
-          CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
-        run: |
-          # Decode PFX from GitHub Secret
-          [System.Convert]::FromBase64String($env:CERT_BASE64) | Set-Content -Path notex-sign.pfx -AsByteStream
-
-          # Export .cer (public key only — safe to distribute to users)
-          $securePwd = ConvertTo-SecureString -String $env:CERT_PASSWORD -Force -AsPlainText
-          $pfx = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new(
-            (Resolve-Path notex-sign.pfx).Path, $env:CERT_PASSWORD)
-          [System.IO.File]::WriteAllBytes(
-            "$PWD\NoteX-cert.cer",
-            $pfx.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-
-          # Create MSIX
-          dart run msix:create `
-            --certificate-path notex-sign.pfx `
-            --certificate-password $env:CERT_PASSWORD `
-            --output-path . `
-            --output-name NoteX-windows
-
-          # Copy install script next to artifacts
-          Copy-Item windows\Install-NoteX.ps1 Install-NoteX.ps1
+      - name: Build Inno Setup installer
+        run: iscc windows\notex_installer.iss
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: NoteX-windows
-          path: |
-            NoteX-windows.msix
-            NoteX-cert.cer
-            Install-NoteX.ps1
+          path: windows/NoteX-windows-setup.exe
 
       - name: Cancel workflow on failure
         if: failure()
@@ -234,8 +207,6 @@ jobs:
         with:
           generate_release_notes: true
           files: |
-            artifacts/NoteX-windows/NoteX-windows.msix
-            artifacts/NoteX-windows/NoteX-cert.cer
-            artifacts/NoteX-windows/Install-NoteX.ps1
+            artifacts/NoteX-windows/NoteX-windows-setup.exe
             artifacts/NoteX-macos/NoteX-macos.zip
             artifacts/NoteX-linux/NoteX-linux.deb

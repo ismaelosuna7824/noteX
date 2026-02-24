@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.15.0+1
+version: 1.16.0+1
 
 environment:
   sdk: ^3.11.0
@@ -76,7 +76,6 @@ dev_dependencies:
   drift_dev: ^2.22.1
   build_runner: ^2.4.14
   flutter_launcher_icons: ^0.14.3
-  msix: ^3.16.7
 
 flutter_launcher_icons:
   image_path: "assets/icons/logo.png"
@@ -90,16 +89,6 @@ flutter_launcher_icons:
   linux:
     generate: true
     image_path: "assets/icons/logo.png"
-
-msix_config:
-  display_name: NoteX
-  publisher_display_name: ismaelosuna7824
-  identity_name: ismaelosuna7824.NoteX
-  msix_version: 1.15.0.0
-  logo_path: assets/icons/logo.png
-  capabilities: internetClient
-  languages: en-us
-  install_certificate: false
 
 flutter:
   uses-material-design: true
