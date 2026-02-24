@@ -23,7 +23,18 @@
       "Bash(grep:*)",
       "Bash(xargs:*)",
       "Bash(git rm:*)",
-      "Bash(git reset:*)"
+      "Bash(git reset:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(ffmpeg:*)",
+      "Bash(ffprobe:*)",
+      "Bash(python3:*)",
+      "Bash(cmd /c \"gh release view backgrounds-v1 --json assets --jq \"\".assets[].name\"\" --repo ismaelosuna7824/noteX 2>&1\")",
+      "Bash(cmd /c \"gh release view backgrounds-v1 --json assets --repo ismaelosuna7824/noteX\")",
+      "Bash(cmd /c:*)",
+      "Bash(cmd /c \"gh release view backgrounds-v1 --repo ismaelosuna7824/noteX 2>&1\")",
+      "Bash(find:*)"
     ]
   }
 }

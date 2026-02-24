@@ -56,3 +56,8 @@ dart_defines.json
 notex-sign.pfx
 NoteX-cert.cer
 Install-NoteX.ps1
+
+# Video backgrounds — hosted on GitHub Releases, not bundled in the app
+assets/images/*.mp4
+assets/images/*.webm
+assets/images/*.mov

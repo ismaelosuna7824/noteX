@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../../infrastructure/config/app_config.dart';
+import '../../infrastructure/services/background_downloader.dart';
 import 'auth_dialog.dart';
 
 /// Dark-mode card surface — same navy used across the app.
@@ -683,14 +684,15 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: ListView.separated(
                   controller: _bgScrollController,
                   scrollDirection: Axis.horizontal,
-                  itemCount: ThemeState.presetBackgrounds.length + 1,
+                  itemCount: ThemeState.presetBackgrounds.length +
+                      ThemeState.remoteVideos.length +
+                      1,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
-              // First slot = "No background"
+              // ── Slot 0: "No background" ──────────────────────────────
               if (index == 0) {
-                final isSelected = currentPath == null;
                 return _BgThumbnail(
-                  isSelected: isSelected,
+                  isSelected: currentPath == null,
                   accentColor: accentColor,
                   onTap: () => themeState.setBackgroundImage(null),
                   child: Container(
@@ -709,39 +711,27 @@ class _SettingsPageState extends State<SettingsPage> {
                 );
               }
 
-              final assetPath =
-                  ThemeState.presetBackgrounds[index - 1];
-              final isSelected = currentPath == assetPath;
-              final isVideo = ThemeState.isVideoFile(assetPath);
-              return _BgThumbnail(
-                isSelected: isSelected,
+              // ── Slots 1…N: bundled images ────────────────────────────
+              if (index <= ThemeState.presetBackgrounds.length) {
+                final assetPath = ThemeState.presetBackgrounds[index - 1];
+                return _BgThumbnail(
+                  isSelected: currentPath == assetPath,
+                  accentColor: accentColor,
+                  onTap: () => themeState.setBackgroundImage(assetPath),
+                  child: Image.asset(assetPath, fit: BoxFit.cover),
+                );
+              }
+
+              // ── Remaining slots: remote videos ───────────────────────
+              final bg = ThemeState.remoteVideos[
+                  index - ThemeState.presetBackgrounds.length - 1];
+              return _RemoteVideoThumbnail(
+                key: ValueKey(bg.filename),
+                bg: bg,
+                currentBackgroundPath: currentPath,
                 accentColor: accentColor,
-                onTap: () => themeState.setBackgroundImage(assetPath),
-                child: isVideo
-                    ? Stack(
-                        fit: StackFit.expand,
-                        children: [
-                          _VideoThumbnail(
-                            key: ValueKey(assetPath),
-                            videoPath: assetPath,
-                          ),
-                          Center(
-                            child: Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: const BoxDecoration(
-                                color: Colors.black45,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.play_arrow_rounded,
-                                color: Colors.white,
-                                size: 16,
-                              ),
-                            ),
-                          ),
-                        ],
-                      )
-                    : Image.asset(assetPath, fit: BoxFit.cover),
+                onSelect: (localPath) =>
+                    themeState.setBackgroundImage(localPath),
               );
             },
                 ),   // ListView.separated
@@ -1085,9 +1075,225 @@ class _BgThumbnail extends StatelessWidget {
 
 // ── Video thumbnail widget ───────────────────────────────────────────────────
 //
+// ─────────────────────────────────────────────────────────────────────────────
+// _RemoteVideoThumbnail
+//
+// Shows a download-on-demand video thumbnail.
+//   • Not downloaded → dark placeholder with name + download icon; tap = download.
+//   • Downloading    → progress ring with percentage.
+//   • Downloaded     → video thumbnail with play icon; tap = select as background.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RemoteVideoThumbnail extends StatefulWidget {
+  final RemoteBackground bg;
+  final String? currentBackgroundPath;
+  final Color accentColor;
+  final void Function(String localPath) onSelect;
+
+  const _RemoteVideoThumbnail({
+    super.key,
+    required this.bg,
+    required this.currentBackgroundPath,
+    required this.accentColor,
+    required this.onSelect,
+  });
+
+  @override
+  State<_RemoteVideoThumbnail> createState() => _RemoteVideoThumbnailState();
+}
+
+class _RemoteVideoThumbnailState extends State<_RemoteVideoThumbnail> {
+  bool _downloaded = false;
+  bool _downloading = false;
+  double _progress = 0;
+  String? _localPath;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkDownloaded();
+  }
+
+  Future<void> _checkDownloaded() async {
+    // deleteIfCorrupt cleans up any HTML/partial file from a previous
+    // failed download so the user sees the retry placeholder instead.
+    await BackgroundDownloader.deleteIfCorrupt(widget.bg.filename);
+    final valid = await BackgroundDownloader.isDownloaded(widget.bg.filename);
+    if (!mounted) return;
+    if (valid) {
+      final path = await BackgroundDownloader.localPath(widget.bg.filename);
+      if (mounted) {
+        setState(() {
+          _downloaded = true;
+          _localPath = path;
+        });
+      }
+    } else {
+      setState(() => _downloaded = false);
+    }
+  }
+
+  Future<void> _download() async {
+    if (_downloading) return;
+    setState(() {
+      _downloading = true;
+      _progress = 0;
+    });
+    final result = await BackgroundDownloader.download(
+      widget.bg,
+      onProgress: (p) {
+        if (mounted) setState(() => _progress = p);
+      },
+    );
+    if (mounted) {
+      if (result != null) {
+        setState(() {
+          _downloaded = true;
+          _downloading = false;
+          _localPath = result;
+        });
+        widget.onSelect(result);
+      } else {
+        setState(() => _downloading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error al descargar ${widget.bg.name}')),
+        );
+      }
+    }
+  }
+
+  bool get _isSelected => _localPath != null &&
+      widget.currentBackgroundPath == _localPath;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget inner;
+
+    if (_downloading) {
+      // ── Downloading: progress ring ─────────────────────────────────
+      inner = Container(
+        color: const Color(0xFF1A1A2E),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  value: _progress > 0 ? _progress : null,
+                  strokeWidth: 2.5,
+                  color: Colors.white70,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${(_progress * 100).toInt()}%',
+                style: const TextStyle(color: Colors.white54, fontSize: 9),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (_downloaded && _localPath != null) {
+      // ── Downloaded: video thumbnail ────────────────────────────────
+      inner = Stack(
+        fit: StackFit.expand,
+        children: [
+          _VideoThumbnail(key: ValueKey(_localPath), videoPath: _localPath!),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: Colors.black45,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ],
+      );
+    } else {
+      // ── Not downloaded: thumbnail preview + download overlay ───────
+      inner = Stack(
+        fit: StackFit.expand,
+        children: [
+          // Thumbnail image (generated by scripts/generate_video_thumbnails.py)
+          Image.asset(
+            widget.bg.thumbnailAsset,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) =>
+                Container(color: const Color(0xFF12121E)),
+          ),
+          // Dark overlay so icons are readable
+          Container(color: Colors.black.withValues(alpha: 0.45)),
+          // Centered download icon + name
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(5),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.download_rounded,
+                      color: Colors.white, size: 16),
+                ),
+                const SizedBox(height: 3),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4),
+                  child: Text(
+                    widget.bg.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 8,
+                      fontWeight: FontWeight.w500,
+                      shadows: [Shadow(blurRadius: 4, color: Colors.black)],
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
+
+    // ── Selection border + tap ─────────────────────────────────────────
+    final borderColor =
+        _isSelected ? widget.accentColor : Colors.transparent;
+
+    return GestureDetector(
+      onTap: _downloaded ? () => widget.onSelect(_localPath!) : _download,
+      child: Container(
+        width: 110,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: borderColor, width: 2.5),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: inner,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _VideoThumbnail
+//
 // Opens a video with a muted [Player], pauses on the first decoded frame,
 // and renders the paused [Video] widget as a static thumbnail. Disposed
 // automatically when scrolled off-screen or the page changes.
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _VideoThumbnail extends StatefulWidget {
   final String videoPath;

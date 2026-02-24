@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:palette_generator_master/palette_generator_master.dart';
 import 'package:path_provider/path_provider.dart';
+import '../../infrastructure/services/background_downloader.dart';
 
 /// Theme and appearance state with disk persistence.
 ///
@@ -90,9 +91,9 @@ class ThemeState extends ChangeNotifier {
   /// White accent — only available in dark mode.
   static const Color darkModeWhiteAccent = Color(0xFFFFFFFF);
 
-  /// Bundled preset backgrounds — images and videos (from assets/images/).
+  /// Bundled preset image backgrounds (from assets/images/).
+  /// Videos are no longer bundled — see [remoteVideos].
   static const List<String> presetBackgrounds = [
-    // ── Images ──
     'assets/images/anime-night-sky-illustration.jpg',
     'assets/images/anime-style-boy-girl-couple-love.jpg',
     'assets/images/anime-style-boy-girl-couple.jpg',
@@ -109,16 +110,29 @@ class ThemeState extends ChangeNotifier {
     'assets/images/1311994.jpeg',
     'assets/images/896653.jpg',
     'assets/images/clay-banks-hwLAI5lRhdM-unsplash.jpg',
-    // ── Videos ──
-    'assets/images/vecteezy_ai-generated-japanese-house-room-with-beautiful-nature-view_36627003.mp4',
-    'assets/images/vecteezy_traditional-japanese-house-street-rainy-old-asian-village_47974312.mp4',
-    'assets/images/vecteezy_a-serene-street-lined-with-traditional-wooden-houses-under_47072140.mp4',
-    'assets/images/HD Desk UI Ocarina.mp4',
-    'assets/images/zeldasunsetdeskop4k.mp4',
-    'assets/images/Bump Of Chicken - Acacia [Pokemon Gotcha!] (Jetdarc 8-bit_Chiptune Remix).mp4',
-    'assets/images/ffmpeg_260118093337_c82792_60.mp4',
-    'assets/images/inthesnow 2_1.mp4',
-    'assets/images/2020-04-11 20-26-21.mp4',
+  ];
+
+  /// Remote video backgrounds — downloaded on demand to the app cache dir.
+  /// Hosted on GitHub Releases under the tag `backgrounds-v1`.
+  static const List<RemoteBackground> remoteVideos = [
+    RemoteBackground(name: 'Japanese Room',       filename: 'vecteezy_ai-generated-japanese-house-room-with-beautiful-nature-view_36627003.mp4'),
+    RemoteBackground(name: 'Japanese Village',    filename: 'vecteezy_traditional-japanese-house-street-rainy-old-asian-village_47974312.mp4'),
+    RemoteBackground(name: 'Japanese Street',     filename: 'vecteezy_a-serene-street-lined-with-traditional-wooden-houses-under_47072140.mp4'),
+    RemoteBackground(name: 'HD Desk UI Ocarina',  filename: 'HD.Desk.UI.Ocarina.mp4'),
+    RemoteBackground(name: 'Zelda Sunset',        filename: 'zeldasunsetdeskop4k.mp4'),
+    RemoteBackground(name: 'Bump of Chicken',     filename: 'Bump.Of.Chicken.-.Acacia.Pokemon.Gotcha.Jetdarc.8-bit_Chiptune.Remix.mp4'),
+    RemoteBackground(name: 'Snow',                filename: 'ffmpeg_260118093337_c82792_60.mp4'),
+    RemoteBackground(name: 'In The Snow',         filename: 'inthesnow.2_1.mp4'),
+    RemoteBackground(name: 'Night Drive',         filename: '2020-04-11.20-26-21.mp4'),
+    RemoteBackground(name: 'City 1080p',          filename: '1920x1080.mp4'),
+    RemoteBackground(name: 'Hatsune Miku',        filename: 'hatsune-miku-nier-automata-desktop-wallpaperwaifu.com.mp4'),
+    RemoteBackground(name: 'Punklorde',           filename: 'Punklorde_169.mp4'),
+    RemoteBackground(name: 'Klee',                filename: 'KleeWP.mp4'),
+    RemoteBackground(name: 'May Waterfall',       filename: 'May.waterfall.desk.anim.HD.mp4'),
+    RemoteBackground(name: 'Minecraft Aquarium',  filename: 'Minecraft.Soothing.Scenes.Relaxing.Aquarium.mp4'),
+    RemoteBackground(name: 'Screen Clean',        filename: 'screenclean.mp4'),
+    RemoteBackground(name: 'Totoro Cave',         filename: 'default.mp4'),
+    RemoteBackground(name: 'Abstract',            filename: 'a7UX9KlNBdHrbAu94DiX.mp4'),
   ];
 
   /// Returns `true` when [path] refers to a bundled asset (not a disk file).
@@ -159,10 +173,18 @@ class ThemeState extends ChangeNotifier {
 
       final bgPath = json['backgroundImagePath'] as String?;
       if (bgPath != null) {
-        // Asset paths are always valid; file paths need an existence check.
-        _backgroundImagePath = isAssetImage(bgPath)
-            ? bgPath
-            : (File(bgPath).existsSync() ? bgPath : null);
+        if (isAssetImage(bgPath) && isVideoFile(bgPath)) {
+          // Videos are no longer bundled assets — clear stored path so the
+          // default image is used instead (migration from pre-1.14 settings).
+          _backgroundImagePath = null;
+        } else if (isAssetImage(bgPath)) {
+          // Bundled images are always valid.
+          _backgroundImagePath = bgPath;
+        } else {
+          // User file or downloaded video — check it still exists on disk.
+          _backgroundImagePath =
+              File(bgPath).existsSync() ? bgPath : null;
+        }
       }
 
       final colorValue = json['accentColor'] as int?;
