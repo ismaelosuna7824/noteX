@@ -85,17 +85,28 @@ class SupabaseAuthAdapter implements AuthRepository {
     _signInCancelled = false;
 
     // 1. Pick a port and start a local HTTP server for the OAuth redirect.
+    //    Bind to IPv6 ANY (with v6Only: false) so the server accepts both
+    //    IPv4 (127.0.0.1) and IPv6 (::1) connections.  macOS resolves
+    //    "localhost" to ::1 first, so an IPv4-only server never receives
+    //    the browser callback.
     const int port = 54321;
 
-    _log('Binding HTTP server on 127.0.0.1:$port ...');
+    _log('Binding HTTP server on [::]:$port (dual-stack) ...');
     late final HttpServer server;
     try {
-      server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+      server = await HttpServer.bind(
+        InternetAddress.anyIPv6, port, v6Only: false,
+      );
     } catch (e) {
-      _log('ERROR binding port $port: $e');
-      rethrow;
+      _log('Dual-stack bind failed ($e), falling back to IPv4 ...');
+      try {
+        server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+      } catch (e2) {
+        _log('ERROR binding port $port: $e2');
+        rethrow;
+      }
     }
-    _log('Server bound successfully on port ${server.port}');
+    _log('Server bound successfully on ${server.address.address}:${server.port}');
     _pendingServer = server;
 
     final redirectUri = 'http://localhost:$port/auth/callback';
