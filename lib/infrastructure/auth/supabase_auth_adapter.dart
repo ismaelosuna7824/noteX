@@ -89,7 +89,8 @@ class SupabaseAuthAdapter implements AuthRepository {
     //    IPv4 (127.0.0.1) and IPv6 (::1) connections.  macOS resolves
     //    "localhost" to ::1 first, so an IPv4-only server never receives
     //    the browser callback.
-    const int port = 54321;
+    //    Port 54321 is reserved by Supabase CLI / OrbStack, so we use 21987.
+    const int port = 21987;
 
     _log('Binding HTTP server on [::]:$port (dual-stack) ...');
     late final HttpServer server;
