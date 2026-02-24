@@ -84,28 +84,39 @@ class SupabaseAuthAdapter implements AuthRepository {
   Future<void> _signInDesktop() async {
     _signInCancelled = false;
 
-    // 1. Pick a port and start a local HTTP server for the OAuth redirect
-    const int port = 54321;
-    final server = await HttpServer.bind(
-      InternetAddress.loopbackIPv4, port, shared: true,
-    );
+    // 1. Pick a port and start a local HTTP server for the OAuth redirect.
+    //    Avoid 54321 — it conflicts with Supabase CLI local dev server.
+    const int port = 21987;
+
+    _log('Binding HTTP server on 127.0.0.1:$port ...');
+    late final HttpServer server;
+    try {
+      server = await HttpServer.bind(InternetAddress.loopbackIPv4, port);
+    } catch (e) {
+      _log('ERROR binding port $port: $e');
+      rethrow;
+    }
+    _log('Server bound successfully on port ${server.port}');
     _pendingServer = server;
 
     final redirectUri = 'http://localhost:$port/auth/callback';
 
     try {
       // 2. Get the OAuth URL from Supabase (includes PKCE code challenge)
+      _log('Requesting OAuth URL from Supabase (redirectTo: $redirectUri)');
       final res = await _client.auth.getOAuthSignInUrl(
         provider: OAuthProvider.google,
         redirectTo: redirectUri,
         queryParams: {'access_type': 'offline', 'prompt': 'consent'},
       );
+      _log('OAuth URL obtained: ${res.url.substring(0, 80)}...');
 
       // 3. Open the URL in the system browser
       final url = Uri.parse(res.url);
       if (!await launchUrl(url, mode: LaunchMode.externalApplication)) {
         throw Exception('Could not open browser for Google Sign-In');
       }
+      _log('Browser launched, waiting for callback...');
 
       // 4. Wait for the redirect callback (with 5-minute timeout).
       //    If the user cancels, [cancelGoogleSignIn] closes the server which
@@ -114,6 +125,10 @@ class SupabaseAuthAdapter implements AuthRepository {
         const Duration(minutes: 5),
         onTimeout: () => throw TimeoutException('Sign-in timed out'),
       );
+
+      _log('Callback received: ${request.uri}');
+      _log('Request method: ${request.method}');
+      _log('Query params: ${request.uri.queryParameters}');
 
       // 5. Extract the auth code from the callback URL
       final code = request.uri.queryParameters['code'];
@@ -133,18 +148,40 @@ class SupabaseAuthAdapter implements AuthRepository {
       await request.response.close();
 
       if (code == null || code.isEmpty) {
+        _log('ERROR: No authorization code in callback params');
         throw Exception('No authorization code received');
       }
 
       // 6. Exchange the PKCE code for a Supabase session
+      _log('Exchanging code for session...');
       await _client.auth.exchangeCodeForSession(code);
+      _log('Session exchange successful — user authenticated');
     } catch (e) {
+      _log('ERROR in OAuth flow: $e');
       // If the user cancelled, convert any exception into the canonical type.
       if (_signInCancelled) throw const GoogleSignInCancelledException();
       rethrow;
     } finally {
       await server.close(force: true);
       _pendingServer = null;
+      _log('HTTP server closed');
+    }
+  }
+
+  /// Writes a timestamped log line to stderr (visible in Terminal / Console.app
+  /// even in release builds) and also appends to a log file in the system temp
+  /// directory for easy retrieval.
+  static void _log(String message) {
+    final line = '[NoteX-Auth ${DateTime.now().toIso8601String()}] $message';
+    // ignore: avoid_print
+    print(line);
+    try {
+      final logFile = File(
+        '${Directory.systemTemp.path}/notex_auth_debug.log',
+      );
+      logFile.writeAsStringSync('$line\n', mode: FileMode.append);
+    } catch (_) {
+      // Silently ignore file-write errors.
     }
   }
 

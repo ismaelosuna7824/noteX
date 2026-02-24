@@ -1,0 +1,66 @@
+name: Release macOS only
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create dart defines file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
+
+      - name: Apply macOS squircle icon shape
+        run: |
+          pip3 install Pillow --quiet --break-system-packages
+          python3 scripts/apply_macos_icon.py
+
+      - name: Patch Xcode signing for CI
+        run: |
+          python3 - << 'EOF'
+          import pathlib
+          pbx = pathlib.Path('macos/Runner.xcodeproj/project.pbxproj')
+          txt = pbx.read_text()
+          txt = txt.replace('DEVELOPMENT_TEAM = 2CAK428VHF;',          'DEVELOPMENT_TEAM = "";')
+          txt = txt.replace('CODE_SIGN_STYLE = Automatic;',             'CODE_SIGN_STYLE = Manual;')
+          txt = txt.replace('CODE_SIGN_IDENTITY = "Apple Development";','CODE_SIGN_IDENTITY = "-";')
+          txt = txt.replace('"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";',
+                            '"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";')
+          pbx.write_text(txt)
+          print("Patched project.pbxproj for CI signing")
+          EOF
+
+      - name: Build macOS
+        run: flutter build macos --release --dart-define-from-file=dart_defines.json
+
+      - name: Sign app (ad-hoc)
+        run: |
+          codesign --force --deep --sign - \
+            build/macos/Build/Products/Release/notex.app
+
+      - name: Create macOS ZIP
+        run: |
+          cd build/macos/Build/Products/Release
+          ditto -c -k --sequesterRsrc --keepParent notex.app ../../../../../NoteX-macos.zip
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NoteX-macos
+          path: NoteX-macos.zip
