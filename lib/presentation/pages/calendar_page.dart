@@ -412,7 +412,9 @@ class _CalendarPageState extends State<CalendarPage> {
                                 const SizedBox(height: 16),
                                 FilledButton.icon(
                                   onPressed: () async {
-                                    await widget.appState.createNewNote();
+                                    await widget.appState.createNewNote(
+                                      date: _selectedDay,
+                                    );
                                     widget.appState.navigateToPage(2);
                                   },
                                   icon: const Icon(Icons.add, size: 18),

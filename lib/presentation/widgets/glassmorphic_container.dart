@@ -33,8 +33,9 @@ class GlassmorphicContainer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    // Dark mode: use same navy as settings cards for visual consistency.
     final baseColor =
-        color ?? (isDark ? Colors.black : Colors.white);
+        color ?? (isDark ? const Color(0xFF1A1A2E) : Colors.white);
 
     final radius = BorderRadius.circular(borderRadius);
 
@@ -46,9 +47,20 @@ class GlassmorphicContainer extends StatelessWidget {
         borderRadius: radius,
         border: border ??
             Border.all(
-              color: Colors.white.withValues(alpha: 0.2),
-              width: 1.5,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.2),
+              width: isDark ? 1 : 1.5,
             ),
+        boxShadow: isDark
+            ? [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.25),
+                  blurRadius: 12,
+                  offset: const Offset(0, 2),
+                ),
+              ]
+            : null,
       ),
       child: ClipRRect(
         borderRadius: radius,

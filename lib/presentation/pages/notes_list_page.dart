@@ -34,12 +34,17 @@ class _NotesListPageState extends State<NotesListPage> {
   /// Created once so the platform scrollbar always has a valid position.
   final ScrollController _quillScrollController = ScrollController();
 
+  /// Persistent focus node for the Quill editor.
+  /// Creating a new FocusNode on every build causes the cursor to disappear.
+  final FocusNode _editorFocusNode = FocusNode();
+
   @override
   void dispose() {
     _forceSave();
     _quillController?.dispose();
     _titleController?.dispose();
     _quillScrollController.dispose();
+    _editorFocusNode.dispose();
     super.dispose();
   }
 
@@ -125,7 +130,7 @@ class _NotesListPageState extends State<NotesListPage> {
             width: 320,
             child: GlassmorphicContainer(
               borderRadius: 20,
-              opacity: theme.brightness == Brightness.dark ? 0.3 : 0.92,
+              opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
@@ -573,7 +578,7 @@ class _NotesListPageState extends State<NotesListPage> {
     if (note == null || _quillController == null) {
       return GlassmorphicContainer(
         borderRadius: 20,
-        opacity: theme.brightness == Brightness.dark ? 0.3 : 0.92,
+        opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -601,7 +606,7 @@ class _NotesListPageState extends State<NotesListPage> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
-      opacity: theme.brightness == Brightness.dark ? 0.3 : 0.95,
+      opacity: theme.brightness == Brightness.dark ? 0.90 : 0.95,
       padding: EdgeInsets.zero,
       child: Column(
         children: [
@@ -747,13 +752,26 @@ class _NotesListPageState extends State<NotesListPage> {
               padding: const EdgeInsets.all(16),
               child: QuillEditor(
                 controller: _quillController!,
-                focusNode: FocusNode(),
+                focusNode: _editorFocusNode,
                 scrollController: _quillScrollController,
                 config: QuillEditorConfig(
                   placeholder: 'Start typing...',
                   padding: EdgeInsets.zero,
                   expands: true,
                   customStyles: DefaultStyles(
+                    placeHolder: DefaultTextBlockStyle(
+                      TextStyle(
+                        fontSize: 14,
+                        height: 1.6,
+                        color: theme.brightness == Brightness.dark
+                            ? Colors.white38
+                            : Colors.grey.shade400,
+                      ),
+                      const HorizontalSpacing(0, 0),
+                      const VerticalSpacing(4, 4),
+                      const VerticalSpacing(0, 0),
+                      null,
+                    ),
                     paragraph: DefaultTextBlockStyle(
                       TextStyle(
                         fontSize: 14,
@@ -765,6 +783,20 @@ class _NotesListPageState extends State<NotesListPage> {
                       const HorizontalSpacing(0, 0),
                       const VerticalSpacing(4, 4),
                       const VerticalSpacing(0, 0),
+                      null,
+                    ),
+                    lists: DefaultListBlockStyle(
+                      TextStyle(
+                        fontSize: 14,
+                        height: 1.6,
+                        color: theme.brightness == Brightness.dark
+                            ? Colors.white
+                            : Colors.grey.shade800,
+                      ),
+                      const HorizontalSpacing(0, 0),
+                      const VerticalSpacing(4, 4),
+                      const VerticalSpacing(0, 0),
+                      null,
                       null,
                     ),
                   ),

@@ -35,21 +35,33 @@ class Note {
     this.projectId,
   });
 
-  /// Creates a new empty note for today.
+  /// Creates a new empty note for a given [date] (defaults to today).
+  ///
+  /// When [date] comes from an external source (e.g. table_calendar) it may
+  /// be UTC midnight, which can shift to the previous day after Drift stores
+  /// and reads it back as local time.  We normalise to **local noon** so the
+  /// day component survives any timezone conversion.
   factory Note.createDaily({
     required String id,
     String? backgroundImage,
     String? themeId,
     String? userId,
     String? projectId,
+    DateTime? date,
   }) {
-    final now = DateTime.now();
+    final DateTime targetDate;
+    if (date != null) {
+      // Normalise to local time at noon — safe against timezone shifts
+      targetDate = DateTime(date.year, date.month, date.day, 12, 0, 0);
+    } else {
+      targetDate = DateTime.now();
+    }
     return Note(
       id: id,
-      title: _defaultTitleForDate(now),
+      title: _defaultTitleForDate(targetDate),
       content: '[]', // Empty Quill Delta
-      createdAt: now,
-      updatedAt: now,
+      createdAt: targetDate,
+      updatedAt: targetDate,
       syncStatus: SyncStatus.localOnly,
       backgroundImage: backgroundImage,
       themeId: themeId,

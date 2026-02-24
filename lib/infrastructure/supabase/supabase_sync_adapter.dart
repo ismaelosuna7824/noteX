@@ -7,12 +7,14 @@ import '../../domain/entities/time_entry.dart';
 import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
 import '../../domain/entities/note_project.dart';
+import '../../domain/entities/reminder.dart';
 import '../../domain/repositories/note_repository.dart';
 import '../../domain/repositories/project_repository.dart';
 import '../../domain/repositories/time_entry_repository.dart';
 import '../../domain/repositories/markdown_file_repository.dart';
 import '../../domain/repositories/markdown_project_repository.dart';
 import '../../domain/repositories/note_project_repository.dart';
+import '../../domain/repositories/reminder_repository.dart';
 import '../../domain/services/sync_service.dart';
 import '../../domain/value_objects/sync_result.dart';
 import '../../domain/value_objects/sync_status.dart';
@@ -31,6 +33,7 @@ class SupabaseSyncAdapter implements SyncService {
   final MarkdownFileRepository _mdFileRepo;
   final MarkdownProjectRepository _mdProjectRepo;
   final NoteProjectRepository _noteProjectRepo;
+  final ReminderRepository _reminderRepo;
 
   bool _isSyncing = false;
 
@@ -43,6 +46,7 @@ class SupabaseSyncAdapter implements SyncService {
     required MarkdownFileRepository mdFileRepo,
     required MarkdownProjectRepository mdProjectRepo,
     required NoteProjectRepository noteProjectRepo,
+    required ReminderRepository reminderRepo,
   })  : _supabase = supabase,
         _db = db,
         _noteRepo = noteRepo,
@@ -50,7 +54,8 @@ class SupabaseSyncAdapter implements SyncService {
         _timeEntryRepo = timeEntryRepo,
         _mdFileRepo = mdFileRepo,
         _mdProjectRepo = mdProjectRepo,
-        _noteProjectRepo = noteProjectRepo;
+        _noteProjectRepo = noteProjectRepo,
+        _reminderRepo = reminderRepo;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -167,6 +172,23 @@ class SupabaseSyncAdapter implements SyncService {
         }
       }
 
+      // Push pending reminders
+      final pendingReminders = [
+        ...await _reminderRepo.getBySyncStatus(SyncStatus.pendingSync),
+        ...await _reminderRepo.getBySyncStatus(SyncStatus.localOnly)
+      ];
+      for (final reminder in pendingReminders) {
+        final owned = reminder.copyWith(userId: userId);
+        try {
+          await _pushReminder(owned);
+          await _reminderRepo.save(owned.markSynced());
+          pushed++;
+        } catch (e) {
+          print('====== ERROR PUSHING REMINDER: $e ======');
+          errors.add('Reminder ${reminder.id}: $e');
+        }
+      }
+
       return SyncResult(
         pushed: pushed,
         conflicts: conflicts,
@@ -205,6 +227,11 @@ class SupabaseSyncAdapter implements SyncService {
   Future<void> _pushNoteProject(NoteProject project) async {
     final data = _noteProjectToMap(project);
     await _supabase.from('note_projects').upsert(data, onConflict: 'id');
+  }
+
+  Future<void> _pushReminder(Reminder reminder) async {
+    final data = _reminderToMap(reminder);
+    await _supabase.from('reminders').upsert(data, onConflict: 'id');
   }
 
   // ── Pull ───────────────────────────────────────────────────────────────────
@@ -280,6 +307,17 @@ class SupabaseSyncAdapter implements SyncService {
           if (result) pulled++;
         } catch (e) {
           errors.add('Pull note project: $e');
+        }
+      }
+
+      // Pull reminders
+      final remindersData = await _fetchTable('reminders', since);
+      for (final row in remindersData) {
+        try {
+          final result = await _mergeReminder(row);
+          if (result) pulled++;
+        } catch (e) {
+          errors.add('Pull reminder: $e');
         }
       }
 
@@ -653,6 +691,62 @@ class SupabaseSyncAdapter implements SyncService {
     } else if (remote.version == local.version &&
         remote.updatedAt.isAfter(local.updatedAt)) {
       await _noteProjectRepo.save(remote.markSynced());
+      return true;
+    }
+    return false;
+  }
+
+  // ── Reminders Serialization ─────────────────────────────────────────
+
+  Map<String, dynamic> _reminderToMap(Reminder r) => {
+        'id': r.id,
+        'user_id': r.userId,
+        'title': r.title,
+        'scheduled_date': r.scheduledDate.toUtc().toIso8601String(),
+        'is_completed': r.isCompleted,
+        'completed_at': r.completedAt?.toUtc().toIso8601String(),
+        'created_at': r.createdAt.toUtc().toIso8601String(),
+        'updated_at': r.updatedAt.toUtc().toIso8601String(),
+        'deleted_at': r.deletedAt?.toUtc().toIso8601String(),
+        'version': r.version,
+        'sync_status': 'synced',
+      };
+
+  Reminder _mapToReminder(Map<String, dynamic> m) => Reminder(
+        id: m['id'] as String,
+        title: m['title'] as String? ?? '',
+        scheduledDate: DateTime.parse(m['scheduled_date'] as String),
+        isCompleted: m['is_completed'] as bool? ?? false,
+        completedAt: m['completed_at'] != null
+            ? DateTime.parse(m['completed_at'] as String)
+            : null,
+        createdAt: DateTime.parse(m['created_at'] as String),
+        updatedAt: DateTime.parse(m['updated_at'] as String),
+        syncStatus: SyncStatus.synced,
+        version: m['version'] as int? ?? 1,
+        deletedAt: m['deleted_at'] != null
+            ? DateTime.parse(m['deleted_at'] as String)
+            : null,
+        userId: m['user_id'] as String?,
+      );
+
+  // ── Reminder Merge Logic ────────────────────────────────────────────
+
+  Future<bool> _mergeReminder(Map<String, dynamic> remoteData) async {
+    final remote = _mapToReminder(remoteData);
+    final local = await _reminderRepo.getById(remote.id);
+
+    if (local == null) {
+      await _reminderRepo.save(remote.markSynced());
+      return true;
+    }
+
+    if (remote.version > local.version) {
+      await _reminderRepo.save(remote.markSynced());
+      return true;
+    } else if (remote.version == local.version &&
+        remote.updatedAt.isAfter(local.updatedAt)) {
+      await _reminderRepo.save(remote.markSynced());
       return true;
     }
     return false;

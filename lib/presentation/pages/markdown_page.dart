@@ -127,7 +127,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
             width: 320,
             child: GlassmorphicContainer(
               borderRadius: 20,
-              opacity: isDark ? 0.3 : 0.92,
+              opacity: isDark ? 0.90 : 0.92,
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
@@ -459,7 +459,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
     if (file == null || _contentController == null) {
       return GlassmorphicContainer(
         borderRadius: 20,
-        opacity: isDark ? 0.3 : 0.92,
+        opacity: isDark ? 0.90 : 0.92,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -484,7 +484,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
-      opacity: isDark ? 0.3 : 0.95,
+      opacity: isDark ? 0.90 : 0.95,
       padding: EdgeInsets.zero,
       child: Column(
         children: [

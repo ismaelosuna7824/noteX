@@ -11,6 +11,7 @@ import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
+import 'presentation/state/reminder_state.dart';
 import 'application/services/sync_engine.dart';
 import 'domain/repositories/auth_repository.dart';
 
@@ -47,6 +48,10 @@ void main() async {
   // Initialize markdown state
   final markdownState = getIt<MarkdownState>();
   await markdownState.initialize();
+
+  // Initialize reminder state
+  final reminderState = getIt<ReminderState>();
+  await reminderState.initialize();
 
   // 6. Restore persisted theme settings
   final themeState = getIt<ThemeState>();

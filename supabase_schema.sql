@@ -161,3 +161,33 @@ create index idx_markdown_projects_user_updated on public.markdown_projects (use
 create index idx_markdown_files_user_id on public.markdown_files (user_id);
 create index idx_markdown_files_user_updated on public.markdown_files (user_id, updated_at);
 create index idx_markdown_files_project_id on public.markdown_files (project_id);
+
+-- ── Reminders ────────────────────────────────────────────────────────────────
+
+-- Create the `reminders` table
+create table public.reminders (
+  id uuid primary key,
+  user_id uuid references auth.users not null,
+  title text not null default '',
+  scheduled_date timestamp with time zone not null,
+  is_completed boolean not null default false,
+  completed_at timestamp with time zone,
+  created_at timestamp with time zone not null,
+  updated_at timestamp with time zone not null,
+  deleted_at timestamp with time zone,
+  version integer not null default 1,
+  sync_status text not null default 'synced'
+);
+
+-- Enable RLS
+alter table public.reminders enable row level security;
+
+-- RLS Policies
+create policy "Users can view their own reminders" on public.reminders for select using (auth.uid() = user_id);
+create policy "Users can insert their own reminders" on public.reminders for insert with check (auth.uid() = user_id);
+create policy "Users can update their own reminders" on public.reminders for update using (auth.uid() = user_id);
+create policy "Users can delete their own reminders" on public.reminders for delete using (auth.uid() = user_id);
+
+-- Indexes
+create index idx_reminders_user_id on public.reminders (user_id);
+create index idx_reminders_user_updated on public.reminders (user_id, updated_at);

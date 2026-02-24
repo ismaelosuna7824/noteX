@@ -12,12 +12,14 @@ class CreateNoteUseCase {
 
   /// Creates a new note with the given [id].
   /// If [ensureDaily] is true, first checks if a note for today exists.
+  /// If [date] is provided, the note is created for that date instead of today.
   Future<Note> execute({
     required String id,
     String? title,
     String? backgroundImage,
     String? themeId,
     String? projectId,
+    DateTime? date,
     bool ensureDaily = false,
   }) async {
     if (ensureDaily) {
@@ -30,6 +32,7 @@ class CreateNoteUseCase {
       backgroundImage: backgroundImage,
       themeId: themeId,
       projectId: projectId,
+      date: date,
     ).copyWith(
       title: title,
     );

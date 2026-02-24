@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
 import '../state/app_state.dart';
+import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 
@@ -52,6 +53,16 @@ class HomePage extends StatelessWidget {
                 heroColor: heroColor,
                 theme: theme,
                 shadows: heroShadows,
+              ),
+            ),
+
+            // Pending reminders card (top-right)
+            Positioned(
+              right: 24,
+              top: 16,
+              child: _ReminderCard(
+                accentColor: accentColor,
+                onNavigateToReminders: () => appState.navigateToPage(7),
               ),
             ),
 
@@ -603,6 +614,185 @@ class _HeroText extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reminder card — top-right on home page, shows pending/overdue reminders.
+// Uses the same organic morphable_shape design as other dashboard cards.
+// Only visible when there are pending reminders for today or earlier.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ReminderCard extends StatelessWidget {
+  final Color accentColor;
+  final VoidCallback onNavigateToReminders;
+
+  const _ReminderCard({
+    required this.accentColor,
+    required this.onNavigateToReminders,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: GetIt.instance<ReminderState>(),
+      builder: (context, _) {
+        final reminderState = GetIt.instance<ReminderState>();
+        if (!reminderState.hasPendingToday) {
+          return const SizedBox.shrink();
+        }
+
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final pending = reminderState.pendingToday;
+        final theme = Theme.of(context);
+
+        final primaryText = isDark ? Colors.white : Colors.black87;
+        final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+        final dividerColor = isDark
+            ? Colors.white.withValues(alpha: 0.10)
+            : Colors.grey.shade100;
+
+        final shape = RectangleShapeBorder(
+          borderRadius: DynamicBorderRadius.only(
+            topLeft: DynamicRadius.circular(Length(24)),
+            topRight: DynamicRadius.circular(Length(56)),
+            bottomLeft: DynamicRadius.circular(Length(56)),
+            bottomRight: DynamicRadius.circular(Length(24)),
+          ),
+        );
+
+        return _PressButton(
+          onTap: onNavigateToReminders,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 280, maxHeight: 260),
+            child: Container(
+              clipBehavior: Clip.antiAlias,
+              decoration: ShapeDecoration(
+                color: isDark
+                    ? _kDarkCard.withValues(alpha: 0.90)
+                    : Colors.white,
+                shape: shape,
+                shadows: [
+                  BoxShadow(
+                    color: Colors.black
+                        .withValues(alpha: isDark ? 0.30 : 0.07),
+                    blurRadius: 20,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 18, 22, 18),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header row
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${pending.length}',
+                            style: theme.textTheme.headlineLarge?.copyWith(
+                              fontWeight: FontWeight.w900,
+                              color: primaryText,
+                            ),
+                          ),
+                          Text(
+                            'Pending',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: secondaryText,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: accentColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          Icons.notifications_active_rounded,
+                          color: accentColor,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(color: dividerColor, thickness: 1),
+                  ),
+
+                  // Reminder list
+                  Flexible(
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: EdgeInsets.zero,
+                      itemCount: pending.length,
+                      itemBuilder: (context, index) {
+                        final reminder = pending[index];
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              SizedBox(
+                                width: 22,
+                                height: 22,
+                                child: Checkbox(
+                                  value: false,
+                                  onChanged: (_) {
+                                    GetIt.instance<ReminderState>()
+                                        .completeReminder(reminder.id);
+                                  },
+                                  activeColor: accentColor,
+                                  side: BorderSide(
+                                    color: isDark
+                                        ? Colors.white38
+                                        : Colors.grey.shade400,
+                                    width: 1.5,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius:
+                                        BorderRadius.circular(4),
+                                  ),
+                                  materialTapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Text(
+                                  reminder.title,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: primaryText,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

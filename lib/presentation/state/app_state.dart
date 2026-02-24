@@ -238,7 +238,8 @@ class AppState extends ChangeNotifier {
   }
 
   /// Create a new note, inheriting the current project filter.
-  Future<Note> createNewNote({String? projectId}) async {
+  /// If [date] is provided, the note is created for that date instead of today.
+  Future<Note> createNewNote({String? projectId, DateTime? date}) async {
     // Use passed projectId, or inherit from filter (unless 'all' or '__root__')
     final effectiveProjectId = projectId ??
         (_selectedNoteProjectId != null &&
@@ -248,6 +249,7 @@ class AppState extends ChangeNotifier {
     final note = await _createNote.execute(
       id: const Uuid().v4(),
       projectId: effectiveProjectId,
+      date: date,
     );
     await refreshNotes();
     _currentNote = note;

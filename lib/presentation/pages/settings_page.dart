@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../../infrastructure/config/app_config.dart';
@@ -92,45 +93,106 @@ class _SettingsPageState extends State<SettingsPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Wrap(
-                              spacing: 12,
-                              runSpacing: 12,
-                              children: ThemeState.presetColors.map((color) {
-                                final isSelected =
-                                    themeState.accentColor == color;
-                                return InkWell(
-                                  onTap: () =>
-                                      themeState.setAccentColor(color),
-                                  borderRadius: BorderRadius.circular(20),
-                                  child: AnimatedContainer(
-                                    duration:
-                                        const Duration(milliseconds: 200),
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: color,
-                                      shape: BoxShape.circle,
-                                      border: isSelected
-                                          ? Border.all(
-                                              color: Colors.white, width: 3)
-                                          : null,
-                                      boxShadow: isSelected
-                                          ? [
-                                              BoxShadow(
-                                                color: color.withValues(
-                                                    alpha: 0.5),
-                                                blurRadius: 12,
-                                                spreadRadius: 2,
-                                              )
-                                            ]
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                ...ThemeState.presetColors.map((color) {
+                                  final isSelected =
+                                      themeState.accentColor == color;
+                                  // Light colors need a dark check icon
+                                  final isLight =
+                                      color.computeLuminance() > 0.6;
+                                  return InkWell(
+                                    onTap: () =>
+                                        themeState.setAccentColor(color),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: isSelected
+                                            ? Border.all(
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : Colors.black87,
+                                                width: 3)
+                                            : (isLight && !isDark
+                                                ? Border.all(
+                                                    color: Colors.grey.shade300,
+                                                    width: 1)
+                                                : null),
+                                        boxShadow: isSelected
+                                            ? [
+                                                BoxShadow(
+                                                  color: color.withValues(
+                                                      alpha: 0.5),
+                                                  blurRadius: 12,
+                                                  spreadRadius: 2,
+                                                )
+                                              ]
+                                            : null,
+                                      ),
+                                      child: isSelected
+                                          ? Icon(Icons.check,
+                                              color: isLight
+                                                  ? Colors.black87
+                                                  : Colors.white,
+                                              size: 16)
                                           : null,
                                     ),
-                                    child: isSelected
-                                        ? const Icon(Icons.check,
-                                            color: Colors.white, size: 18)
-                                        : null,
-                                  ),
-                                );
-                              }).toList(),
+                                  );
+                                }),
+                                // White accent — only visible in dark mode
+                                if (isDark)
+                                  Builder(builder: (context) {
+                                    const whiteColor =
+                                        ThemeState.darkModeWhiteAccent;
+                                    final isSelected =
+                                        themeState.accentColor == whiteColor;
+                                    return InkWell(
+                                      onTap: () =>
+                                          themeState.setAccentColor(whiteColor),
+                                      borderRadius: BorderRadius.circular(20),
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: whiteColor,
+                                          shape: BoxShape.circle,
+                                          border: isSelected
+                                              ? Border.all(
+                                                  color: Colors.white,
+                                                  width: 3)
+                                              : Border.all(
+                                                  color: Colors.white
+                                                      .withValues(alpha: 0.3),
+                                                  width: 1),
+                                          boxShadow: isSelected
+                                              ? [
+                                                  BoxShadow(
+                                                    color: whiteColor.withValues(
+                                                        alpha: 0.5),
+                                                    blurRadius: 12,
+                                                    spreadRadius: 2,
+                                                  )
+                                                ]
+                                              : null,
+                                        ),
+                                        child: isSelected
+                                            ? const Icon(Icons.check,
+                                                color: Colors.black87,
+                                                size: 16)
+                                            : null,
+                                      ),
+                                    );
+                                  }),
+                              ],
                             ),
                             const SizedBox(height: 10),
                             // Info badge: colors auto-adapt when a bg is chosen
@@ -227,7 +289,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                     children: [
                                       Text(
                                         font,
-                                        style: TextStyle(
+                                        style: GoogleFonts.getFont(
+                                          font,
                                           fontWeight: isSelected
                                               ? FontWeight.w600
                                               : FontWeight.w400,

@@ -11,6 +11,7 @@ import '../../domain/entities/time_entry.dart' as domain_time;
 import '../../domain/entities/markdown_file.dart' as domain_md;
 import '../../domain/entities/markdown_project.dart' as domain_mdp;
 import '../../domain/entities/note_project.dart' as domain_np;
+import '../../domain/entities/reminder.dart' as domain_reminder;
 import '../../domain/value_objects/sync_status.dart';
 
 part 'database.g.dart';
@@ -148,6 +149,30 @@ class NoteProjectEntries extends Table {
   String get tableName => 'note_projects';
 }
 
+/// Drift table for reminders.
+@DataClassName('ReminderEntry')
+class ReminderEntries extends Table {
+  TextColumn get id => text()();
+  TextColumn get title => text().withDefault(const Constant(''))();
+  DateTimeColumn get scheduledDate => dateTime()();
+  BoolColumn get isCompleted =>
+      boolean().withDefault(const Constant(false))();
+  DateTimeColumn get completedAt => dateTime().nullable()();
+  DateTimeColumn get createdAt => dateTime()();
+  DateTimeColumn get updatedAt => dateTime()();
+  IntColumn get version => integer().withDefault(const Constant(1))();
+  DateTimeColumn get deletedAt => dateTime().nullable()();
+  TextColumn get syncStatus =>
+      text().withDefault(const Constant('localOnly'))();
+  TextColumn get userId => text().nullable()();
+
+  @override
+  Set<Column> get primaryKey => {id};
+
+  @override
+  String get tableName => 'reminders';
+}
+
 /// Tracks last sync timestamp per entity type per user.
 @DataClassName('SyncMetadataRow')
 class SyncMetadataEntries extends Table {
@@ -174,6 +199,7 @@ class SyncMetadataEntries extends Table {
   MarkdownFileEntries,
   MarkdownProjectEntries,
   NoteProjectEntries,
+  ReminderEntries,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -182,7 +208,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 8;
+  int get schemaVersion => 9;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -256,6 +282,9 @@ class AppDatabase extends _$AppDatabase {
         await m.createTable(noteProjectEntries);
         await m.addColumn(noteEntries, noteEntries.projectId);
       }
+      if (from < 9) {
+        await m.createTable(reminderEntries);
+      }
     },
   );
 
@@ -271,6 +300,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(markdownFileEntries).go();
       await delete(markdownProjectEntries).go();
       await delete(noteProjectEntries).go();
+      await delete(reminderEntries).go();
       await delete(syncMetadataEntries).go();
     });
   }
@@ -476,6 +506,41 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: Value(p.deletedAt),
       syncStatus: Value(p.syncStatus.name),
       userId: Value(p.userId),
+    );
+  }
+
+  // ── Reminders ──────────────────────────────────────────────────────────
+
+  static domain_reminder.Reminder reminderToDomain(ReminderEntry row) {
+    return domain_reminder.Reminder(
+      id: row.id,
+      title: row.title,
+      scheduledDate: row.scheduledDate,
+      isCompleted: row.isCompleted,
+      completedAt: row.completedAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
+      version: row.version,
+      deletedAt: row.deletedAt,
+      syncStatus: _parseSyncStatus(row.syncStatus),
+      userId: row.userId,
+    );
+  }
+
+  static ReminderEntriesCompanion reminderToCompanion(
+      domain_reminder.Reminder r) {
+    return ReminderEntriesCompanion(
+      id: Value(r.id),
+      title: Value(r.title),
+      scheduledDate: Value(r.scheduledDate),
+      isCompleted: Value(r.isCompleted),
+      completedAt: Value(r.completedAt),
+      createdAt: Value(r.createdAt),
+      updatedAt: Value(r.updatedAt),
+      version: Value(r.version),
+      deletedAt: Value(r.deletedAt),
+      syncStatus: Value(r.syncStatus.name),
+      userId: Value(r.userId),
     );
   }
 }

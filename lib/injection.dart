@@ -8,6 +8,7 @@ import 'domain/repositories/time_entry_repository.dart';
 import 'domain/repositories/markdown_file_repository.dart';
 import 'domain/repositories/markdown_project_repository.dart';
 import 'domain/repositories/note_project_repository.dart';
+import 'domain/repositories/reminder_repository.dart';
 import 'domain/services/sync_service.dart';
 import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
@@ -20,6 +21,7 @@ import 'infrastructure/local/drift_time_entry_repository.dart';
 import 'infrastructure/local/drift_markdown_file_repository.dart';
 import 'infrastructure/local/drift_markdown_project_repository.dart';
 import 'infrastructure/local/drift_note_project_repository.dart';
+import 'infrastructure/local/drift_reminder_repository.dart';
 import 'infrastructure/auth/supabase_auth_adapter.dart';
 import 'infrastructure/supabase/supabase_sync_adapter.dart';
 import 'infrastructure/network/connectivity_adapter.dart';
@@ -50,6 +52,10 @@ import 'application/use_cases/markdown/delete_markdown_project_use_case.dart';
 import 'application/use_cases/note/create_note_project_use_case.dart';
 import 'application/use_cases/note/get_note_projects_use_case.dart';
 import 'application/use_cases/note/delete_note_project_use_case.dart';
+import 'application/use_cases/reminder/create_reminder_use_case.dart';
+import 'application/use_cases/reminder/get_reminders_use_case.dart';
+import 'application/use_cases/reminder/complete_reminder_use_case.dart';
+import 'application/use_cases/reminder/delete_reminder_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/services/auto_save_service.dart';
 import 'application/services/markdown_auto_save_service.dart';
@@ -59,6 +65,7 @@ import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
+import 'presentation/state/reminder_state.dart';
 
 final getIt = GetIt.instance;
 
@@ -119,6 +126,11 @@ Future<void> setupDependencies() async {
     DriftNoteProjectRepository(database),
   );
 
+  // Infrastructure - Reminder Repository
+  getIt.registerSingleton<ReminderRepository>(
+    DriftReminderRepository(database),
+  );
+
   // Infrastructure - Sync Service (Supabase adapter)
   getIt.registerSingleton<SyncService>(
     SupabaseSyncAdapter(
@@ -130,6 +142,7 @@ Future<void> setupDependencies() async {
       mdFileRepo: getIt<MarkdownFileRepository>(),
       mdProjectRepo: getIt<MarkdownProjectRepository>(),
       noteProjectRepo: getIt<NoteProjectRepository>(),
+      reminderRepo: getIt<ReminderRepository>(),
     ),
   );
 
@@ -229,6 +242,23 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  // Application - Reminder Use Cases
+  getIt.registerFactory<CreateReminderUseCase>(
+    () => CreateReminderUseCase(getIt<ReminderRepository>()),
+  );
+  getIt.registerFactory<GetRemindersUseCase>(
+    () => GetRemindersUseCase(getIt<ReminderRepository>()),
+  );
+  getIt.registerFactory<CompleteReminderUseCase>(
+    () => CompleteReminderUseCase(getIt<ReminderRepository>()),
+  );
+  getIt.registerFactory<DeleteReminderUseCase>(
+    () => DeleteReminderUseCase(
+      getIt<ReminderRepository>(),
+      getIt<SyncEngine>(),
+    ),
+  );
+
   // Application - Update Use Case
   getIt.registerFactory<CheckForUpdateUseCase>(
     () => CheckForUpdateUseCase(getIt<UpdateService>()),
@@ -271,8 +301,11 @@ Future<void> setupDependencies() async {
     updateService: getIt<UpdateService>(),
   );
   getIt.registerSingleton<AppState>(appState);
-  // Wire sync completion callback so the UI refreshes sync icons after each sync
-  getIt<SyncEngine>().onSyncComplete = appState.refreshNotes;
+  // Wire sync completion callback so the UI refreshes after each sync
+  getIt<SyncEngine>().onSyncComplete = () async {
+    await appState.refreshNotes();
+    await getIt<ReminderState>().refreshReminders();
+  };
   // Wire sync engine to AppState for user switch detection on sign-in
   appState.syncEngine = getIt<SyncEngine>();
   // TimerState owns a dart:async Timer → must be a singleton
@@ -299,6 +332,15 @@ Future<void> setupDependencies() async {
       getProjects: getIt<GetMarkdownProjectsUseCase>(),
       deleteProject: getIt<DeleteMarkdownProjectUseCase>(),
       autoSaveService: getIt<MarkdownAutoSaveService>(),
+    ),
+  );
+  // ReminderState
+  getIt.registerSingleton<ReminderState>(
+    ReminderState(
+      createReminder: getIt<CreateReminderUseCase>(),
+      getReminders: getIt<GetRemindersUseCase>(),
+      completeReminder: getIt<CompleteReminderUseCase>(),
+      deleteReminder: getIt<DeleteReminderUseCase>(),
     ),
   );
 }

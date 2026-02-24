@@ -16,6 +16,7 @@ import 'calendar_page.dart';
 import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
+import 'reminder_page.dart';
 
 /// Corner radius used for the rounded window frame.
 const double _kWindowRadius = 14.0;
@@ -318,6 +319,12 @@ class _AppShellState extends State<AppShell> with WindowListener {
       case 6:
         return SettingsPage(
           key: const ValueKey('settings'),
+          appState: widget.appState,
+          themeState: widget.themeState,
+        );
+      case 7:
+        return ReminderPage(
+          key: const ValueKey('reminders'),
           appState: widget.appState,
           themeState: widget.themeState,
         );

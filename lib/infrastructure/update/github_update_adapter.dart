@@ -96,15 +96,15 @@ class GitHubUpdateAdapter implements UpdateService {
     exit(0);
   }
 
-  // ── macOS: mount DMG, replace .app bundle, relaunch ───────────────────
+  // ── macOS: extract ZIP, replace .app bundle, relaunch ──────────────────
 
   Future<void> _applyMacOS(
     UpdateInfo update,
     void Function(double)? onProgress,
   ) async {
-    final dmgPath = '${Directory.systemTemp.path}/NoteX-macos.dmg';
+    final zipPath = '${Directory.systemTemp.path}/NoteX-macos.zip';
 
-    await _downloadFile(update.downloadUrl, dmgPath, onProgress);
+    await _downloadFile(update.downloadUrl, zipPath, onProgress);
 
     // Resolve the current .app bundle path from the running executable.
     // Platform.resolvedExecutable → /Applications/notex.app/Contents/MacOS/notex
@@ -120,27 +120,23 @@ class GitHubUpdateAdapter implements UpdateService {
     // Create an update script that runs after the app exits.
     // macOS keeps the binary in memory after the .app is deleted, so this is safe.
     final scriptPath = '${Directory.systemTemp.path}/notex_update.sh';
+    final extractDir = '${Directory.systemTemp.path}/notex_update_extracted';
     final currentPid = pid;
 
     final script = '''#!/bin/bash
 # Wait for the current process to exit
 while kill -0 $currentPid 2>/dev/null; do sleep 0.3; done
 
-# Mount the DMG
-MOUNT_OUTPUT=\$(hdiutil attach "$dmgPath" -nobrowse -readonly 2>&1)
-MOUNT_POINT=\$(echo "\$MOUNT_OUTPUT" | grep -oE '/Volumes/[^\\t\\n]+' | head -1)
+# Extract the ZIP
+rm -rf "$extractDir"
+mkdir -p "$extractDir"
+ditto -x -k "$zipPath" "$extractDir"
 
-if [ -z "\$MOUNT_POINT" ]; then
-  rm -f "$dmgPath" "$scriptPath"
-  exit 1
-fi
-
-# Find the .app inside the mounted volume
-APP_FOUND=\$(ls "\$MOUNT_POINT" | grep '\\.app\$' | head -1)
+# Find the .app inside the extracted directory
+APP_FOUND=\$(ls "$extractDir" | grep '\\.app\$' | head -1)
 
 if [ -z "\$APP_FOUND" ]; then
-  hdiutil detach "\$MOUNT_POINT" -quiet
-  rm -f "$dmgPath" "$scriptPath"
+  rm -rf "$zipPath" "$extractDir" "$scriptPath"
   exit 1
 fi
 
@@ -149,15 +145,14 @@ TARGET="$appDir/\$APP_FOUND"
 # Check if we can write directly; if not, elevate via osascript
 if [ -w "$appDir" ]; then
   rm -rf "\$TARGET"
-  cp -Rf "\$MOUNT_POINT/\$APP_FOUND" "$appDir/"
+  cp -Rf "$extractDir/\$APP_FOUND" "$appDir/"
   xattr -cr "\$TARGET"
 else
-  osascript -e "do shell script \\"rm -rf '\$TARGET' && cp -Rf '\$MOUNT_POINT/\$APP_FOUND' '$appDir/' && xattr -cr '\$TARGET'\\" with administrator privileges"
+  osascript -e "do shell script \\"rm -rf '\$TARGET' && cp -Rf '$extractDir/\$APP_FOUND' '$appDir/' && xattr -cr '\$TARGET'\\" with administrator privileges"
 fi
 
-# Unmount and clean up
-hdiutil detach "\$MOUNT_POINT" -quiet
-rm -f "$dmgPath"
+# Clean up
+rm -rf "$zipPath" "$extractDir"
 
 # Relaunch
 open "\$TARGET"

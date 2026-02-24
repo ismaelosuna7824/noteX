@@ -19,7 +19,9 @@
       "Bash(gh release list)",
       "WebFetch(domain:api.github.com)",
       "Bash(where:*)",
-      "Bash(gh run list:*)"
+      "Bash(gh run list:*)",
+      "Bash(grep:*)",
+      "Bash(xargs:*)"
     ]
   }
 }

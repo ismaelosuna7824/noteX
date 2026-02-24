@@ -121,8 +121,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final accentColor = widget.themeState.accentColor;
     final note = widget.appState.currentNote;
+
+    // Adaptive colors matching settings page dark mode style
+    const darkCard = Color(0xFF1A1A2E);
+    final chipBg = isDark
+        ? darkCard.withValues(alpha: 0.90)
+        : Colors.white.withValues(alpha: 0.85);
+    final chipBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.grey.shade200;
+    final chipText = isDark ? Colors.white70 : Colors.grey.shade600;
 
     if (note == null) {
       return Center(
@@ -132,13 +143,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             Icon(
               Icons.note_add_rounded,
               size: 64,
-              color: Colors.grey.shade300,
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.20)
+                  : Colors.grey.shade300,
             ),
             const SizedBox(height: 16),
             Text(
               'No note selected',
               style: theme.textTheme.titleLarge?.copyWith(
-                color: Colors.grey.shade400,
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.40)
+                    : Colors.grey.shade400,
               ),
             ),
             const SizedBox(height: 8),
@@ -179,16 +194,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
-                      color: Colors.grey.shade800,
+                      color: isDark ? Colors.white : Colors.grey.shade800,
                     ),
                     decoration: InputDecoration(
                       hintText: 'Note title...',
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.85),
+                      fillColor: chipBg,
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14),
                         borderSide: BorderSide(
-                          color: Colors.grey.shade200,
+                          color: chipBorder,
                           width: 1,
                         ),
                       ),
@@ -209,7 +224,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         size: 20,
                       ),
                       hintStyle: TextStyle(
-                        color: Colors.grey.shade400,
+                        color: isDark ? Colors.white38 : Colors.grey.shade400,
                         fontWeight: FontWeight.w500,
                         fontSize: 15,
                       ),
@@ -225,10 +240,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 height: 44,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: chipBg,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: Colors.grey.shade200,
+                    color: chipBorder,
                     width: 1,
                   ),
                 ),
@@ -246,7 +261,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w500,
-                        color: Colors.grey.shade600,
+                        color: chipText,
                       ),
                     ),
                   ],
@@ -260,10 +275,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 height: 44,
                 width: 44,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.85),
+                  color: chipBg,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
-                    color: Colors.grey.shade200,
+                    color: chipBorder,
                     width: 1,
                   ),
                 ),
@@ -280,22 +295,32 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 duration: const Duration(milliseconds: 300),
                 child: Container(
                   height: 44,
+                  width: 110,
                   margin: const EdgeInsets.only(left: 8),
                   padding: const EdgeInsets.symmetric(horizontal: 12),
                   decoration: BoxDecoration(
-                    color: _saveStatus == 'saved'
-                        ? Colors.green.shade50
-                        : Colors.orange.shade50,
+                    color: isDark
+                        ? (_saveStatus == 'saved'
+                            ? Colors.green.withValues(alpha: 0.15)
+                            : Colors.orange.withValues(alpha: 0.15))
+                        : (_saveStatus == 'saved'
+                            ? Colors.green.shade50
+                            : Colors.orange.shade50),
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(
-                      color: _saveStatus == 'saved'
-                          ? Colors.green.shade200
-                          : Colors.orange.shade200,
+                      color: isDark
+                          ? (_saveStatus == 'saved'
+                              ? Colors.green.withValues(alpha: 0.30)
+                              : Colors.orange.withValues(alpha: 0.30))
+                          : (_saveStatus == 'saved'
+                              ? Colors.green.shade200
+                              : Colors.orange.shade200),
                       width: 1,
                     ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(
                         _saveStatus == 'saved'
@@ -303,8 +328,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                             : Icons.sync_rounded,
                         size: 14,
                         color: _saveStatus == 'saved'
-                            ? Colors.green.shade600
-                            : Colors.orange.shade600,
+                            ? (isDark ? Colors.green.shade300 : Colors.green.shade600)
+                            : (isDark ? Colors.orange.shade300 : Colors.orange.shade600),
                       ),
                       const SizedBox(width: 4),
                       Text(
@@ -313,8 +338,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           fontSize: 12,
                           fontWeight: FontWeight.w500,
                           color: _saveStatus == 'saved'
-                              ? Colors.green.shade600
-                              : Colors.orange.shade600,
+                              ? (isDark ? Colors.green.shade300 : Colors.green.shade600)
+                              : (isDark ? Colors.orange.shade300 : Colors.orange.shade600),
                         ),
                       ),
                     ],
@@ -334,16 +359,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 Expanded(
                   child: Column(
                     children: [
-                      // Quill toolbar — white card
+                      // Quill toolbar — adaptive card
                       Container(
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.92),
+                          color: isDark
+                              ? darkCard.withValues(alpha: 0.90)
+                              : Colors.white.withValues(alpha: 0.92),
                           borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(20),
                             topRight: Radius.circular(20),
                           ),
                           border: Border.all(
-                            color: Colors.grey.shade200,
+                            color: chipBorder,
                             width: 1,
                           ),
                         ),
@@ -370,6 +397,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                   iconButtonSelectedData: IconButtonData(
                                     color: accentColor,
                                   ),
+                                  iconButtonUnselectedData: IconButtonData(
+                                    color: isDark ? Colors.white70 : null,
+                                  ),
                                 ),
                               ),
                             ),
@@ -377,32 +407,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         ),
                       ),
 
-                      // Editor content — solid white card for readability
+                      // Editor content — adaptive card for readability
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 1),
+                            color: isDark
+                                ? darkCard.withValues(alpha: 0.90)
+                                : Colors.white,
                             borderRadius: const BorderRadius.only(
                               bottomLeft: Radius.circular(20),
                               bottomRight: Radius.circular(20),
                             ),
                             border: Border(
                               left: BorderSide(
-                                color: Colors.grey.shade200,
+                                color: chipBorder,
                                 width: 1,
                               ),
                               right: BorderSide(
-                                color: Colors.grey.shade200,
+                                color: chipBorder,
                                 width: 1,
                               ),
                               bottom: BorderSide(
-                                color: Colors.grey.shade200,
+                                color: chipBorder,
                                 width: 1,
                               ),
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.05),
+                                color: Colors.black.withValues(
+                                    alpha: isDark ? 0.25 : 0.05),
                                 blurRadius: 20,
                                 offset: const Offset(0, 4),
                               ),
@@ -417,15 +450,44 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               padding: const EdgeInsets.all(8),
                               expands: true,
                               customStyles: DefaultStyles(
-                                paragraph: DefaultTextBlockStyle(
+                                placeHolder: DefaultTextBlockStyle(
                                   TextStyle(
                                     fontSize: 15,
                                     height: 1.6,
-                                    color: Colors.grey.shade800,
+                                    color: isDark
+                                        ? Colors.white38
+                                        : Colors.grey.shade400,
                                   ),
                                   const HorizontalSpacing(0, 0),
                                   const VerticalSpacing(6, 6),
                                   const VerticalSpacing(0, 0),
+                                  null,
+                                ),
+                                paragraph: DefaultTextBlockStyle(
+                                  TextStyle(
+                                    fontSize: 15,
+                                    height: 1.6,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.grey.shade800,
+                                  ),
+                                  const HorizontalSpacing(0, 0),
+                                  const VerticalSpacing(6, 6),
+                                  const VerticalSpacing(0, 0),
+                                  null,
+                                ),
+                                lists: DefaultListBlockStyle(
+                                  TextStyle(
+                                    fontSize: 15,
+                                    height: 1.6,
+                                    color: isDark
+                                        ? Colors.white
+                                        : Colors.grey.shade800,
+                                  ),
+                                  const HorizontalSpacing(0, 0),
+                                  const VerticalSpacing(6, 6),
+                                  const VerticalSpacing(0, 0),
+                                  null,
                                   null,
                                 ),
                               ),

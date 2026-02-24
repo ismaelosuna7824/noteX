@@ -155,7 +155,7 @@ class _TimerBar extends StatelessWidget {
 
     return GlassmorphicContainer(
       borderRadius: 18,
-      opacity: Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.92,
+      opacity: Theme.of(context).brightness == Brightness.dark ? 0.90 : 0.92,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
@@ -615,7 +615,7 @@ class _WeekNavBar extends StatelessWidget {
 
     return GlassmorphicContainer(
       borderRadius: 14,
-      opacity: isDark ? 0.3 : 0.92,
+      opacity: isDark ? 0.90 : 0.92,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
@@ -1121,7 +1121,7 @@ class _EntriesListState extends State<_EntriesList> {
     if (grouped.isEmpty) {
       return GlassmorphicContainer(
         borderRadius: 20,
-        opacity: Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.92,
+        opacity: Theme.of(context).brightness == Brightness.dark ? 0.90 : 0.92,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -1161,7 +1161,7 @@ class _EntriesListState extends State<_EntriesList> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
-      opacity: Theme.of(context).brightness == Brightness.dark ? 0.3 : 0.92,
+      opacity: Theme.of(context).brightness == Brightness.dark ? 0.90 : 0.92,
       padding: const EdgeInsets.all(16),
       child: ListView.builder(
         controller: _scrollController,

@@ -53,7 +53,7 @@ jobs:
           name: NoteX-windows
           path: NoteX-windows-setup.exe
 
-  # ── macOS — .dmg via create-dmg ───────────────────────────────────────
+  # ── macOS — .zip (ad-hoc signed) ──────────────────────────────────────
   build-macos:
     runs-on: macos-latest
     steps:
@@ -86,27 +86,16 @@ jobs:
           codesign --force --deep --sign - \
             build/macos/Build/Products/Release/notex.app
 
-      - name: Install create-dmg
-        run: brew install create-dmg
-
-      - name: Build macOS DMG
+      - name: Create macOS ZIP
         run: |
-          create-dmg \
-            --volname "NoteX" \
-            --window-pos 200 120 \
-            --window-size 600 300 \
-            --icon-size 100 \
-            --icon "notex.app" 150 145 \
-            --hide-extension "notex.app" \
-            --app-drop-link 450 145 \
-            "NoteX-macos.dmg" \
-            "build/macos/Build/Products/Release/"
+          cd build/macos/Build/Products/Release
+          ditto -c -k --sequesterRsrc --keepParent notex.app ../../../../../NoteX-macos.zip
 
       - name: Upload macOS artifact
         uses: actions/upload-artifact@v4
         with:
           name: NoteX-macos
-          path: NoteX-macos.dmg
+          path: NoteX-macos.zip
 
   # ── Linux — .deb package ──────────────────────────────────────────────
   build-linux:
@@ -196,5 +185,5 @@ jobs:
           generate_release_notes: true
           files: |
             artifacts/NoteX-windows/NoteX-windows-setup.exe
-            artifacts/NoteX-macos/NoteX-macos.dmg
+            artifacts/NoteX-macos/NoteX-macos.zip
             artifacts/NoteX-linux/NoteX-linux.deb

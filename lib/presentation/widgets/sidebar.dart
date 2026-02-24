@@ -23,6 +23,7 @@ class Sidebar extends StatelessWidget {
     (3, _SidebarItem(Icons.calendar_month_rounded, 'Calendar')),
     (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
     (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
+    (7, _SidebarItem(Icons.notifications_rounded, 'Reminders')),
   ];
   static const _settingsItem =
       (6, _SidebarItem(Icons.settings_rounded, 'Settings'));
@@ -91,17 +92,27 @@ class _NavButtonState extends State<_NavButton> {
   Widget build(BuildContext context) {
     final isSelected = widget.isSelected;
     final accent = widget.accentColor;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Tint the circle slightly on hover (unselected only).
-    final circleColor = isSelected
-        ? accent
-        : (_hovered
-            ? Colors.white.withValues(alpha: 0.88)
-            : Colors.white);
+    // Adapt circle color to dark/light mode.
+    final Color circleColor;
+    if (isSelected) {
+      circleColor = accent;
+    } else if (isDark) {
+      circleColor = _hovered
+          ? const Color(0xFF2A2A40)
+          : const Color(0xFF1A1A2E);
+    } else {
+      circleColor = _hovered
+          ? Colors.white.withValues(alpha: 0.88)
+          : Colors.white;
+    }
 
     final shadowColor = isSelected
         ? accent.withValues(alpha: 0.35)
-        : Colors.black.withValues(alpha: _hovered ? 0.14 : 0.08);
+        : (isDark
+            ? Colors.black.withValues(alpha: _hovered ? 0.30 : 0.20)
+            : Colors.black.withValues(alpha: _hovered ? 0.14 : 0.08));
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 10),
@@ -122,6 +133,12 @@ class _NavButtonState extends State<_NavButton> {
               decoration: BoxDecoration(
                 color: circleColor,
                 shape: BoxShape.circle,
+                border: isDark && !isSelected
+                    ? Border.all(
+                        color: Colors.white.withValues(alpha: 0.08),
+                        width: 1,
+                      )
+                    : null,
                 boxShadow: [
                   BoxShadow(
                     color: shadowColor,
@@ -132,12 +149,10 @@ class _NavButtonState extends State<_NavButton> {
               ),
               child: Icon(
                 widget.item.icon,
-                // Selected → always white; unselected adapts slightly by mode.
+                // Selected → always white; unselected adapts to dark/light.
                 color: isSelected
                     ? Colors.white
-                    : (Theme.of(context).brightness == Brightness.dark
-                        ? Colors.grey.shade400
-                        : Colors.grey.shade600),
+                    : (isDark ? Colors.white70 : Colors.grey.shade600),
                 size: 22,
               ),
             ),

@@ -77,9 +77,18 @@ class ThemeState extends ChangeNotifier {
     Color(0xFFE17055), // Coral
     Color(0xFF0984E3), // Blue
     Color(0xFFE84393), // Pink
+    Color(0xFF00CEC9), // Cyan
+    Color(0xFFFD79A8), // Light pink
+    Color(0xFFA29BFE), // Lavender
+    Color(0xFF55EFC4), // Mint
+    Color(0xFFFF7675), // Salmon
+    Color(0xFFDFE6E9), // Silver
     Color(0xFF2D3436), // Dark
     Color(0xFF636E72), // Gray
   ];
+
+  /// White accent — only available in dark mode.
+  static const Color darkModeWhiteAccent = Color(0xFFFFFFFF);
 
   /// Bundled preset backgrounds — images and videos (from assets/images/).
   static const List<String> presetBackgrounds = [
