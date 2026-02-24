@@ -102,13 +102,25 @@ jobs:
           pip3 install Pillow --quiet --break-system-packages
           python3 scripts/apply_macos_icon.py
 
+      - name: Patch Xcode signing for CI
+        # Removes the Apple Developer team and switches to ad-hoc signing so
+        # xcodebuild doesn't look for a "Mac Development" certificate that
+        # doesn't exist on the runner. We re-sign with codesign --sign - after.
+        run: |
+          python3 - << 'EOF'
+          import pathlib
+          pbx = pathlib.Path('macos/Runner.xcodeproj/project.pbxproj')
+          txt = pbx.read_text()
+          txt = txt.replace('DEVELOPMENT_TEAM = 2CAK428VHF;',          'DEVELOPMENT_TEAM = "";')
+          txt = txt.replace('CODE_SIGN_STYLE = Automatic;',             'CODE_SIGN_STYLE = Manual;')
+          txt = txt.replace('CODE_SIGN_IDENTITY = "Apple Development";','CODE_SIGN_IDENTITY = "-";')
+          txt = txt.replace('"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";',
+                            '"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";')
+          pbx.write_text(txt)
+          print("Patched project.pbxproj for CI signing")
+          EOF
+
       - name: Build macOS
-        # CODE_SIGN_IDENTITY="" + CODE_SIGNING_REQUIRED=NO tells xcodebuild to
-        # skip automatic certificate lookup. We do our own ad-hoc sign below.
-        env:
-          CODE_SIGN_IDENTITY: ""
-          CODE_SIGNING_REQUIRED: "NO"
-          CODE_SIGNING_ALLOWED: "NO"
         run: flutter build macos --release --dart-define-from-file=dart_defines.json
 
       - name: Sign app (ad-hoc — avoids "malware" Gatekeeper message)
