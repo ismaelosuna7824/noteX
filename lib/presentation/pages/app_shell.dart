@@ -51,6 +51,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
   void initState() {
     super.initState();
     windowManager.addListener(this);
+    // Intercept the close event so we can dispose media_kit's native player
+    // before the process exits. Without this macOS reports "quit unexpectedly"
+    // because libmpv's cleanup is interrupted mid-flight.
+    windowManager.setPreventClose(true);
     _syncMaximizedState();
     widget.themeState.addListener(_syncVideoPlayer);
     _syncVideoPlayer();
@@ -62,6 +66,22 @@ class _AppShellState extends State<AppShell> with WindowListener {
     _disposeVideoPlayer();
     windowManager.removeListener(this);
     super.dispose();
+  }
+
+  @override
+  void onWindowClose() async {
+    // Stop playback first, then dispose — gives libmpv time to release
+    // native resources cleanly instead of crashing on process exit.
+    await _bgPlayer?.stop();
+    _bgPlayer?.dispose();
+    _bgPlayer = null;
+    _bgVideoController = null;
+    _currentVideoPath = null;
+
+    // Brief pause so the native backend finishes its teardown.
+    await Future.delayed(const Duration(milliseconds: 150));
+
+    await windowManager.destroy();
   }
 
   @override

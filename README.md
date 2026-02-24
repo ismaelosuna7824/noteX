@@ -100,12 +100,13 @@ flutter run -d linux --dart-define-from-file=dart_defines.json
 1. Download `NoteX-macos.zip` from the [latest release](https://github.com/ismaelosuna7824/noteX/releases/latest)
 2. Double-click the ZIP to extract `notex.app`
 3. Drag `notex.app` into your **Applications** folder
-4. **Right-click** (or Control-click) on `notex.app` and select **Open**
-5. In the dialog that appears, click **Open** to confirm
+4. Double-click to open — macOS will show **"NoteX Not Opened"** because the app is not notarized with an Apple Developer certificate. Click **Done**.
+5. Open **System Settings → Privacy & Security**, scroll down to the **Security** section — you will see *"NoteX was blocked to protect your Mac"*. Click **Open Anyway**.
+6. macOS will ask one more time: **"Open NoteX?"** — click **Open Anyway** to confirm.
 
-> The first launch must be via right-click because macOS blocks apps that are not notarized with an Apple Developer certificate. After opening it once this way, you can open it normally from then on.
+> After doing this once, NoteX will open normally from then on.
 
-**Alternative — Terminal:**
+**Alternative — Terminal (skip all dialogs):**
 ```bash
 xattr -dr com.apple.quarantine /Applications/notex.app
 ```
