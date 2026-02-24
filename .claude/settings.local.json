@@ -21,7 +21,9 @@
       "Bash(where:*)",
       "Bash(gh run list:*)",
       "Bash(grep:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(git rm:*)",
+      "Bash(git reset:*)"
     ]
   }
 }
