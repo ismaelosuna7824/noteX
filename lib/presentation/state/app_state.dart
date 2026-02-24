@@ -13,6 +13,7 @@ import '../../application/use_cases/note/create_note_project_use_case.dart';
 import '../../application/use_cases/note/get_note_projects_use_case.dart';
 import '../../application/use_cases/note/delete_note_project_use_case.dart';
 import '../../application/use_cases/check_for_update_use_case.dart';
+import '../../application/use_cases/cleanup_empty_notes_use_case.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
 import '../../domain/repositories/auth_repository.dart'
@@ -32,6 +33,7 @@ class AppState extends ChangeNotifier {
   final GetNoteProjectsUseCase _getNoteProjects;
   final DeleteNoteProjectUseCase _deleteNoteProject;
   final CheckForUpdateUseCase _checkForUpdate;
+  final CleanupEmptyNotesUseCase _cleanupEmptyNotes;
   final UpdateService _updateService;
   final AutoSaveService autoSaveService;
   final AuthRepository _authRepository;
@@ -65,6 +67,7 @@ class AppState extends ChangeNotifier {
     required GetNoteProjectsUseCase getNoteProjects,
     required DeleteNoteProjectUseCase deleteNoteProject,
     required CheckForUpdateUseCase checkForUpdate,
+    required CleanupEmptyNotesUseCase cleanupEmptyNotes,
     required UpdateService updateService,
     required this.autoSaveService,
     required AuthRepository authRepository,
@@ -76,10 +79,14 @@ class AppState extends ChangeNotifier {
         _getNoteProjects = getNoteProjects,
         _deleteNoteProject = deleteNoteProject,
         _checkForUpdate = checkForUpdate,
+        _cleanupEmptyNotes = cleanupEmptyNotes,
         _updateService = updateService,
         _authRepository = authRepository {
     // Wire up auto-save callback to refresh the list after saves
     autoSaveService.onSaved = _onNoteSaved;
+
+    // Wire up cleanup callback for when empty notes are removed
+    autoSaveService.onNoteDeleted = _onNoteDeleted;
 
     // React to Supabase auth state changes (sign-in/sign-out come in async)
     _authSub = _authRepository.authStateChanges.listen((_) {
@@ -162,6 +169,12 @@ class AppState extends ChangeNotifier {
       _notes = await _getNotes.getAll();
       _noteProjects = await _getNoteProjects.getAll();
 
+      // Safety net: clean up orphaned empty notes from previous sessions
+      final removed = await _cleanupEmptyNotes.execute();
+      if (removed > 0) {
+        _notes = await _getNotes.getAll();
+      }
+
       // Auto-create daily note if none exists for today
       final today = DateTime.now();
       final hasTodayNote = _notes.any((n) => n.isForDate(today));
@@ -188,6 +201,16 @@ class AppState extends ChangeNotifier {
 
     // Non-blocking update check — runs in background after startup
     checkForUpdate();
+  }
+
+  /// Called by AutoSaveService when an empty note is cleaned up.
+  /// Removes it from the in-memory list and adjusts currentNote.
+  Future<void> _onNoteDeleted(String noteId) async {
+    _notes.removeWhere((n) => n.id == noteId);
+    if (_currentNote?.id == noteId) {
+      _currentNote = _notes.isNotEmpty ? _notes.first : null;
+    }
+    notifyListeners();
   }
 
   /// Called by AutoSaveService after a successful save.

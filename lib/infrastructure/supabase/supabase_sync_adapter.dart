@@ -93,6 +93,9 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _noteRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final note in pendingNotes) {
+        // Skip syncing empty notes — they will be cleaned up locally
+        if (note.isEmpty) continue;
+
         final owned = note.copyWith(userId: userId);
         try {
           await _pushNote(owned);

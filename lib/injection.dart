@@ -57,6 +57,7 @@ import 'application/use_cases/reminder/get_reminders_use_case.dart';
 import 'application/use_cases/reminder/complete_reminder_use_case.dart';
 import 'application/use_cases/reminder/delete_reminder_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
+import 'application/use_cases/cleanup_empty_notes_use_case.dart';
 import 'application/services/auto_save_service.dart';
 import 'application/services/markdown_auto_save_service.dart';
 import 'application/services/sync_engine.dart';
@@ -158,6 +159,9 @@ Future<void> setupDependencies() async {
   );
   getIt.registerFactory<DeleteNoteUseCase>(
     () => DeleteNoteUseCase(getIt<NoteRepository>()),
+  );
+  getIt.registerFactory<CleanupEmptyNotesUseCase>(
+    () => CleanupEmptyNotesUseCase(getIt<NoteRepository>()),
   );
   getIt.registerFactory<GenerateTitleUseCase>(
     () => GenerateTitleUseCase(
@@ -276,6 +280,7 @@ Future<void> setupDependencies() async {
     AutoSaveService(
       getIt<UpdateNoteUseCase>(),
       getIt<SyncEngine>(),
+      getIt<CleanupEmptyNotesUseCase>(),
     ),
   );
   getIt.registerSingleton<MarkdownAutoSaveService>(
@@ -295,6 +300,7 @@ Future<void> setupDependencies() async {
     createNoteProject: getIt<CreateNoteProjectUseCase>(),
     getNoteProjects: getIt<GetNoteProjectsUseCase>(),
     deleteNoteProject: getIt<DeleteNoteProjectUseCase>(),
+    cleanupEmptyNotes: getIt<CleanupEmptyNotesUseCase>(),
     autoSaveService: getIt<AutoSaveService>(),
     authRepository: getIt<AuthRepository>(),
     checkForUpdate: getIt<CheckForUpdateUseCase>(),

@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../value_objects/sync_status.dart';
 
 /// Core domain entity representing a note.
@@ -74,6 +76,40 @@ class Note {
 
   /// Whether this note has been soft-deleted.
   bool get isDeleted => deletedAt != null;
+
+  /// Whether the Quill Delta content is effectively empty.
+  ///
+  /// Empty means the raw JSON is `'[]'` or contains only whitespace /
+  /// newline operations like `[{"insert":"\n"}]`.
+  bool get hasEmptyContent {
+    if (content == '[]') return true;
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is! List || decoded.isEmpty) return true;
+      if (decoded.length == 1) {
+        final op = decoded[0];
+        if (op is Map && op.length == 1 && op.containsKey('insert')) {
+          final insert = op['insert'];
+          if (insert is String && insert.trim().isEmpty) return true;
+        }
+      }
+      return false;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// Whether the title is the auto-generated date format (e.g. "February 24, 2026").
+  bool get hasDefaultTitle {
+    if (title.isEmpty) return true;
+    return RegExp(
+      r'^(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}$',
+    ).hasMatch(title);
+  }
+
+  /// A note is "empty" when it has no meaningful user content:
+  /// default date title + no text in the editor.
+  bool get isEmpty => hasEmptyContent && hasDefaultTitle;
 
   /// Returns a copy with updated fields.
   Note copyWith({
