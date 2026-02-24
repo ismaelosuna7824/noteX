@@ -73,6 +73,10 @@ jobs:
             NoteX-cert.cer
             Install-NoteX.ps1
 
+      - name: Cancel workflow on failure
+        if: failure()
+        uses: andymckay/cancel-action@0.3
+
   # ── macOS — .zip (ad-hoc signed) ──────────────────────────────────────
   build-macos:
     runs-on: macos-latest
@@ -99,6 +103,12 @@ jobs:
           python3 scripts/apply_macos_icon.py
 
       - name: Build macOS
+        # CODE_SIGN_IDENTITY="" + CODE_SIGNING_REQUIRED=NO tells xcodebuild to
+        # skip automatic certificate lookup. We do our own ad-hoc sign below.
+        env:
+          CODE_SIGN_IDENTITY: ""
+          CODE_SIGNING_REQUIRED: "NO"
+          CODE_SIGNING_ALLOWED: "NO"
         run: flutter build macos --release --dart-define-from-file=dart_defines.json
 
       - name: Sign app (ad-hoc — avoids "malware" Gatekeeper message)
@@ -116,6 +126,10 @@ jobs:
         with:
           name: NoteX-macos
           path: NoteX-macos.zip
+
+      - name: Cancel workflow on failure
+        if: failure()
+        uses: andymckay/cancel-action@0.3
 
   # ── Linux — .deb package ──────────────────────────────────────────────
   build-linux:
@@ -186,6 +200,10 @@ jobs:
         with:
           name: NoteX-linux
           path: NoteX-linux.deb
+
+      - name: Cancel workflow on failure
+        if: failure()
+        uses: andymckay/cancel-action@0.3
 
   # ── Create GitHub Release ──────────────────────────────────────────────
   create-release:
