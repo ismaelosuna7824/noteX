@@ -814,7 +814,7 @@ class _ReminderCard extends StatelessWidget {
                     child: Divider(color: dividerColor, thickness: 1),
                   ),
 
-                  // Reminder list
+                  // Reminder list with staggered entrance
                   Flexible(
                     child: ListView.builder(
                       shrinkWrap: true,
@@ -822,50 +822,17 @@ class _ReminderCard extends StatelessWidget {
                       itemCount: pending.length,
                       itemBuilder: (context, index) {
                         final reminder = pending[index];
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Row(
-                            children: [
-                              SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: Checkbox(
-                                  value: false,
-                                  onChanged: (_) {
-                                    GetIt.instance<ReminderState>()
-                                        .completeReminder(reminder.id);
-                                  },
-                                  activeColor: accentColor,
-                                  side: BorderSide(
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.grey.shade400,
-                                    width: 1.5,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius:
-                                        BorderRadius.circular(4),
-                                  ),
-                                  materialTapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Text(
-                                  reminder.title,
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: primaryText,
-                                  ),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
-                            ],
-                          ),
+                        return _HomeReminderItem(
+                          key: ValueKey(reminder.id),
+                          index: index,
+                          reminder: reminder,
+                          accentColor: accentColor,
+                          isDark: isDark,
+                          primaryText: primaryText,
+                          onComplete: () {
+                            GetIt.instance<ReminderState>()
+                                .completeReminder(reminder.id);
+                          },
                         );
                       },
                     ),
@@ -876,6 +843,121 @@ class _ReminderCard extends StatelessWidget {
           ),
         );
       },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Home reminder item — staggered entrance, hover highlight, animated checkout.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HomeReminderItem extends StatefulWidget {
+  final int index;
+  final dynamic reminder;
+  final Color accentColor;
+  final bool isDark;
+  final Color primaryText;
+  final VoidCallback onComplete;
+
+  const _HomeReminderItem({
+    super.key,
+    required this.index,
+    required this.reminder,
+    required this.accentColor,
+    required this.isDark,
+    required this.primaryText,
+    required this.onComplete,
+  });
+
+  @override
+  State<_HomeReminderItem> createState() => _HomeReminderItemState();
+}
+
+class _HomeReminderItemState extends State<_HomeReminderItem>
+    with SingleTickerProviderStateMixin {
+  // Completion exit animation
+  late final AnimationController _exitController;
+  late final Animation<double> _exitOpacity;
+  late final Animation<Offset> _exitSlide;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _exitController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+    _exitOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _exitController, curve: Curves.easeIn),
+    );
+    _exitSlide = Tween<Offset>(
+      begin: Offset.zero,
+      end: const Offset(0.15, 0),
+    ).animate(
+      CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
+    );
+  }
+
+  @override
+  void dispose() {
+    _exitController.dispose();
+    super.dispose();
+  }
+
+  void _handleComplete() async {
+    await _exitController.forward();
+    widget.onComplete();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SlideTransition(
+      position: _exitSlide,
+      child: FadeTransition(
+        opacity: _exitOpacity,
+        child: Padding(
+          padding: const EdgeInsets.only(bottom: 4),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 22,
+                height: 22,
+                child: Checkbox(
+                  value: false,
+                  onChanged: (_) => _handleComplete(),
+                  activeColor: widget.accentColor,
+                  side: BorderSide(
+                    color: widget.isDark
+                        ? Colors.white38
+                        : Colors.grey.shade400,
+                    width: 1.5,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  materialTapTargetSize:
+                      MaterialTapTargetSize.shrinkWrap,
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.reminder.title,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                    color: widget.primaryText,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

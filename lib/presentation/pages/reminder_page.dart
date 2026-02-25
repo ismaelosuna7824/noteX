@@ -372,6 +372,53 @@ class _ReminderPageState extends State<ReminderPage> {
     bool isDark,
     Color accentColor,
   ) {
+    return _ReminderTile(
+      reminder: reminder,
+      isDark: isDark,
+      accentColor: accentColor,
+      onComplete: () => _reminderState.completeReminder(reminder.id),
+      onDelete: () => _reminderState.deleteReminder(reminder.id),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Reminder tile with hover animation (lift + accent border glow).
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ReminderTile extends StatefulWidget {
+  final Reminder reminder;
+  final bool isDark;
+  final Color accentColor;
+  final VoidCallback onComplete;
+  final VoidCallback onDelete;
+
+  const _ReminderTile({
+    required this.reminder,
+    required this.isDark,
+    required this.accentColor,
+    required this.onComplete,
+    required this.onDelete,
+  });
+
+  @override
+  State<_ReminderTile> createState() => _ReminderTileState();
+}
+
+class _ReminderTileState extends State<_ReminderTile> {
+  bool _hovered = false;
+
+  static const _monthNames = [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final reminder = widget.reminder;
+    final isDark = widget.isDark;
+    final accentColor = widget.accentColor;
+
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final scheduled = DateTime(
@@ -383,99 +430,111 @@ class _ReminderPageState extends State<ReminderPage> {
     final isToday = scheduled.isAtSameMomentAs(today);
 
     final itemBg = isDark
-        ? Colors.white.withValues(alpha: 0.07)
-        : Colors.grey.shade50;
-    final itemBorder = isDark
-        ? Colors.white.withValues(alpha: 0.10)
-        : Colors.grey.shade200;
+        ? Colors.white.withValues(alpha: _hovered ? 0.10 : 0.07)
+        : (_hovered ? Colors.grey.shade100 : Colors.grey.shade50);
+    final itemBorder = _hovered
+        ? accentColor.withValues(alpha: 0.25)
+        : (isDark
+            ? Colors.white.withValues(alpha: 0.10)
+            : Colors.grey.shade200);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: itemBg,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: itemBorder, width: 1),
-        ),
-        child: Row(
-          children: [
-            // Checkbox
-            SizedBox(
-              width: 24,
-              height: 24,
-              child: Checkbox(
-                value: reminder.isCompleted,
-                onChanged: reminder.isCompleted
-                    ? null
-                    : (_) => _reminderState.completeReminder(reminder.id),
-                activeColor: accentColor,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(4),
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          transform: Matrix4.translationValues(0, _hovered ? -2 : 0, 0),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: itemBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: itemBorder, width: 1),
+          ),
+          child: Row(
+            children: [
+              // Checkbox
+              SizedBox(
+                width: 24,
+                height: 24,
+                child: Checkbox(
+                  value: reminder.isCompleted,
+                  onChanged: reminder.isCompleted
+                      ? null
+                      : (_) => widget.onComplete(),
+                  activeColor: accentColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(4),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 12),
+              const SizedBox(width: 12),
 
-            // Title
-            Expanded(
-              child: Text(
-                reminder.title,
-                style: TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                  decoration: reminder.isCompleted
-                      ? TextDecoration.lineThrough
-                      : null,
-                  color: reminder.isCompleted
-                      ? (isDark ? Colors.white38 : Colors.grey.shade400)
-                      : null,
+              // Title
+              Expanded(
+                child: Text(
+                  reminder.title,
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    decoration: reminder.isCompleted
+                        ? TextDecoration.lineThrough
+                        : null,
+                    color: reminder.isCompleted
+                        ? (isDark ? Colors.white38 : Colors.grey.shade400)
+                        : null,
+                  ),
                 ),
               ),
-            ),
 
-            // Date badge
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: isOverdue
-                    ? Colors.red.withValues(alpha: 0.12)
-                    : isToday
-                        ? accentColor.withValues(alpha: 0.12)
-                        : (isDark
-                            ? Colors.white.withValues(alpha: 0.05)
-                            : Colors.grey.shade100),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                isToday
-                    ? 'Today'
-                    : '${_monthNames[reminder.scheduledDate.month - 1]} ${reminder.scheduledDate.day}',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
+              // Date badge
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
                   color: isOverdue
-                      ? Colors.red
+                      ? Colors.red.withValues(alpha: 0.12)
                       : isToday
-                          ? accentColor
-                          : (isDark ? Colors.white54 : Colors.grey.shade600),
+                          ? accentColor.withValues(alpha: 0.12)
+                          : (isDark
+                              ? Colors.white.withValues(alpha: 0.05)
+                              : Colors.grey.shade100),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  isToday
+                      ? 'Today'
+                      : '${_monthNames[reminder.scheduledDate.month - 1]} ${reminder.scheduledDate.day}',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: isOverdue
+                        ? Colors.red
+                        : isToday
+                            ? accentColor
+                            : (isDark
+                                ? Colors.white54
+                                : Colors.grey.shade600),
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(width: 8),
+              const SizedBox(width: 8),
 
-            // Delete button
-            IconButton(
-              onPressed: () => _reminderState.deleteReminder(reminder.id),
-              icon: Icon(
-                Icons.close_rounded,
-                size: 16,
-                color: isDark ? Colors.white38 : Colors.grey.shade400,
+              // Delete button
+              IconButton(
+                onPressed: widget.onDelete,
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: isDark ? Colors.white38 : Colors.grey.shade400,
+                ),
+                visualDensity: VisualDensity.compact,
+                tooltip: 'Delete',
               ),
-              visualDensity: VisualDensity.compact,
-              tooltip: 'Delete',
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
