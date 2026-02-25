@@ -548,8 +548,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               padding: const EdgeInsets.all(8),
                               expands: true,
                               textSelectionThemeData: TextSelectionThemeData(
-                                cursorColor:
-                                    isDark ? Colors.white : Colors.black,
+                                cursorColor: accentColor,
                               ),
                               customStyles: _buildQuillStyles(isDark),
                             ),

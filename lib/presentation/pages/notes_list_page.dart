@@ -5,9 +5,9 @@ import 'package:flutter_quill/flutter_quill.dart';
 import '../../domain/entities/note_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
-import '../widgets/note_card.dart';
-import '../widgets/glassmorphic_container.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/glassmorphic_container.dart';
+import '../widgets/note_card.dart';
 
 /// Notes list view with inline preview/edit panel.
 ///
@@ -28,47 +28,22 @@ class NotesListPage extends StatefulWidget {
 
 class _NotesListPageState extends State<NotesListPage> {
   QuillController? _quillController;
-  TextEditingController? _titleController;
   String? _loadedNoteId;
 
-  /// Clipboard config: paste from external sources as plain text only.
-  // ignore: experimental_member_use
-  static final _controllerConfig = QuillControllerConfig(
-    // ignore: experimental_member_use
-    clipboardConfig: QuillClipboardConfig(
-      // ignore: experimental_member_use
-      enableExternalRichPaste: false,
-    ),
-  );
-
   /// Persistent scroll controller for the Quill editor.
-  /// Created once so the platform scrollbar always has a valid position.
   final ScrollController _quillScrollController = ScrollController();
-
-  /// Persistent focus node for the Quill editor.
-  /// Creating a new FocusNode on every build causes the cursor to disappear.
-  final FocusNode _editorFocusNode = FocusNode();
 
   @override
   void dispose() {
-    _forceSave();
-    widget.appState.autoSaveService.unwatch();
     _quillController?.dispose();
-    _titleController?.dispose();
     _quillScrollController.dispose();
-    _editorFocusNode.dispose();
     super.dispose();
   }
 
   void _loadPreview() {
     final note = widget.appState.currentNote;
     if (note == null || note.id == _loadedNoteId) return;
-
-    _forceSave(); // save previous note before switching
     _loadedNoteId = note.id;
-
-    _titleController?.dispose();
-    _titleController = TextEditingController(text: note.title);
 
     _quillController?.dispose();
     try {
@@ -76,41 +51,11 @@ class _NotesListPageState extends State<NotesListPage> {
       _quillController = QuillController(
         document: delta,
         selection: const TextSelection.collapsed(offset: 0),
-        config: _controllerConfig,
+        readOnly: true,
       );
     } catch (_) {
-      _quillController = QuillController.basic(config: _controllerConfig);
+      _quillController = QuillController.basic()..readOnly = true;
     }
-
-    // Register lazy getters once — the periodic timer reads them every 3 s.
-    widget.appState.autoSaveService.watch(
-      noteId: note.id,
-      getTitle: () => _titleController?.text ?? '',
-      getContent: () =>
-          jsonEncode(_quillController!.document.toDelta().toJson()),
-    );
-
-    // On every keystroke just flip a boolean — zero overhead.
-    _quillController!.document.changes.listen((_) {
-      widget.appState.autoSaveService.markDirty();
-    });
-  }
-
-  void _forceSave() {
-    // IMPORTANT: use _loadedNoteId, NOT currentNote.id.
-    // When switching notes, previewNote() updates currentNote to the NEW note
-    // before _forceSave() runs, so using currentNote.id would save the OLD
-    // editor content into the NEW note — overwriting its title/content.
-    final noteId = _loadedNoteId;
-    if (noteId == null || _quillController == null) return;
-
-    final content =
-        jsonEncode(_quillController!.document.toDelta().toJson());
-    widget.appState.autoSaveService.forceSave(
-      noteId: noteId,
-      title: _titleController?.text ?? '',
-      content: content,
-    );
   }
 
   @override
@@ -666,28 +611,18 @@ class _NotesListPageState extends State<NotesListPage> {
         children: [
           // Title + Open in editor button
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
+            padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
             child: Row(
               children: [
-                // Inline title field
                 Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    onChanged: (_) => widget.appState.autoSaveService.markDirty(),
+                  child: Text(
+                    note.title.isEmpty ? 'Untitled' : note.title,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'Note title...',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(
-                        color: theme.brightness == Brightness.dark
-                            ? Colors.white54
-                            : Colors.grey.shade400,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -757,72 +692,19 @@ class _NotesListPageState extends State<NotesListPage> {
 
           Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
 
-          // Compact toolbar — Focus barrier prevents toolbar buttons from
-          // capturing keyboard focus (Space key would activate them instead
-          // of typing in the editor).
-          Focus(
-            canRequestFocus: false,
-            descendantsAreFocusable: false,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              child: QuillSimpleToolbar(
-                controller: _quillController!,
-                config: QuillSimpleToolbarConfig(
-                  showAlignmentButtons: false,
-                  showBackgroundColorButton: false,
-                  showClearFormat: false,
-                  showCodeBlock: false,
-                  showDirection: false,
-                  showFontFamily: false,
-                  showFontSize: false,
-                  showHeaderStyle: true,
-                  showIndent: false,
-                  showInlineCode: false,
-                  showLink: false,
-                  showQuote: false,
-                  showSearchButton: false,
-                  showStrikeThrough: false,
-                  showSubscript: false,
-                  showSuperscript: false,
-                  showUndo: false,
-                  showRedo: false,
-                  showColorButton: false,
-                  showListCheck: true,
-                  multiRowsDisplay: false,
-                  buttonOptions: QuillSimpleToolbarButtonOptions(
-                    base: QuillToolbarBaseButtonOptions(
-                      iconSize: 18,
-                      iconTheme: QuillIconTheme(
-                        iconButtonSelectedData: IconButtonData(
-                          color: accentColor,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
-
-          // Editor content
+          // Read-only content preview
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: QuillEditor(
                 controller: _quillController!,
-                focusNode: _editorFocusNode,
                 scrollController: _quillScrollController,
+                focusNode: FocusNode(canRequestFocus: false),
                 config: QuillEditorConfig(
-                  placeholder: 'Start typing...',
+                  placeholder: 'Empty note',
                   padding: EdgeInsets.zero,
                   expands: true,
-                  textSelectionThemeData: TextSelectionThemeData(
-                    cursorColor: theme.brightness == Brightness.dark
-                        ? Colors.white
-                        : Colors.black,
-                  ),
+                  showCursor: false,
                   customStyles: _buildQuillStyles(theme),
                 ),
               ),

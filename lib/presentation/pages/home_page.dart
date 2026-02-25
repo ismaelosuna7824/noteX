@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
@@ -107,6 +109,7 @@ class _HomePageState extends State<HomePage>
                   position: _slideAnims[0],
                   child: _HeroText(
                     heroColor: heroColor,
+                    accentColor: accentColor,
                     theme: theme,
                     shadows: heroShadows,
                   ),
@@ -658,43 +661,183 @@ class _HomePageState extends State<HomePage>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Static hero text — two lines of bold display text, no animation.
+// Hero text — gradient display text with periodic shimmer sweep and organic
+// accent bar.  The gradient blends heroColor → accentColor; a highlight band
+// sweeps across every ~6.5 s.  Shadows are rendered on a separate layer so
+// ShaderMask doesn't tint them.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _HeroText extends StatelessWidget {
+class _HeroText extends StatefulWidget {
   final Color heroColor;
+  final Color accentColor;
   final ThemeData theme;
   final List<Shadow> shadows;
 
   const _HeroText({
     required this.heroColor,
+    required this.accentColor,
     required this.theme,
     required this.shadows,
   });
 
   @override
+  State<_HeroText> createState() => _HeroTextState();
+}
+
+class _HeroTextState extends State<_HeroText>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _shimmer;
+  Timer? _pauseTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _shimmer = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+
+    _shimmer.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _pauseTimer = Timer(const Duration(seconds: 5), () {
+          if (mounted) {
+            _shimmer.reset();
+            _shimmer.forward();
+          }
+        });
+      }
+    });
+
+    // Wait for the stagger entrance to mostly finish before first shimmer.
+    _pauseTimer = Timer(const Duration(milliseconds: 1200), () {
+      if (mounted) _shimmer.forward();
+    });
+  }
+
+  @override
+  void dispose() {
+    _pauseTimer?.cancel();
+    _shimmer.dispose();
+    super.dispose();
+  }
+
+  // ── Shimmer gradient ────────────────────────────────────────────────────
+
+  LinearGradient _buildShimmerGradient() {
+    final base = widget.heroColor;
+    final isDark = base.computeLuminance() < 0.4;
+    final highlight = Color.lerp(base, widget.accentColor, isDark ? 0.65 : 0.5)!;
+
+    // Band sweeps from offscreen-left (-0.2) to offscreen-right (1.2).
+    final pos = -0.2 + (_shimmer.value * 1.4);
+
+    // Solid heroColor everywhere except the narrow shimmer band.
+    return LinearGradient(
+      begin: Alignment.centerLeft,
+      end: Alignment.centerRight,
+      colors: [
+        base,
+        base,
+        highlight,
+        base,
+        base,
+      ],
+      stops: [
+        0.0,
+        (pos - 0.08).clamp(0.001, 0.999),
+        pos.clamp(0.002, 0.998),
+        (pos + 0.08).clamp(0.001, 0.999),
+        1.0,
+      ],
+    );
+  }
+
+  // ── Build ───────────────────────────────────────────────────────────────
+
+  @override
   Widget build(BuildContext context) {
+    final theme = widget.theme;
+
+    final smallStyle = theme.textTheme.displaySmall?.copyWith(
+      fontWeight: FontWeight.w900,
+      letterSpacing: 2,
+    );
+    final mediumStyle = theme.textTheme.displayMedium?.copyWith(
+      fontWeight: FontWeight.w900,
+      letterSpacing: 4,
+    );
+
+    // Shared text column builder to avoid duplication.
+    Widget textColumn({Color? color, List<Shadow>? shadows}) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text('IMMERSE IN',
+              style: smallStyle?.copyWith(color: color, shadows: shadows)),
+          Text('YOUR NOTES',
+              style: mediumStyle?.copyWith(color: color, shadows: shadows)),
+        ],
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
-        Text(
-          'IMMERSE IN',
-          style: theme.textTheme.displaySmall?.copyWith(
-            color: heroColor,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 2,
-            shadows: shadows,
-          ),
+        // ── Gradient text with shadow layer ────────────────────────────
+        Stack(
+          children: [
+            // Shadow layer — transparent glyphs, visible shadows.
+            textColumn(
+              color: Colors.transparent,
+              shadows: widget.shadows,
+            ),
+
+            // Gradient + shimmer layer — no shadows.
+            AnimatedBuilder(
+              animation: _shimmer,
+              builder: (context, child) {
+                return ShaderMask(
+                  blendMode: BlendMode.srcIn,
+                  shaderCallback: (bounds) =>
+                      _buildShimmerGradient().createShader(bounds),
+                  child: child,
+                );
+              },
+              child: textColumn(color: Colors.white),
+            ),
+          ],
         ),
-        Text(
-          'YOUR NOTES',
-          style: theme.textTheme.displayMedium?.copyWith(
-            color: heroColor,
-            fontWeight: FontWeight.w900,
-            letterSpacing: 4,
-            shadows: shadows,
-          ),
+
+        const SizedBox(height: 10),
+
+        // ── Organic accent bar ────────────────────────────────────────
+        AnimatedBuilder(
+          animation: _shimmer,
+          builder: (context, _) {
+            final alpha = 0.5 + (_shimmer.value * 0.3);
+            return Container(
+              width: 52,
+              height: 5,
+              decoration: BoxDecoration(
+                color: widget.accentColor.withValues(alpha: alpha),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(2),
+                  topRight: Radius.circular(8),
+                  bottomLeft: Radius.circular(8),
+                  bottomRight: Radius.circular(2),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.accentColor.withValues(alpha: 0.3),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+            );
+          },
         ),
       ],
     );
