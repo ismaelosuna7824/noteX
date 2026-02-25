@@ -1,15 +1,15 @@
 import 'dart:async';
 
 import '../use_cases/markdown/update_markdown_file_use_case.dart';
-import 'sync_engine.dart';
 
 /// Application service: Auto-save for markdown files with intelligent debounce.
 ///
 /// NO save button — saves automatically when the user stops typing.
 /// Uses an 800ms debounce to avoid saving on every keystroke.
+/// Only persists to the local Drift database — remote sync is handled
+/// separately on app open/close to avoid excessive Supabase calls.
 class MarkdownAutoSaveService {
   final UpdateMarkdownFileUseCase _updateFile;
-  final SyncEngine _syncEngine;
 
   Timer? _debounceTimer;
   static const _debounceDuration = Duration(milliseconds: 800);
@@ -17,7 +17,7 @@ class MarkdownAutoSaveService {
   /// Callback invoked after a successful save (can be async).
   Future<void> Function(String fileId)? onSaved;
 
-  MarkdownAutoSaveService(this._updateFile, this._syncEngine);
+  MarkdownAutoSaveService(this._updateFile);
 
   /// Schedule an auto-save for the given markdown file.
   /// Resets the debounce timer on each call.
@@ -55,8 +55,6 @@ class MarkdownAutoSaveService {
 
     if (updated != null) {
       await onSaved?.call(fileId);
-      // Trigger sync if authenticated
-      await _syncEngine.syncIfAuthenticated();
     }
   }
 

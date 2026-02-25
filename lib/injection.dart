@@ -279,13 +279,11 @@ Future<void> setupDependencies() async {
   getIt.registerSingleton<AutoSaveService>(
     AutoSaveService(
       getIt<UpdateNoteUseCase>(),
-      getIt<SyncEngine>(),
     ),
   );
   getIt.registerSingleton<MarkdownAutoSaveService>(
     MarkdownAutoSaveService(
       getIt<UpdateMarkdownFileUseCase>(),
-      getIt<SyncEngine>(),
     ),
   );
 

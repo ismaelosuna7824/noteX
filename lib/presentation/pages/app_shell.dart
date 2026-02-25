@@ -17,6 +17,8 @@ import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
 import 'reminder_page.dart';
+import '../../injection.dart';
+import '../../application/services/sync_engine.dart';
 
 /// Corner radius used for the rounded window frame.
 const double _kWindowRadius = 14.0;
@@ -75,6 +77,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
   void onWindowClose() async {
     // Clean up empty notes before closing
     await widget.appState.cleanupEmptyNotes();
+
+    // Push any pending local changes to Supabase before closing.
+    // Remote sync only runs on app open/close to avoid excessive API calls.
+    await getIt<SyncEngine>().syncIfAuthenticated();
 
     // Stop playback first, then dispose — gives libmpv time to release
     // native resources cleanly instead of crashing on process exit.

@@ -39,7 +39,8 @@
       "Bash(git log:*)",
       "Bash(git tag:*)",
       "Bash(gh workflow run:*)",
-      "Bash(wc -l /d/Git/NoteX/notex/lib/presentation/pages/*.dart)"
+      "Bash(wc -l /d/Git/NoteX/notex/lib/presentation/pages/*.dart)",
+      "Bash(powershell.exe -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")"
     ]
   }
 }
