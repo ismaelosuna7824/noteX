@@ -63,6 +63,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
   @override
   void dispose() {
     _forceSave();
+    _mdState.autoSaveService.unwatch();
     _mdState.removeListener(_onStateChanged);
     _titleController?.dispose();
     _contentController?.dispose();
@@ -85,14 +86,10 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
     _contentController?.dispose();
     _contentController = TextEditingController(text: file.content);
-  }
 
-  void _scheduleAutoSave() {
-    final fileId = _loadedFileId;
-    if (fileId == null || _contentController == null) return;
-
-    _mdState.autoSaveService.scheduleAutoSave(
-      fileId: fileId,
+    // Register lazy getters once — the periodic timer reads them every 3 s.
+    _mdState.autoSaveService.watch(
+      fileId: file.id,
       getTitle: () => _titleController?.text ?? '',
       getContent: () => _contentController!.text,
     );
@@ -499,7 +496,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                 Expanded(
                   child: TextField(
                     controller: _titleController,
-                    onChanged: (_) => _scheduleAutoSave(),
+                    onChanged: (_) => _mdState.autoSaveService.markDirty(),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
@@ -657,7 +654,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
       padding: const EdgeInsets.all(16),
       child: TextField(
         controller: _contentController,
-        onChanged: (_) => _scheduleAutoSave(),
+        onChanged: (_) => _mdState.autoSaveService.markDirty(),
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,

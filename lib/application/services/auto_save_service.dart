@@ -2,81 +2,133 @@ import 'dart:async';
 
 import '../use_cases/update_note_use_case.dart';
 
-/// Application service: Auto-save with intelligent debounce.
+/// Application service: Auto-save with dirty-flag + periodic timer.
 ///
 /// NO save button — saves automatically when the user stops typing.
-/// Uses an 800ms debounce to avoid saving on every keystroke.
-/// Only persists to the local Drift database — remote sync is handled
-/// separately on app open/close to avoid excessive Supabase calls.
+/// The editor is **100 % decoupled** from the save pipeline:
 ///
-/// [scheduleAutoSave] accepts **lazy getters** so expensive operations like
-/// `jsonEncode(delta)` only run when the timer actually fires (after the
-/// user pauses typing), not on every single keystroke.
+///  1. The page calls [watch] once when loading a note, registering lazy
+///     getters for title & content.
+///  2. On every keystroke the page calls [markDirty] — a single `bool`
+///     assignment with **zero** overhead on the UI thread.
+///  3. A periodic timer (every 3 s) checks the flag. If dirty it reads
+///     the getters, serialises, and persists to the local Drift database.
+///
+/// Only persists locally — remote sync is handled on app open/close.
 class AutoSaveService {
   final UpdateNoteUseCase _updateNote;
 
-  Timer? _debounceTimer;
-  static const _debounceDuration = Duration(milliseconds: 800);
+  // ── Periodic timer ───────────────────────────────────────────────────
+  Timer? _periodicTimer;
+  static const _checkInterval = Duration(seconds: 3);
+
+  // ── Dirty-flag state ─────────────────────────────────────────────────
+  bool _isDirty = false;
+  String? _watchedNoteId;
+  String Function()? _getTitle;
+  String Function()? _getContent;
 
   /// Callback invoked after a successful save (can be async).
   Future<void> Function(String noteId)? onSaved;
 
   AutoSaveService(this._updateNote);
 
-  /// Schedule an auto-save for the given note.
-  /// Resets the debounce timer on each call.
+  // ── Public API ───────────────────────────────────────────────────────
+
+  /// Register a note to watch for auto-saving.
   ///
-  /// [getTitle] and [getContent] are evaluated lazily — only when the
-  /// 800 ms debounce elapses. This avoids serialising the entire Quill
-  /// document on every keystroke, which would block the UI thread.
-  void scheduleAutoSave({
+  /// Call once when loading a note. The [getTitle] and [getContent] closures
+  /// are only evaluated when the periodic timer detects unsaved changes —
+  /// **never** on the keystroke itself.
+  void watch({
     required String noteId,
     required String Function() getTitle,
     required String Function() getContent,
   }) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounceDuration, () async {
-      await _performSave(
-        noteId: noteId,
-        title: getTitle(),
-        content: getContent(),
-      );
-    });
+    _watchedNoteId = noteId;
+    _getTitle = getTitle;
+    _getContent = getContent;
+    _isDirty = false;
+    _startTimer();
   }
 
-  /// Force an immediate save (e.g., when navigating away).
+  /// Mark the current note as having unsaved changes.
+  ///
+  /// Cost: a single boolean assignment — zero overhead on the UI thread.
+  void markDirty() {
+    _isDirty = true;
+  }
+
+  /// Stop watching the current note (e.g., before disposing controllers).
+  void unwatch() {
+    _stopTimer();
+    _watchedNoteId = null;
+    _getTitle = null;
+    _getContent = null;
+    _isDirty = false;
+  }
+
+  /// Force an immediate save (e.g., when navigating away or disposing).
   Future<void> forceSave({
     required String noteId,
     String? title,
     String? content,
   }) async {
-    _debounceTimer?.cancel();
+    _isDirty = false;
     await _performSave(noteId: noteId, title: title, content: content);
   }
 
+  /// Cancel any pending changes without saving.
+  void cancel() {
+    _isDirty = false;
+  }
+
+  /// Dispose resources.
+  void dispose() {
+    _stopTimer();
+  }
+
+  // ── Internals ────────────────────────────────────────────────────────
+
+  void _startTimer() {
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(_checkInterval, (_) {
+      _tick(); // synchronous entry — avoids unawaited-Future issues
+    });
+  }
+
+  void _stopTimer() {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  /// Non-async tick — uses `.whenComplete` so [onSaved] fires regardless
+  /// of whether the DB call succeeds, fails, or throws.
+  void _tick() {
+    if (!_isDirty || _watchedNoteId == null) return;
+    _isDirty = false;
+
+    final noteId = _watchedNoteId!;
+    _updateNote
+        .execute(
+          noteId: noteId,
+          title: _getTitle?.call(),
+          content: _getContent?.call(),
+        )
+        .whenComplete(() => onSaved?.call(noteId));
+  }
+
+  /// Force an immediate save (dispose / navigation).
   Future<void> _performSave({
     required String noteId,
     String? title,
     String? content,
   }) async {
-    final updated = await _updateNote.execute(
+    await _updateNote.execute(
       noteId: noteId,
       title: title,
       content: content,
     );
-
-    if (updated != null) {
-      await onSaved?.call(noteId);
-    }
-  }
-
-  /// Cancel any pending auto-save.
-  void cancel() {
-    _debounceTimer?.cancel();
-  }
-
-  /// Dispose resources.
-  void dispose() {
-    _debounceTimer?.cancel();
+    await onSaved?.call(noteId);
   }
 }

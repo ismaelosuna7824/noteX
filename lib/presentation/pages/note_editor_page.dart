@@ -9,7 +9,7 @@ import '../widgets/editor_text_controls.dart';
 ///
 /// Matches the reference design: big background image, glassmorphic inputs on top,
 /// and a semi-opaque editor card for readability.
-/// NO save button — auto-saves when the user stops typing (800ms debounce).
+/// NO save button — auto-saves via dirty-flag + 3 s periodic timer.
 class NoteEditorPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
@@ -72,27 +72,25 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       _quillController = QuillController.basic();
     }
 
-    // Listen for content changes → auto-save
-    _quillController.document.changes.listen((_) {
-      _scheduleAutoSave();
-    });
-  }
-
-  void _scheduleAutoSave() {
-    final note = widget.appState.currentNote;
-    if (note == null) return;
-
-    // Update only the save indicator — no setState, no full rebuild.
-    _saveStatus.value = 'saving';
-
-    // Lazy getters: jsonEncode only runs when the 800ms debounce fires,
-    // NOT on every keystroke. This keeps the UI thread free for rendering.
-    widget.appState.autoSaveService.scheduleAutoSave(
+    // Register lazy getters once — the periodic timer reads them every 3 s.
+    widget.appState.autoSaveService.watch(
       noteId: note.id,
       getTitle: () => _titleController.text,
       getContent: () =>
           jsonEncode(_quillController.document.toDelta().toJson()),
     );
+
+    // On every keystroke just flip a boolean — zero overhead.
+    _quillController.document.changes.listen((_) {
+      _markDirty();
+    });
+  }
+
+  /// Mark the current note as having unsaved changes.
+  /// Cost: a ValueNotifier string assignment + a boolean flip.
+  void _markDirty() {
+    _saveStatus.value = 'saving';
+    widget.appState.autoSaveService.markDirty();
   }
 
   @override
@@ -116,6 +114,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         content: content,
       );
     }
+    // Stop the periodic timer so it doesn't fire after controllers are disposed.
+    widget.appState.autoSaveService.unwatch();
 
     _quillController.dispose();
     _titleController.dispose();
@@ -196,7 +196,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   height: 44,
                   child: TextField(
                     controller: _titleController,
-                    onChanged: (_) => _scheduleAutoSave(),
+                    onChanged: (_) => _markDirty(),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,

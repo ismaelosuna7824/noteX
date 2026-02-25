@@ -2,79 +2,133 @@ import 'dart:async';
 
 import '../use_cases/markdown/update_markdown_file_use_case.dart';
 
-/// Application service: Auto-save for markdown files with intelligent debounce.
+/// Application service: Auto-save for markdown files with dirty-flag + periodic timer.
 ///
 /// NO save button — saves automatically when the user stops typing.
-/// Uses an 800ms debounce to avoid saving on every keystroke.
-/// Only persists to the local Drift database — remote sync is handled
-/// separately on app open/close to avoid excessive Supabase calls.
+/// The editor is **100 % decoupled** from the save pipeline:
 ///
-/// [scheduleAutoSave] accepts **lazy getters** so the content is only
-/// read when the debounce timer fires, not on every keystroke.
+///  1. The page calls [watch] once when loading a file, registering lazy
+///     getters for title & content.
+///  2. On every keystroke the page calls [markDirty] — a single `bool`
+///     assignment with **zero** overhead on the UI thread.
+///  3. A periodic timer (every 3 s) checks the flag. If dirty it reads
+///     the getters and persists to the local Drift database.
+///
+/// Only persists locally — remote sync is handled on app open/close.
 class MarkdownAutoSaveService {
   final UpdateMarkdownFileUseCase _updateFile;
 
-  Timer? _debounceTimer;
-  static const _debounceDuration = Duration(milliseconds: 800);
+  // ── Periodic timer ───────────────────────────────────────────────────
+  Timer? _periodicTimer;
+  static const _checkInterval = Duration(seconds: 3);
+
+  // ── Dirty-flag state ─────────────────────────────────────────────────
+  bool _isDirty = false;
+  String? _watchedFileId;
+  String Function()? _getTitle;
+  String Function()? _getContent;
 
   /// Callback invoked after a successful save (can be async).
   Future<void> Function(String fileId)? onSaved;
 
   MarkdownAutoSaveService(this._updateFile);
 
-  /// Schedule an auto-save for the given markdown file.
-  /// Resets the debounce timer on each call.
+  // ── Public API ───────────────────────────────────────────────────────
+
+  /// Register a file to watch for auto-saving.
   ///
-  /// [getTitle] and [getContent] are evaluated lazily — only when the
-  /// 800 ms debounce elapses.
-  void scheduleAutoSave({
+  /// Call once when loading a file. The [getTitle] and [getContent] closures
+  /// are only evaluated when the periodic timer detects unsaved changes —
+  /// **never** on the keystroke itself.
+  void watch({
     required String fileId,
     required String Function() getTitle,
     required String Function() getContent,
   }) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(_debounceDuration, () async {
-      await _performSave(
-        fileId: fileId,
-        title: getTitle(),
-        content: getContent(),
-      );
-    });
+    _watchedFileId = fileId;
+    _getTitle = getTitle;
+    _getContent = getContent;
+    _isDirty = false;
+    _startTimer();
   }
 
-  /// Force an immediate save (e.g., when navigating away).
+  /// Mark the current file as having unsaved changes.
+  ///
+  /// Cost: a single boolean assignment — zero overhead on the UI thread.
+  void markDirty() {
+    _isDirty = true;
+  }
+
+  /// Stop watching the current file (e.g., before disposing controllers).
+  void unwatch() {
+    _stopTimer();
+    _watchedFileId = null;
+    _getTitle = null;
+    _getContent = null;
+    _isDirty = false;
+  }
+
+  /// Force an immediate save (e.g., when navigating away or disposing).
   Future<void> forceSave({
     required String fileId,
     String? title,
     String? content,
   }) async {
-    _debounceTimer?.cancel();
+    _isDirty = false;
     await _performSave(fileId: fileId, title: title, content: content);
   }
 
+  /// Cancel any pending changes without saving.
+  void cancel() {
+    _isDirty = false;
+  }
+
+  /// Dispose resources.
+  void dispose() {
+    _stopTimer();
+  }
+
+  // ── Internals ────────────────────────────────────────────────────────
+
+  void _startTimer() {
+    _periodicTimer?.cancel();
+    _periodicTimer = Timer.periodic(_checkInterval, (_) {
+      _tick(); // synchronous entry — avoids unawaited-Future issues
+    });
+  }
+
+  void _stopTimer() {
+    _periodicTimer?.cancel();
+    _periodicTimer = null;
+  }
+
+  /// Non-async tick — uses `.whenComplete` so [onSaved] fires regardless
+  /// of whether the DB call succeeds, fails, or throws.
+  void _tick() {
+    if (!_isDirty || _watchedFileId == null) return;
+    _isDirty = false;
+
+    final fileId = _watchedFileId!;
+    _updateFile
+        .execute(
+          fileId: fileId,
+          title: _getTitle?.call(),
+          content: _getContent?.call(),
+        )
+        .whenComplete(() => onSaved?.call(fileId));
+  }
+
+  /// Force an immediate save (dispose / navigation).
   Future<void> _performSave({
     required String fileId,
     String? title,
     String? content,
   }) async {
-    final updated = await _updateFile.execute(
+    await _updateFile.execute(
       fileId: fileId,
       title: title,
       content: content,
     );
-
-    if (updated != null) {
-      await onSaved?.call(fileId);
-    }
-  }
-
-  /// Cancel any pending auto-save.
-  void cancel() {
-    _debounceTimer?.cancel();
-  }
-
-  /// Dispose resources.
-  void dispose() {
-    _debounceTimer?.cancel();
+    await onSaved?.call(fileId);
   }
 }

@@ -42,6 +42,7 @@ class _NotesListPageState extends State<NotesListPage> {
   @override
   void dispose() {
     _forceSave();
+    widget.appState.autoSaveService.unwatch();
     _quillController?.dispose();
     _titleController?.dispose();
     _quillScrollController.dispose();
@@ -70,24 +71,18 @@ class _NotesListPageState extends State<NotesListPage> {
       _quillController = QuillController.basic();
     }
 
-    // Listen for content changes → auto-save
-    _quillController!.document.changes.listen((_) {
-      _scheduleAutoSave();
-    });
-  }
-
-  void _scheduleAutoSave() {
-    // Use _loadedNoteId — the note currently loaded in the editor.
-    // currentNote may already point to a newly selected note during a switch.
-    final noteId = _loadedNoteId;
-    if (noteId == null || _quillController == null) return;
-
-    widget.appState.autoSaveService.scheduleAutoSave(
-      noteId: noteId,
+    // Register lazy getters once — the periodic timer reads them every 3 s.
+    widget.appState.autoSaveService.watch(
+      noteId: note.id,
       getTitle: () => _titleController?.text ?? '',
       getContent: () =>
           jsonEncode(_quillController!.document.toDelta().toJson()),
     );
+
+    // On every keystroke just flip a boolean — zero overhead.
+    _quillController!.document.changes.listen((_) {
+      widget.appState.autoSaveService.markDirty();
+    });
   }
 
   void _forceSave() {
@@ -667,7 +662,7 @@ class _NotesListPageState extends State<NotesListPage> {
                 Expanded(
                   child: TextField(
                     controller: _titleController,
-                    onChanged: (_) => _scheduleAutoSave(),
+                    onChanged: (_) => widget.appState.autoSaveService.markDirty(),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
