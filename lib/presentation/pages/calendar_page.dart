@@ -3,6 +3,7 @@ import 'package:table_calendar/table_calendar.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../../domain/entities/note.dart';
+import '../widgets/animated_dialog.dart';
 
 /// Dark-mode card surface — same as home page for visual consistency.
 const _kDarkCard = Color(0xFF1A1A2E);
@@ -53,7 +54,7 @@ class _CalendarPageState extends State<CalendarPage> {
     int tempYear = _focusedDay.year;
     int tempMonth = _focusedDay.month;
 
-    await showDialog<void>(
+    await showAnimatedDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {

@@ -27,7 +27,8 @@ class TopBar extends StatefulWidget {
   State<TopBar> createState() => _TopBarState();
 }
 
-class _TopBarState extends State<TopBar> {
+class _TopBarState extends State<TopBar>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
@@ -36,10 +37,21 @@ class _TopBarState extends State<TopBar> {
   OverlayEntry? _updateOverlayEntry;
   List<Note> _searchResults = [];
 
+  late final AnimationController _searchAnimController;
+  late final CurvedAnimation _searchCurved;
+
   @override
   void initState() {
     super.initState();
     _searchFocusNode.addListener(_onFocusChange);
+    _searchAnimController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 200),
+    );
+    _searchCurved = CurvedAnimation(
+      parent: _searchAnimController,
+      curve: Curves.easeOutCubic,
+    );
   }
 
   void _onFocusChange() {
@@ -65,7 +77,15 @@ class _TopBarState extends State<TopBar> {
   }
 
   void _showOverlay() {
-    _hideOverlay();
+    // If overlay already exists, just refresh its content.
+    if (_overlayEntry != null) {
+      if (_searchAnimController.status == AnimationStatus.reverse) {
+        _searchAnimController.forward();
+      }
+      _overlayEntry!.markNeedsBuild();
+      return;
+    }
+
     final overlay = Overlay.of(context);
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
@@ -77,7 +97,14 @@ class _TopBarState extends State<TopBar> {
           link: _layerLink,
           offset: const Offset(0, 50),
           showWhenUnlinked: false,
-          child: Material(
+          child: SlideTransition(
+            position: Tween<Offset>(
+              begin: const Offset(0, -0.05),
+              end: Offset.zero,
+            ).animate(_searchCurved),
+            child: FadeTransition(
+              opacity: _searchCurved,
+              child: Material(
             elevation: 8,
             borderRadius: BorderRadius.circular(16),
             shadowColor: Colors.black.withValues(alpha: 0.15),
@@ -185,23 +212,29 @@ class _TopBarState extends State<TopBar> {
                         },
                       ),
                     ),
+              ),
             ),
           ),
         ),
       ),
+    ),
     );
     overlay.insert(_overlayEntry!);
+    _searchAnimController.forward(from: 0.0);
   }
 
   void _hideOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
+    _searchAnimController.reset();
   }
 
   @override
   void dispose() {
     _hideOverlay();
     _hideUpdateOverlay();
+    _searchCurved.dispose();
+    _searchAnimController.dispose();
     _searchController.dispose();
     _searchFocusNode.dispose();
     super.dispose();

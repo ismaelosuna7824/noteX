@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/note_card.dart';
 import '../widgets/glassmorphic_container.dart';
+import '../widgets/animated_dialog.dart';
 
 /// Notes list view with inline preview/edit panel.
 ///
@@ -397,7 +398,7 @@ class _NotesListPageState extends State<NotesListPage> {
       Colors.teal.toARGB32(),
     ];
 
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -494,7 +495,7 @@ class _NotesListPageState extends State<NotesListPage> {
         .where((n) => n.projectId == project.id)
         .length;
 
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Delete "${project.name}"?'),

@@ -11,6 +11,7 @@ import '../state/theme_state.dart';
 import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
 import 'auth_dialog.dart';
+import '../widgets/animated_dialog.dart';
 
 /// Dark-mode card surface — same navy used across the app.
 const _kDarkCard = Color(0xFF1A1A2E);
@@ -389,7 +390,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                           )
                                         : FilledButton.icon(
                                             onPressed: () {
-                                              showDialog(
+                                              showAnimatedDialog(
                                                 context: context,
                                                 builder: (_) => AuthDialog(appState: appState),
                                               );

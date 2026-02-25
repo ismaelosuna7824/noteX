@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/markdown_state.dart';
 import '../widgets/glassmorphic_container.dart';
+import '../widgets/animated_dialog.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Preset colors for new markdown projects
@@ -743,7 +744,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
     final nameController = TextEditingController();
     int selectedColor = _projectColors[0].toARGB32();
 
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (ctx) {
         return StatefulBuilder(builder: (ctx, setDialogState) {
@@ -849,7 +850,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
     final fileCount =
         _mdState.files.where((f) => f.projectId == project.id).length;
 
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (ctx) {
         return AlertDialog(

@@ -8,6 +8,7 @@ import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import '../widgets/glassmorphic_container.dart';
 import 'package:get_it/get_it.dart';
+import '../widgets/animated_dialog.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Preset colors for new projects
@@ -472,7 +473,7 @@ class _ProjectChip extends StatelessWidget {
     final nameController = TextEditingController();
     int selectedColorValue = _projectColors.first.toARGB32();
 
-    await showDialog(
+    await showAnimatedDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
@@ -566,7 +567,7 @@ class _ProjectChip extends StatelessWidget {
         .where((e) => e.projectId == project.id)
         .length;
 
-    showDialog(
+    showAnimatedDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -707,7 +708,7 @@ class _WeekNavBar extends StatelessWidget {
   }
 
   Future<void> _showWeekPicker(BuildContext context) async {
-    final selected = await showDialog<DateTime>(
+    final selected = await showAnimatedDialog<DateTime>(
       context: context,
       barrierColor: Colors.black38,
       builder: (ctx) => _WeekPickerDialog(
@@ -1422,7 +1423,7 @@ class _EntryTile extends StatelessWidget {
   }
 
   Future<void> _confirmDelete(BuildContext context) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await showAnimatedDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

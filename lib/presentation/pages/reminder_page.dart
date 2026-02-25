@@ -5,6 +5,7 @@ import '../../domain/entities/reminder.dart';
 import '../state/app_state.dart';
 import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
+import '../widgets/animated_dialog.dart';
 
 /// Dark-mode card surface — same as other pages for visual consistency.
 const _kDarkCard = Color(0xFF1A1A2E);
@@ -43,7 +44,7 @@ class _ReminderPageState extends State<ReminderPage> {
     DateTime selectedDate = DateTime.now();
     final accentColor = widget.themeState.accentColor;
 
-    await showDialog<void>(
+    await showAnimatedDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
