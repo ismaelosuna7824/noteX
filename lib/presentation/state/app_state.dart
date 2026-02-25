@@ -85,9 +85,6 @@ class AppState extends ChangeNotifier {
     // Wire up auto-save callback to refresh the list after saves
     autoSaveService.onSaved = _onNoteSaved;
 
-    // Wire up cleanup callback for when empty notes are removed
-    autoSaveService.onNoteDeleted = _onNoteDeleted;
-
     // React to Supabase auth state changes (sign-in/sign-out come in async)
     _authSub = _authRepository.authStateChanges.listen((_) {
       notifyListeners();
@@ -203,14 +200,10 @@ class AppState extends ChangeNotifier {
     checkForUpdate();
   }
 
-  /// Called by AutoSaveService when an empty note is cleaned up.
-  /// Removes it from the in-memory list and adjusts currentNote.
-  Future<void> _onNoteDeleted(String noteId) async {
-    _notes.removeWhere((n) => n.id == noteId);
-    if (_currentNote?.id == noteId) {
-      _currentNote = _notes.isNotEmpty ? _notes.first : null;
-    }
-    notifyListeners();
+  /// Delete all notes with empty content from the database.
+  /// Called on app startup (initialize) and app close (onWindowClose).
+  Future<void> cleanupEmptyNotes() async {
+    await _cleanupEmptyNotes.execute();
   }
 
   /// Called by AutoSaveService after a successful save.

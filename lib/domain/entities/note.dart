@@ -77,11 +77,12 @@ class Note {
   /// Whether this note has been soft-deleted.
   bool get isDeleted => deletedAt != null;
 
-  /// Whether the Quill Delta content is effectively empty.
+  /// Whether this note has no meaningful content in the editor.
   ///
-  /// Empty means the raw JSON is `'[]'` or contains only whitespace /
-  /// newline operations like `[{"insert":"\n"}]`.
-  bool get hasEmptyContent {
+  /// A note is considered empty when the Quill Delta is `'[]'` or contains
+  /// only whitespace / newline operations like `[{"insert":"\n"}]`.
+  /// The title is irrelevant — even a custom title with no body is empty.
+  bool get isEmpty {
     if (content == '[]') return true;
     try {
       final decoded = jsonDecode(content);
@@ -98,18 +99,6 @@ class Note {
       return true;
     }
   }
-
-  /// Whether the title is the auto-generated date format (e.g. "February 24, 2026").
-  bool get hasDefaultTitle {
-    if (title.isEmpty) return true;
-    return RegExp(
-      r'^(January|February|March|April|May|June|July|August|September|October|November|December) \d{1,2}, \d{4}$',
-    ).hasMatch(title);
-  }
-
-  /// A note is "empty" when it has no meaningful user content:
-  /// default date title + no text in the editor.
-  bool get isEmpty => hasEmptyContent && hasDefaultTitle;
 
   /// Returns a copy with updated fields.
   Note copyWith({

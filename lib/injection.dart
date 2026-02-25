@@ -280,7 +280,6 @@ Future<void> setupDependencies() async {
     AutoSaveService(
       getIt<UpdateNoteUseCase>(),
       getIt<SyncEngine>(),
-      getIt<CleanupEmptyNotesUseCase>(),
     ),
   );
   getIt.registerSingleton<MarkdownAutoSaveService>(

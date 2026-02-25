@@ -70,6 +70,9 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   @override
   void onWindowClose() async {
+    // Clean up empty notes before closing
+    await widget.appState.cleanupEmptyNotes();
+
     // Stop playback first, then dispose — gives libmpv time to release
     // native resources cleanly instead of crashing on process exit.
     await _bgPlayer?.stop();
