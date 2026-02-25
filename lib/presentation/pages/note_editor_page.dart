@@ -30,8 +30,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   late FocusNode _editorFocusNode;
   String? _loadedNoteId;
 
-  // Save indicator
-  String _saveStatus = ''; // '', 'saving', 'saved'
+  // Save indicator — uses ValueNotifier so only the indicator chip rebuilds,
+  // NOT the entire widget tree (which would cause the QuillEditor to lose focus).
+  final ValueNotifier<String> _saveStatus = ValueNotifier('');
 
   @override
   void initState() {
@@ -46,9 +47,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     widget.appState.autoSaveService.onSaved = (noteId) async {
       if (originalOnSaved != null) await originalOnSaved(noteId);
       if (mounted) {
-        setState(() => _saveStatus = 'saved');
+        _saveStatus.value = 'saved';
         Future.delayed(const Duration(seconds: 2), () {
-          if (mounted) setState(() => _saveStatus = '');
+          if (mounted) _saveStatus.value = '';
         });
       }
     };
@@ -81,7 +82,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     final note = widget.appState.currentNote;
     if (note == null) return;
 
-    setState(() => _saveStatus = 'saving');
+    // Update only the save indicator — no setState, no full rebuild.
+    _saveStatus.value = 'saving';
 
     final content = jsonEncode(_quillController.document.toDelta().toJson());
     widget.appState.autoSaveService.scheduleAutoSave(
@@ -116,6 +118,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _quillController.dispose();
     _titleController.dispose();
     _editorFocusNode.dispose();
+    _saveStatus.dispose();
     super.dispose();
   }
 
@@ -290,62 +293,67 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
 
-              // Save indicator
-              AnimatedOpacity(
-                opacity: _saveStatus.isNotEmpty ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                child: Container(
-                  height: 44,
-                  width: 110,
-                  margin: const EdgeInsets.only(left: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: isDark
-                        ? (_saveStatus == 'saved'
-                            ? Colors.green.withValues(alpha: 0.15)
-                            : Colors.orange.withValues(alpha: 0.15))
-                        : (_saveStatus == 'saved'
-                            ? Colors.green.shade50
-                            : Colors.orange.shade50),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: isDark
-                          ? (_saveStatus == 'saved'
-                              ? Colors.green.withValues(alpha: 0.30)
-                              : Colors.orange.withValues(alpha: 0.30))
-                          : (_saveStatus == 'saved'
-                              ? Colors.green.shade200
-                              : Colors.orange.shade200),
-                      width: 1,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        _saveStatus == 'saved'
-                            ? Icons.check_circle_outline_rounded
-                            : Icons.sync_rounded,
-                        size: 14,
-                        color: _saveStatus == 'saved'
-                            ? (isDark ? Colors.green.shade300 : Colors.green.shade600)
-                            : (isDark ? Colors.orange.shade300 : Colors.orange.shade600),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _saveStatus == 'saved' ? 'Saved' : 'Saving...',
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
-                          color: _saveStatus == 'saved'
-                              ? (isDark ? Colors.green.shade300 : Colors.green.shade600)
-                              : (isDark ? Colors.orange.shade300 : Colors.orange.shade600),
+              // Save indicator — isolated rebuild via ValueListenableBuilder
+              ValueListenableBuilder<String>(
+                valueListenable: _saveStatus,
+                builder: (context, status, _) {
+                  return AnimatedOpacity(
+                    opacity: status.isNotEmpty ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: Container(
+                      height: 44,
+                      width: 110,
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? (status == 'saved'
+                                ? Colors.green.withValues(alpha: 0.15)
+                                : Colors.orange.withValues(alpha: 0.15))
+                            : (status == 'saved'
+                                ? Colors.green.shade50
+                                : Colors.orange.shade50),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(
+                          color: isDark
+                              ? (status == 'saved'
+                                  ? Colors.green.withValues(alpha: 0.30)
+                                  : Colors.orange.withValues(alpha: 0.30))
+                              : (status == 'saved'
+                                  ? Colors.green.shade200
+                                  : Colors.orange.shade200),
+                          width: 1,
                         ),
                       ),
-                    ],
-                  ),
-                ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            status == 'saved'
+                                ? Icons.check_circle_outline_rounded
+                                : Icons.sync_rounded,
+                            size: 14,
+                            color: status == 'saved'
+                                ? (isDark ? Colors.green.shade300 : Colors.green.shade600)
+                                : (isDark ? Colors.orange.shade300 : Colors.orange.shade600),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            status == 'saved' ? 'Saved' : 'Saving...',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: status == 'saved'
+                                  ? (isDark ? Colors.green.shade300 : Colors.green.shade600)
+                                  : (isDark ? Colors.orange.shade300 : Colors.orange.shade600),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
               ),
             ],
           ),

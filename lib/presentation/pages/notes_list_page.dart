@@ -581,38 +581,39 @@ class _NotesListPageState extends State<NotesListPage> {
     final isDark = theme.brightness == Brightness.dark;
     final fontSize = widget.themeState.editorFontSize;
     final lh = widget.themeState.editorLineHeight;
-    final extra = fontSize * (lh - 1.0) / 2;
-    final lineSpacing = VerticalSpacing(extra, extra);
 
     return DefaultStyles(
       placeHolder: DefaultTextBlockStyle(
         TextStyle(
           fontSize: fontSize,
+          height: lh,
           color: isDark ? Colors.white38 : Colors.grey.shade400,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
-        lineSpacing,
+        const VerticalSpacing(0, 0),
         null,
       ),
       paragraph: DefaultTextBlockStyle(
         TextStyle(
           fontSize: fontSize,
+          height: lh,
           color: isDark ? Colors.white : Colors.grey.shade800,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
-        lineSpacing,
+        const VerticalSpacing(0, 0),
         null,
       ),
       lists: DefaultListBlockStyle(
         TextStyle(
           fontSize: fontSize,
+          height: lh,
           color: isDark ? Colors.white : Colors.grey.shade800,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
-        lineSpacing,
+        const VerticalSpacing(0, 0),
         null,
         null,
       ),
