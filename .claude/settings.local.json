@@ -34,7 +34,12 @@
       "Bash(cmd /c \"gh release view backgrounds-v1 --json assets --repo ismaelosuna7824/noteX\")",
       "Bash(cmd /c:*)",
       "Bash(cmd /c \"gh release view backgrounds-v1 --repo ismaelosuna7824/noteX 2>&1\")",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git status:*)",
+      "Bash(git log:*)",
+      "Bash(git tag:*)",
+      "Bash(gh workflow run:*)",
+      "Bash(wc -l /d/Git/NoteX/notex/lib/presentation/pages/*.dart)"
     ]
   }
 }

@@ -232,21 +232,26 @@ class _NotesListPageState extends State<NotesListPage> {
                             ),
                           )
                         : ListView.builder(
+                            key: ValueKey(showPinned ? 'pinned' : 'all'),
                             itemCount: displayedNotes.length,
                             itemBuilder: (context, index) {
                               final note = displayedNotes[index];
-                              return NoteCard(
-                                note: note,
-                                isSelected: note.id ==
-                                    widget.appState.currentNote?.id,
-                                accentColor: accentColor,
-                                onTap: () {
-                                  widget.appState.previewNote(note);
-                                  setState(() => _loadPreview());
-                                },
-                                onPin: () => widget.appState.togglePin(note),
-                                onDelete: () =>
-                                    widget.appState.deleteNote(note.id),
+                              return _StaggeredEntry(
+                                index: index,
+                                child: NoteCard(
+                                  note: note,
+                                  isSelected: note.id ==
+                                      widget.appState.currentNote?.id,
+                                  accentColor: accentColor,
+                                  onTap: () {
+                                    widget.appState.previewNote(note);
+                                    setState(() => _loadPreview());
+                                  },
+                                  onPin: () =>
+                                      widget.appState.togglePin(note),
+                                  onDelete: () =>
+                                      widget.appState.deleteNote(note.id),
+                                ),
                               );
                             },
                           ),
@@ -805,6 +810,49 @@ class _NotesListPageState extends State<NotesListPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Staggered entrance animation for list items.
+// Each card fades in and slides up with a small delay based on its index.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StaggeredEntry extends StatefulWidget {
+  final int index;
+  final Widget child;
+  const _StaggeredEntry({required this.index, required this.child});
+
+  @override
+  State<_StaggeredEntry> createState() => _StaggeredEntryState();
+}
+
+class _StaggeredEntryState extends State<_StaggeredEntry> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Cap stagger at 8 items to avoid slow entrance on large lists.
+    final delay = widget.index.clamp(0, 8) * 40;
+    Future.delayed(Duration(milliseconds: delay), () {
+      if (mounted) setState(() => _visible = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: _visible ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeOutCubic,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 250),
+        curve: Curves.easeOutCubic,
+        transform: Matrix4.translationValues(0, _visible ? 0 : 12, 0),
+        child: widget.child,
       ),
     );
   }

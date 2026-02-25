@@ -14,7 +14,8 @@ const _kDarkCard = Color(0xFF1A1A2E);
 ///
 /// Large hero area with background image, bold title text,
 /// and organic-shaped cards at the bottom using morphable_shape.
-class HomePage extends StatelessWidget {
+/// Elements stagger in with a subtle fade + slide on each visit.
+class HomePage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
@@ -23,6 +24,57 @@ class HomePage extends StatelessWidget {
     required this.appState,
     required this.themeState,
   });
+
+  @override
+  State<HomePage> createState() => _HomePageState();
+}
+
+class _HomePageState extends State<HomePage>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _staggerController;
+
+  // Staggered intervals — each element fades/slides in overlapping.
+  static const _intervals = [
+    Interval(0.0, 0.5, curve: Curves.easeOutCubic), // hero text
+    Interval(0.1, 0.6, curve: Curves.easeOutCubic), // reminder card
+    Interval(0.25, 0.75, curve: Curves.easeOutCubic), // enjoy card
+    Interval(0.35, 0.85, curve: Curves.easeOutCubic), // stats card
+    Interval(0.45, 1.0, curve: Curves.easeOutCubic), // right column
+  ];
+
+  late final List<Animation<double>> _fadeAnims;
+  late final List<Animation<Offset>> _slideAnims;
+
+  @override
+  void initState() {
+    super.initState();
+    _staggerController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    );
+
+    _fadeAnims = _intervals
+        .map((i) => CurvedAnimation(parent: _staggerController, curve: i))
+        .toList();
+
+    _slideAnims = _intervals.map((i) {
+      return Tween<Offset>(
+        begin: const Offset(0, 0.04),
+        end: Offset.zero,
+      ).animate(CurvedAnimation(parent: _staggerController, curve: i));
+    }).toList();
+
+    _staggerController.forward();
+  }
+
+  @override
+  void dispose() {
+    _staggerController.dispose();
+    super.dispose();
+  }
+
+  AppState get appState => widget.appState;
+  ThemeState get themeState => widget.themeState;
 
   @override
   Widget build(BuildContext context) {
@@ -49,10 +101,16 @@ class HomePage extends StatelessWidget {
             Positioned(
               left: 32,
               top: 32,
-              child: _HeroText(
-                heroColor: heroColor,
-                theme: theme,
-                shadows: heroShadows,
+              child: FadeTransition(
+                opacity: _fadeAnims[0],
+                child: SlideTransition(
+                  position: _slideAnims[0],
+                  child: _HeroText(
+                    heroColor: heroColor,
+                    theme: theme,
+                    shadows: heroShadows,
+                  ),
+                ),
               ),
             ),
 
@@ -60,9 +118,15 @@ class HomePage extends StatelessWidget {
             Positioned(
               right: 24,
               top: 16,
-              child: _ReminderCard(
-                accentColor: accentColor,
-                onNavigateToReminders: () => appState.navigateToPage(7),
+              child: FadeTransition(
+                opacity: _fadeAnims[1],
+                child: SlideTransition(
+                  position: _slideAnims[1],
+                  child: _ReminderCard(
+                    accentColor: accentColor,
+                    onNavigateToReminders: () => appState.navigateToPage(7),
+                  ),
+                ),
               ),
             ),
 
@@ -92,7 +156,13 @@ class HomePage extends StatelessWidget {
           // "Explore, Write, and ENJOY" organic card (left)
           Expanded(
             flex: 3,
-            child: _buildEnjoyCard(context, theme, accentColor, isDark),
+            child: FadeTransition(
+              opacity: _fadeAnims[2],
+              child: SlideTransition(
+                position: _slideAnims[2],
+                child: _buildEnjoyCard(context, theme, accentColor, isDark),
+              ),
+            ),
           ),
 
           const SizedBox(width: 16),
@@ -100,7 +170,14 @@ class HomePage extends StatelessWidget {
           // Combined "Total Notes + Today's Note" organic card (center)
           Expanded(
             flex: 2,
-            child: _buildCombinedStatsCard(context, theme, accentColor, isDark),
+            child: FadeTransition(
+              opacity: _fadeAnims[3],
+              child: SlideTransition(
+                position: _slideAnims[3],
+                child: _buildCombinedStatsCard(
+                    context, theme, accentColor, isDark),
+              ),
+            ),
           ),
 
           const SizedBox(width: 16),
@@ -108,14 +185,20 @@ class HomePage extends StatelessWidget {
           // Right column: Daily Tasks card stacked above Pinned Notes card
           Expanded(
             flex: 2,
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildDailyTasksCard(context, theme, accentColor),
-                const SizedBox(height: 12),
-                _buildPinnedNotesCard(context, theme, accentColor),
-              ],
+            child: FadeTransition(
+              opacity: _fadeAnims[4],
+              child: SlideTransition(
+                position: _slideAnims[4],
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildDailyTasksCard(context, theme, accentColor),
+                    const SizedBox(height: 12),
+                    _buildPinnedNotesCard(context, theme, accentColor),
+                  ],
+                ),
+              ),
             ),
           ),
         ],

@@ -42,6 +42,9 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> with WindowListener {
   bool _isMaximized = false;
 
+  /// Tracks the previous page index for direction-aware page transitions.
+  int _previousPageIndex = 0;
+
   // ── Video background player ─────────────────────────────────────────────
   Player? _bgPlayer;
   VideoController? _bgVideoController;
@@ -214,8 +217,11 @@ class _AppShellState extends State<AppShell> with WindowListener {
                     children: [
                       Sidebar(
                         selectedIndex: widget.appState.selectedPageIndex,
-                        onItemSelected: (index) =>
-                            widget.appState.navigateToPage(index),
+                        onItemSelected: (index) {
+                          setState(() => _previousPageIndex =
+                              widget.appState.selectedPageIndex);
+                          widget.appState.navigateToPage(index);
+                        },
                         accentColor: widget.themeState.accentColor,
                       ),
                       Expanded(
@@ -250,6 +256,28 @@ class _AppShellState extends State<AppShell> with WindowListener {
                             Expanded(
                               child: AnimatedSwitcher(
                                 duration: const Duration(milliseconds: 300),
+                                transitionBuilder: (child, animation) {
+                                  final isForward =
+                                      widget.appState.selectedPageIndex >=
+                                          _previousPageIndex;
+                                  final slide = Tween<Offset>(
+                                    begin: Offset(0, isForward ? 0.03 : -0.03),
+                                    end: Offset.zero,
+                                  ).animate(CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ));
+                                  return SlideTransition(
+                                    position: slide,
+                                    child: FadeTransition(
+                                      opacity: CurvedAnimation(
+                                        parent: animation,
+                                        curve: Curves.easeIn,
+                                      ),
+                                      child: child,
+                                    ),
+                                  );
+                                },
                                 child: _buildPage(
                                     widget.appState.selectedPageIndex),
                               ),

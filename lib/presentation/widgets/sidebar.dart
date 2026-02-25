@@ -1,9 +1,25 @@
 import 'package:flutter/material.dart';
 
+/// Vertical spacing for each nav button: 10px top + 46px button + 10px bottom.
+const double _kNavButtonPitch = 66.0;
+
+/// Top padding of the sidebar column.
+const double _kTopPadding = 48.0;
+
+/// Bottom padding of the sidebar column.
+const double _kBottomPadding = 24.0;
+
+/// Height of each nav button circle.
+const double _kButtonSize = 46.0;
+
+/// Height of the animated selection indicator bar.
+const double _kIndicatorHeight = 20.0;
+
 /// Minimalist vertical icon rail sidebar matching the reference design.
 ///
 /// Clean sidebar with white circle icon buttons.
 /// Selected item has accent color filled circle background.
+/// An animated indicator bar on the left edge slides to the selected item.
 class Sidebar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
@@ -30,33 +46,77 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 72,
-      padding: const EdgeInsets.only(top: 48, bottom: 24),
-      child: Column(
-        children: [
-          // Top nav items: Home, Notes, Editor, Calendar, Timer
-          for (final (pageIndex, item) in _navItems)
-            _NavButton(
-              pageIndex: pageIndex,
-              item: item,
-              isSelected: selectedIndex == pageIndex,
-              accentColor: accentColor,
-              onTap: () => onItemSelected(pageIndex),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final totalHeight = constraints.maxHeight;
+        final navIndex =
+            _navItems.indexWhere((e) => e.$1 == selectedIndex);
+        final isSettings = selectedIndex == _settingsItem.$1;
+
+        // Calculate indicator vertical position.
+        final double indicatorTop;
+        if (isSettings) {
+          indicatorTop = totalHeight -
+              _kBottomPadding -
+              _kButtonSize +
+              (_kButtonSize - _kIndicatorHeight) / 2;
+        } else if (navIndex >= 0) {
+          indicatorTop = _kTopPadding +
+              (navIndex * _kNavButtonPitch) +
+              10 + // top padding of _NavButton
+              (_kButtonSize - _kIndicatorHeight) / 2;
+        } else {
+          indicatorTop =
+              _kTopPadding + 10 + (_kButtonSize - _kIndicatorHeight) / 2;
+        }
+
+        return Stack(
+          children: [
+            // Original sidebar layout — untouched structure
+            Container(
+              width: 72,
+              padding:
+                  const EdgeInsets.only(top: _kTopPadding, bottom: _kBottomPadding),
+              child: Column(
+                children: [
+                  for (final (pageIndex, item) in _navItems)
+                    _NavButton(
+                      pageIndex: pageIndex,
+                      item: item,
+                      isSelected: selectedIndex == pageIndex,
+                      accentColor: accentColor,
+                      onTap: () => onItemSelected(pageIndex),
+                    ),
+                  const Spacer(),
+                  _NavButton(
+                    pageIndex: _settingsItem.$1,
+                    item: _settingsItem.$2,
+                    isSelected: selectedIndex == _settingsItem.$1,
+                    accentColor: accentColor,
+                    onTap: () => onItemSelected(_settingsItem.$1),
+                  ),
+                ],
+              ),
             ),
 
-          const Spacer(),
-
-          // Bottom item: Settings
-          _NavButton(
-            pageIndex: _settingsItem.$1,
-            item: _settingsItem.$2,
-            isSelected: selectedIndex == _settingsItem.$1,
-            accentColor: accentColor,
-            onTap: () => onItemSelected(_settingsItem.$1),
-          ),
-        ],
-      ),
+            // Animated selection indicator bar (overlaid)
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 250),
+              curve: Curves.easeOutCubic,
+              left: 2,
+              top: indicatorTop,
+              child: Container(
+                width: 3,
+                height: _kIndicatorHeight,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -128,8 +188,8 @@ class _NavButtonState extends State<_NavButton> {
             onTap: widget.onTap,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              width: 46,
-              height: 46,
+              width: _kButtonSize,
+              height: _kButtonSize,
               decoration: BoxDecoration(
                 color: circleColor,
                 shape: BoxShape.circle,

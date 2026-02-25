@@ -5,7 +5,8 @@ import 'glassmorphic_container.dart';
 /// A card representing a note preview in the notes list.
 ///
 /// Shows title, creation date, and a content preview snippet.
-class NoteCard extends StatelessWidget {
+/// Includes a subtle hover animation (lift + accent border glow).
+class NoteCard extends StatefulWidget {
   final Note note;
   final bool isSelected;
   final VoidCallback onTap;
@@ -24,88 +25,111 @@ class NoteCard extends StatelessWidget {
   });
 
   @override
+  State<NoteCard> createState() => _NoteCardState();
+}
+
+class _NoteCardState extends State<NoteCard> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
-    return GlassmorphicContainer(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      borderRadius: 16,
-      opacity: isSelected ? 0.25 : 0.12,
-      blur: isSelected ? 14 : 8,
-      border: isSelected
-          ? Border.all(color: accentColor.withValues(alpha: 0.5), width: 2)
-          : null,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Row(
-          children: [
-            // Color indicator
-            Container(
-              width: 4,
-              height: 48,
-              decoration: BoxDecoration(
-                color:
-                    isSelected ? accentColor : Colors.grey.shade300,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ),
-            const SizedBox(width: 16),
-
-            // Note info
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    note.title.isEmpty ? 'Untitled' : note.title,
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        curve: Curves.easeOut,
+        transform: Matrix4.translationValues(0, _hovered && !widget.isSelected ? -2 : 0, 0),
+        child: GlassmorphicContainer(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(16),
+          borderRadius: 16,
+          opacity: widget.isSelected ? 0.25 : (_hovered ? 0.18 : 0.12),
+          blur: widget.isSelected ? 14 : (_hovered ? 10 : 8),
+          border: widget.isSelected
+              ? Border.all(color: widget.accentColor.withValues(alpha: 0.5), width: 2)
+              : (_hovered
+                  ? Border.all(color: widget.accentColor.withValues(alpha: 0.25), width: 1)
+                  : null),
+          child: InkWell(
+            onTap: widget.onTap,
+            borderRadius: BorderRadius.circular(16),
+            child: Row(
+              children: [
+                // Color indicator
+                Container(
+                  width: 4,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: widget.isSelected
+                        ? widget.accentColor
+                        : Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _formatDate(note.updatedAt),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: Colors.grey.shade500,
-                    ),
+                ),
+                const SizedBox(width: 16),
+
+                // Note info
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.note.title.isEmpty
+                            ? 'Untitled'
+                            : widget.note.title,
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        _formatDate(widget.note.updatedAt),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: Colors.grey.shade500,
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+
+                // Sync indicator
+                _buildSyncIcon(),
+
+                // Pin button
+                if (widget.onPin != null)
+                  IconButton(
+                    onPressed: widget.onPin,
+                    icon: Icon(
+                      widget.note.isPinned
+                          ? Icons.push_pin_rounded
+                          : Icons.push_pin_outlined,
+                      size: 18,
+                      color: widget.note.isPinned
+                          ? widget.accentColor
+                          : Colors.grey.shade400,
+                    ),
+                    splashRadius: 18,
+                  ),
+
+                // Delete button
+                if (widget.onDelete != null)
+                  IconButton(
+                    onPressed: widget.onDelete,
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 18,
+                      color: Colors.grey.shade400,
+                    ),
+                    splashRadius: 18,
+                  ),
+              ],
             ),
-
-            // Sync indicator
-            _buildSyncIcon(),
-
-            // Pin button
-            if (onPin != null)
-              IconButton(
-                onPressed: onPin,
-                icon: Icon(
-                  note.isPinned
-                      ? Icons.push_pin_rounded
-                      : Icons.push_pin_outlined,
-                  size: 18,
-                  color: note.isPinned ? accentColor : Colors.grey.shade400,
-                ),
-                splashRadius: 18,
-              ),
-
-            // Delete button
-            if (onDelete != null)
-              IconButton(
-                onPressed: onDelete,
-                icon: Icon(
-                  Icons.delete_outline_rounded,
-                  size: 18,
-                  color: Colors.grey.shade400,
-                ),
-                splashRadius: 18,
-              ),
-          ],
+          ),
         ),
       ),
     );
@@ -115,7 +139,7 @@ class NoteCard extends StatelessWidget {
     IconData icon;
     Color color;
 
-    switch (note.syncStatus.name) {
+    switch (widget.note.syncStatus.name) {
       case 'synced':
         icon = Icons.cloud_done_outlined;
         color = Colors.green.shade400;
