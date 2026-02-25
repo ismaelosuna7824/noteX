@@ -30,6 +30,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   late FocusNode _editorFocusNode;
   String? _loadedNoteId;
 
+  /// Clipboard config: paste from external sources (web, Word, etc.) as
+  /// plain text only. Internal copy/paste within Quill keeps rich formatting.
+  // ignore: experimental_member_use
+  static final _controllerConfig = QuillControllerConfig(
+    // ignore: experimental_member_use
+    clipboardConfig: QuillClipboardConfig(
+      // ignore: experimental_member_use
+      enableExternalRichPaste: false,
+    ),
+  );
+
   // Save indicator — uses ValueNotifier so only the indicator chip rebuilds,
   // NOT the entire widget tree (which would cause the QuillEditor to lose focus).
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
@@ -39,7 +50,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     super.initState();
     _editorFocusNode = FocusNode();
     _titleController = TextEditingController();
-    _quillController = QuillController.basic();
+    _quillController = QuillController.basic(config: _controllerConfig);
     _loadNote();
 
     // Chain into the save callback to update our indicator
@@ -67,9 +78,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       _quillController = QuillController(
         document: delta,
         selection: const TextSelection.collapsed(offset: 0),
+        config: _controllerConfig,
       );
     } catch (_) {
-      _quillController = QuillController.basic();
+      _quillController = QuillController.basic(config: _controllerConfig);
     }
 
     // Register lazy getters once — the periodic timer reads them every 3 s.

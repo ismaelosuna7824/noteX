@@ -40,7 +40,9 @@
       "Bash(git tag:*)",
       "Bash(gh workflow run:*)",
       "Bash(wc -l /d/Git/NoteX/notex/lib/presentation/pages/*.dart)",
-      "Bash(powershell.exe -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")"
+      "Bash(powershell.exe -Command \"Get-Command gh -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source\")",
+      "Bash(flutter pub cache list)",
+      "Bash(flutter pub cache dir)"
     ]
   }
 }

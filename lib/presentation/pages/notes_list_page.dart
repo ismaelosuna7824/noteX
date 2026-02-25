@@ -31,6 +31,16 @@ class _NotesListPageState extends State<NotesListPage> {
   TextEditingController? _titleController;
   String? _loadedNoteId;
 
+  /// Clipboard config: paste from external sources as plain text only.
+  // ignore: experimental_member_use
+  static final _controllerConfig = QuillControllerConfig(
+    // ignore: experimental_member_use
+    clipboardConfig: QuillClipboardConfig(
+      // ignore: experimental_member_use
+      enableExternalRichPaste: false,
+    ),
+  );
+
   /// Persistent scroll controller for the Quill editor.
   /// Created once so the platform scrollbar always has a valid position.
   final ScrollController _quillScrollController = ScrollController();
@@ -66,9 +76,10 @@ class _NotesListPageState extends State<NotesListPage> {
       _quillController = QuillController(
         document: delta,
         selection: const TextSelection.collapsed(offset: 0),
+        config: _controllerConfig,
       );
     } catch (_) {
-      _quillController = QuillController.basic();
+      _quillController = QuillController.basic(config: _controllerConfig);
     }
 
     // Register lazy getters once — the periodic timer reads them every 3 s.
