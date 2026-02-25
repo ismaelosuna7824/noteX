@@ -82,12 +82,11 @@ class _NotesListPageState extends State<NotesListPage> {
     final noteId = _loadedNoteId;
     if (noteId == null || _quillController == null) return;
 
-    final content =
-        jsonEncode(_quillController!.document.toDelta().toJson());
     widget.appState.autoSaveService.scheduleAutoSave(
       noteId: noteId,
-      title: _titleController?.text ?? '',
-      content: content,
+      getTitle: () => _titleController?.text ?? '',
+      getContent: () =>
+          jsonEncode(_quillController!.document.toDelta().toJson()),
     );
   }
 

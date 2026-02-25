@@ -8,6 +8,10 @@ import '../use_cases/update_note_use_case.dart';
 /// Uses an 800ms debounce to avoid saving on every keystroke.
 /// Only persists to the local Drift database — remote sync is handled
 /// separately on app open/close to avoid excessive Supabase calls.
+///
+/// [scheduleAutoSave] accepts **lazy getters** so expensive operations like
+/// `jsonEncode(delta)` only run when the timer actually fires (after the
+/// user pauses typing), not on every single keystroke.
 class AutoSaveService {
   final UpdateNoteUseCase _updateNote;
 
@@ -21,14 +25,22 @@ class AutoSaveService {
 
   /// Schedule an auto-save for the given note.
   /// Resets the debounce timer on each call.
+  ///
+  /// [getTitle] and [getContent] are evaluated lazily — only when the
+  /// 800 ms debounce elapses. This avoids serialising the entire Quill
+  /// document on every keystroke, which would block the UI thread.
   void scheduleAutoSave({
     required String noteId,
-    String? title,
-    String? content,
+    required String Function() getTitle,
+    required String Function() getContent,
   }) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(_debounceDuration, () async {
-      await _performSave(noteId: noteId, title: title, content: content);
+      await _performSave(
+        noteId: noteId,
+        title: getTitle(),
+        content: getContent(),
+      );
     });
   }
 

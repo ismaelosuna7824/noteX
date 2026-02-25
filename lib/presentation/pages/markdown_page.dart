@@ -93,8 +93,8 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
     _mdState.autoSaveService.scheduleAutoSave(
       fileId: fileId,
-      title: _titleController?.text ?? '',
-      content: _contentController!.text,
+      getTitle: () => _titleController?.text ?? '',
+      getContent: () => _contentController!.text,
     );
   }
 

@@ -8,6 +8,9 @@ import '../use_cases/markdown/update_markdown_file_use_case.dart';
 /// Uses an 800ms debounce to avoid saving on every keystroke.
 /// Only persists to the local Drift database — remote sync is handled
 /// separately on app open/close to avoid excessive Supabase calls.
+///
+/// [scheduleAutoSave] accepts **lazy getters** so the content is only
+/// read when the debounce timer fires, not on every keystroke.
 class MarkdownAutoSaveService {
   final UpdateMarkdownFileUseCase _updateFile;
 
@@ -21,14 +24,21 @@ class MarkdownAutoSaveService {
 
   /// Schedule an auto-save for the given markdown file.
   /// Resets the debounce timer on each call.
+  ///
+  /// [getTitle] and [getContent] are evaluated lazily — only when the
+  /// 800 ms debounce elapses.
   void scheduleAutoSave({
     required String fileId,
-    String? title,
-    String? content,
+    required String Function() getTitle,
+    required String Function() getContent,
   }) {
     _debounceTimer?.cancel();
     _debounceTimer = Timer(_debounceDuration, () async {
-      await _performSave(fileId: fileId, title: title, content: content);
+      await _performSave(
+        fileId: fileId,
+        title: getTitle(),
+        content: getContent(),
+      );
     });
   }
 

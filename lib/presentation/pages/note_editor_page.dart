@@ -85,11 +85,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     // Update only the save indicator — no setState, no full rebuild.
     _saveStatus.value = 'saving';
 
-    final content = jsonEncode(_quillController.document.toDelta().toJson());
+    // Lazy getters: jsonEncode only runs when the 800ms debounce fires,
+    // NOT on every keystroke. This keeps the UI thread free for rendering.
     widget.appState.autoSaveService.scheduleAutoSave(
       noteId: note.id,
-      title: _titleController.text,
-      content: content,
+      getTitle: () => _titleController.text,
+      getContent: () =>
+          jsonEncode(_quillController.document.toDelta().toJson()),
     );
   }
 
