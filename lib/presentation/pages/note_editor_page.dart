@@ -387,41 +387,48 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           horizontal: 8,
                           vertical: 4,
                         ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              child: QuillSimpleToolbar(
-                                controller: _quillController,
-                                config: QuillSimpleToolbarConfig(
-                                  showAlignmentButtons: true,
-                                  showBackgroundColorButton: false,
-                                  showClearFormat: false,
-                                  showFontFamily: false,
-                                  showFontSize: false,
-                                  showInlineCode: true,
-                                  showCodeBlock: true,
-                                  showListCheck: true,
-                                  multiRowsDisplay: false,
-                                  decoration: const BoxDecoration(),
-                                  buttonOptions: QuillSimpleToolbarButtonOptions(
-                                    base: QuillToolbarBaseButtonOptions(
-                                      iconTheme: QuillIconTheme(
-                                        iconButtonSelectedData: IconButtonData(
-                                          color: accentColor,
-                                        ),
-                                        iconButtonUnselectedData: IconButtonData(
-                                          color: isDark ? Colors.white70 : null,
+                        // Prevent toolbar buttons from capturing keyboard
+                        // focus — otherwise pressing Space activates the
+                        // focused button instead of typing in the editor.
+                        child: Focus(
+                          canRequestFocus: false,
+                          descendantsAreFocusable: false,
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: QuillSimpleToolbar(
+                                  controller: _quillController,
+                                  config: QuillSimpleToolbarConfig(
+                                    showAlignmentButtons: true,
+                                    showBackgroundColorButton: false,
+                                    showClearFormat: false,
+                                    showFontFamily: false,
+                                    showFontSize: false,
+                                    showInlineCode: true,
+                                    showCodeBlock: true,
+                                    showListCheck: true,
+                                    multiRowsDisplay: false,
+                                    decoration: const BoxDecoration(),
+                                    buttonOptions: QuillSimpleToolbarButtonOptions(
+                                      base: QuillToolbarBaseButtonOptions(
+                                        iconTheme: QuillIconTheme(
+                                          iconButtonSelectedData: IconButtonData(
+                                            color: accentColor,
+                                          ),
+                                          iconButtonUnselectedData: IconButtonData(
+                                            color: isDark ? Colors.white70 : null,
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                            EditorTextControls(
-                                themeState: widget.themeState),
-                            const SizedBox(width: 4),
-                          ],
+                              EditorTextControls(
+                                  themeState: widget.themeState),
+                              const SizedBox(width: 4),
+                            ],
+                          ),
                         ),
                       ),
 

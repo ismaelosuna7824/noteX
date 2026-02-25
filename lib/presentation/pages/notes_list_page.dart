@@ -752,39 +752,45 @@ class _NotesListPageState extends State<NotesListPage> {
 
           Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
 
-          // Compact toolbar
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            child: QuillSimpleToolbar(
-              controller: _quillController!,
-              config: QuillSimpleToolbarConfig(
-                showAlignmentButtons: false,
-                showBackgroundColorButton: false,
-                showClearFormat: false,
-                showCodeBlock: false,
-                showDirection: false,
-                showFontFamily: false,
-                showFontSize: false,
-                showHeaderStyle: true,
-                showIndent: false,
-                showInlineCode: false,
-                showLink: false,
-                showQuote: false,
-                showSearchButton: false,
-                showStrikeThrough: false,
-                showSubscript: false,
-                showSuperscript: false,
-                showUndo: false,
-                showRedo: false,
-                showColorButton: false,
-                showListCheck: true,
-                multiRowsDisplay: false,
-                buttonOptions: QuillSimpleToolbarButtonOptions(
-                  base: QuillToolbarBaseButtonOptions(
-                    iconSize: 18,
-                    iconTheme: QuillIconTheme(
-                      iconButtonSelectedData: IconButtonData(
-                        color: accentColor,
+          // Compact toolbar — Focus barrier prevents toolbar buttons from
+          // capturing keyboard focus (Space key would activate them instead
+          // of typing in the editor).
+          Focus(
+            canRequestFocus: false,
+            descendantsAreFocusable: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              child: QuillSimpleToolbar(
+                controller: _quillController!,
+                config: QuillSimpleToolbarConfig(
+                  showAlignmentButtons: false,
+                  showBackgroundColorButton: false,
+                  showClearFormat: false,
+                  showCodeBlock: false,
+                  showDirection: false,
+                  showFontFamily: false,
+                  showFontSize: false,
+                  showHeaderStyle: true,
+                  showIndent: false,
+                  showInlineCode: false,
+                  showLink: false,
+                  showQuote: false,
+                  showSearchButton: false,
+                  showStrikeThrough: false,
+                  showSubscript: false,
+                  showSuperscript: false,
+                  showUndo: false,
+                  showRedo: false,
+                  showColorButton: false,
+                  showListCheck: true,
+                  multiRowsDisplay: false,
+                  buttonOptions: QuillSimpleToolbarButtonOptions(
+                    base: QuillToolbarBaseButtonOptions(
+                      iconSize: 18,
+                      iconTheme: QuillIconTheme(
+                        iconButtonSelectedData: IconButtonData(
+                          color: accentColor,
+                        ),
                       ),
                     ),
                   ),
