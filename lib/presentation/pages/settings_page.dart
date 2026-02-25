@@ -317,6 +317,68 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       const SizedBox(height: 16),
 
+                      // Notes Editor
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Notes Editor',
+                        icon: Icons.edit_note_rounded,
+                        accentColor: accentColor,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildFontSizeSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.editorFontSize,
+                              onChanged: themeState.setEditorFontSize,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildLineHeightSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.editorLineHeight,
+                              onChanged: themeState.setEditorLineHeight,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Markdown Editor
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Markdown Editor',
+                        icon: Icons.code_rounded,
+                        accentColor: accentColor,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildFontSizeSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.markdownFontSize,
+                              onChanged: themeState.setMarkdownFontSize,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildLineHeightSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.markdownLineHeight,
+                              onChanged: themeState.setMarkdownLineHeight,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
                       // Account & Sync
                       _buildSection(
                         context,
@@ -914,6 +976,153 @@ class _SettingsPageState extends State<SettingsPage> {
             ],
           ),
         ],
+      ],
+    );
+  }
+
+  // ── Editor slider helpers ──────────────────────────────────────────────────
+
+  Widget _buildFontSizeSlider({
+    required bool isDark,
+    required Color accentColor,
+    required Color mutedText,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(Icons.text_fields_rounded, size: 18, color: accentColor),
+            const SizedBox(width: 8),
+            Text(
+              'Font Size',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white70 : Colors.grey.shade700,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                '${value.toInt()}px',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: accentColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: accentColor,
+            inactiveTrackColor: accentColor.withValues(alpha: 0.15),
+            thumbColor: accentColor,
+            overlayColor: accentColor.withValues(alpha: 0.12),
+            trackHeight: 4,
+            thumbShape:
+                const RoundSliderThumbShape(enabledThumbRadius: 7),
+          ),
+          child: Slider(
+            value: value,
+            onChanged: onChanged,
+            min: 10,
+            max: 24,
+            divisions: 14,
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('10px',
+                style: TextStyle(fontSize: 10, color: mutedText)),
+            Text('24px',
+                style: TextStyle(fontSize: 10, color: mutedText)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildLineHeightSlider({
+    required bool isDark,
+    required Color accentColor,
+    required Color mutedText,
+    required double value,
+    required ValueChanged<double> onChanged,
+  }) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Icon(Icons.format_line_spacing_rounded,
+                size: 18, color: accentColor),
+            const SizedBox(width: 8),
+            Text(
+              'Line Spacing',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white70 : Colors.grey.shade700,
+              ),
+            ),
+            const Spacer(),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.08),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: Text(
+                value.toStringAsFixed(1),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: accentColor,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        SliderTheme(
+          data: SliderThemeData(
+            activeTrackColor: accentColor,
+            inactiveTrackColor: accentColor.withValues(alpha: 0.15),
+            thumbColor: accentColor,
+            overlayColor: accentColor.withValues(alpha: 0.12),
+            trackHeight: 4,
+            thumbShape:
+                const RoundSliderThumbShape(enabledThumbRadius: 7),
+          ),
+          child: Slider(
+            value: value,
+            onChanged: onChanged,
+            min: 1.0,
+            max: 2.5,
+            divisions: 15,
+          ),
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('1.0',
+                style: TextStyle(fontSize: 10, color: mutedText)),
+            Text('2.5',
+                style: TextStyle(fontSize: 10, color: mutedText)),
+          ],
+        ),
       ],
     );
   }

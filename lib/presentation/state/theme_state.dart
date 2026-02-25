@@ -35,6 +35,18 @@ class ThemeState extends ChangeNotifier {
   /// Volume for video backgrounds. 0.0 = muted (default), 1.0 = full volume.
   double _backgroundVolume = 0.0;
 
+  /// Editor body font size in logical pixels.
+  double _editorFontSize = 15.0;
+
+  /// Editor line height multiplier.
+  double _editorLineHeight = 1.6;
+
+  /// Markdown editor font size in logical pixels.
+  double _markdownFontSize = 16.0;
+
+  /// Markdown editor line height multiplier.
+  double _markdownLineHeight = 1.0;
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -55,6 +67,18 @@ class ThemeState extends ChangeNotifier {
 
   /// Video background volume (0.0 = muted, 1.0 = full).
   double get backgroundVolume => _backgroundVolume;
+
+  /// Editor body text font size (logical pixels).
+  double get editorFontSize => _editorFontSize;
+
+  /// Editor line height multiplier (e.g. 1.0, 1.4, 1.6, 2.0).
+  double get editorLineHeight => _editorLineHeight;
+
+  /// Markdown editor font size (logical pixels).
+  double get markdownFontSize => _markdownFontSize;
+
+  /// Markdown editor line height multiplier.
+  double get markdownLineHeight => _markdownLineHeight;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -180,6 +204,14 @@ class ThemeState extends ChangeNotifier {
           (json['dominantLuminance'] as num?)?.toDouble() ?? 0.15;
       _backgroundVolume =
           (json['backgroundVolume'] as num?)?.toDouble() ?? 0.0;
+      _editorFontSize =
+          (json['editorFontSize'] as num?)?.toDouble() ?? 15.0;
+      _editorLineHeight =
+          (json['editorLineHeight'] as num?)?.toDouble() ?? 1.6;
+      _markdownFontSize =
+          (json['markdownFontSize'] as num?)?.toDouble() ?? 16.0;
+      _markdownLineHeight =
+          (json['markdownLineHeight'] as num?)?.toDouble() ?? 1.0;
 
       final bgPath = json['backgroundImagePath'] as String?;
       if (bgPath != null) {
@@ -233,6 +265,10 @@ class ThemeState extends ChangeNotifier {
         'dominantLuminance': _dominantLuminance,
         'heroTextColor': _heroTextColor.toARGB32(),
         'backgroundVolume': _backgroundVolume,
+        'editorFontSize': _editorFontSize,
+        'editorLineHeight': _editorLineHeight,
+        'markdownFontSize': _markdownFontSize,
+        'markdownLineHeight': _markdownLineHeight,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -282,6 +318,34 @@ class ThemeState extends ChangeNotifier {
   /// Set the video background volume and persist.
   void setBackgroundVolume(double volume) {
     _backgroundVolume = volume.clamp(0.0, 1.0);
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Set the editor font size and persist.
+  void setEditorFontSize(double size) {
+    _editorFontSize = size.clamp(10.0, 24.0);
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Set the editor line height and persist.
+  void setEditorLineHeight(double height) {
+    _editorLineHeight = height.clamp(1.0, 2.5);
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Set the markdown editor font size and persist.
+  void setMarkdownFontSize(double size) {
+    _markdownFontSize = size.clamp(10.0, 24.0);
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Set the markdown editor line height and persist.
+  void setMarkdownLineHeight(double height) {
+    _markdownLineHeight = height.clamp(1.0, 2.5);
     _saveToDisk();
     notifyListeners();
   }

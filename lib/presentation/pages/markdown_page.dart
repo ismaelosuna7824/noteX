@@ -8,6 +8,7 @@ import '../../domain/entities/markdown_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/markdown_state.dart';
+import '../widgets/editor_text_controls.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/animated_dialog.dart';
 
@@ -544,6 +545,9 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   ),
                 ),
                 const SizedBox(width: 6),
+                EditorTextControls(
+                    themeState: widget.themeState, isMarkdown: true),
+                const SizedBox(width: 6),
                 // Editor / Preview toggle
                 Container(
                   decoration: BoxDecoration(
@@ -657,9 +661,11 @@ class _MarkdownPageState extends State<MarkdownPage> {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
+        cursorColor: isDark ? Colors.white : Colors.black,
+        cursorHeight: widget.themeState.markdownFontSize,
         style: GoogleFonts.sourceCodePro(
-          fontSize: 14,
-          height: 1.6,
+          fontSize: widget.themeState.markdownFontSize,
+          height: widget.themeState.markdownLineHeight,
           color: isDark ? Colors.white : Colors.grey.shade800,
         ),
         decoration: InputDecoration(
@@ -688,32 +694,36 @@ class _MarkdownPageState extends State<MarkdownPage> {
                 ),
               ),
             )
-          : Markdown(
+          : Builder(builder: (context) {
+              final baseFontSize = widget.themeState.markdownFontSize;
+              final lineHeight = widget.themeState.markdownLineHeight;
+              final scale = baseFontSize / 14.0;
+              return Markdown(
               data: content,
               selectable: true,
               styleSheet: MarkdownStyleSheet(
                 p: TextStyle(
-                  fontSize: 14,
-                  height: 1.6,
+                  fontSize: baseFontSize,
+                  height: lineHeight,
                   color: isDark ? Colors.white : Colors.grey.shade800,
                 ),
                 h1: TextStyle(
-                  fontSize: 28,
+                  fontSize: (28 * scale).roundToDouble(),
                   fontWeight: FontWeight.w800,
                   color: isDark ? Colors.white : Colors.grey.shade900,
                 ),
                 h2: TextStyle(
-                  fontSize: 22,
+                  fontSize: (22 * scale).roundToDouble(),
                   fontWeight: FontWeight.w700,
                   color: isDark ? Colors.white : Colors.grey.shade900,
                 ),
                 h3: TextStyle(
-                  fontSize: 18,
+                  fontSize: (18 * scale).roundToDouble(),
                   fontWeight: FontWeight.w600,
                   color: isDark ? Colors.white : Colors.grey.shade900,
                 ),
                 code: GoogleFonts.sourceCodePro(
-                  fontSize: 13,
+                  fontSize: (13 * scale).roundToDouble(),
                   color: isDark ? Colors.greenAccent.shade200 : Colors.pink.shade700,
                   backgroundColor: isDark
                       ? Colors.white.withValues(alpha: 0.08)
@@ -734,7 +744,8 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   ),
                 ),
               ),
-            ),
+            );
+            }),
     );
   }
 

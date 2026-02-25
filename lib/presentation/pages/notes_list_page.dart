@@ -577,6 +577,48 @@ class _NotesListPageState extends State<NotesListPage> {
     );
   }
 
+  DefaultStyles _buildQuillStyles(ThemeData theme) {
+    final isDark = theme.brightness == Brightness.dark;
+    final fontSize = widget.themeState.editorFontSize;
+    final lh = widget.themeState.editorLineHeight;
+    final extra = fontSize * (lh - 1.0) / 2;
+    final lineSpacing = VerticalSpacing(extra, extra);
+
+    return DefaultStyles(
+      placeHolder: DefaultTextBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          color: isDark ? Colors.white38 : Colors.grey.shade400,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(4, 4),
+        lineSpacing,
+        null,
+      ),
+      paragraph: DefaultTextBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          color: isDark ? Colors.white : Colors.grey.shade800,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(4, 4),
+        lineSpacing,
+        null,
+      ),
+      lists: DefaultListBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          color: isDark ? Colors.white : Colors.grey.shade800,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(4, 4),
+        lineSpacing,
+        null,
+        null,
+      ),
+    );
+  }
+
   Widget _buildEditorPanel(
       BuildContext context, ThemeData theme, Color accentColor) {
     final note = widget.appState.currentNote;
@@ -764,48 +806,12 @@ class _NotesListPageState extends State<NotesListPage> {
                   placeholder: 'Start typing...',
                   padding: EdgeInsets.zero,
                   expands: true,
-                  customStyles: DefaultStyles(
-                    placeHolder: DefaultTextBlockStyle(
-                      TextStyle(
-                        fontSize: 14,
-                        height: 1.6,
-                        color: theme.brightness == Brightness.dark
-                            ? Colors.white38
-                            : Colors.grey.shade400,
-                      ),
-                      const HorizontalSpacing(0, 0),
-                      const VerticalSpacing(4, 4),
-                      const VerticalSpacing(0, 0),
-                      null,
-                    ),
-                    paragraph: DefaultTextBlockStyle(
-                      TextStyle(
-                        fontSize: 14,
-                        height: 1.6,
-                        color: theme.brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.grey.shade800,
-                      ),
-                      const HorizontalSpacing(0, 0),
-                      const VerticalSpacing(4, 4),
-                      const VerticalSpacing(0, 0),
-                      null,
-                    ),
-                    lists: DefaultListBlockStyle(
-                      TextStyle(
-                        fontSize: 14,
-                        height: 1.6,
-                        color: theme.brightness == Brightness.dark
-                            ? Colors.white
-                            : Colors.grey.shade800,
-                      ),
-                      const HorizontalSpacing(0, 0),
-                      const VerticalSpacing(4, 4),
-                      const VerticalSpacing(0, 0),
-                      null,
-                      null,
-                    ),
+                  textSelectionThemeData: TextSelectionThemeData(
+                    cursorColor: theme.brightness == Brightness.dark
+                        ? Colors.white
+                        : Colors.black,
                   ),
+                  customStyles: _buildQuillStyles(theme),
                 ),
               ),
             ),

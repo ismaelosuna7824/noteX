@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../widgets/editor_text_controls.dart';
 
 /// Rich text note editor page — full-screen background with overlaid controls.
 ///
@@ -378,32 +379,41 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           horizontal: 8,
                           vertical: 4,
                         ),
-                        child: QuillSimpleToolbar(
-                          controller: _quillController,
-                          config: QuillSimpleToolbarConfig(
-                            showAlignmentButtons: true,
-                            showBackgroundColorButton: false,
-                            showClearFormat: false,
-                            showFontFamily: false,
-                            showFontSize: false,
-                            showInlineCode: true,
-                            showCodeBlock: true,
-                            showListCheck: true,
-                            multiRowsDisplay: false,
-                            decoration: const BoxDecoration(),
-                            buttonOptions: QuillSimpleToolbarButtonOptions(
-                              base: QuillToolbarBaseButtonOptions(
-                                iconTheme: QuillIconTheme(
-                                  iconButtonSelectedData: IconButtonData(
-                                    color: accentColor,
-                                  ),
-                                  iconButtonUnselectedData: IconButtonData(
-                                    color: isDark ? Colors.white70 : null,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: QuillSimpleToolbar(
+                                controller: _quillController,
+                                config: QuillSimpleToolbarConfig(
+                                  showAlignmentButtons: true,
+                                  showBackgroundColorButton: false,
+                                  showClearFormat: false,
+                                  showFontFamily: false,
+                                  showFontSize: false,
+                                  showInlineCode: true,
+                                  showCodeBlock: true,
+                                  showListCheck: true,
+                                  multiRowsDisplay: false,
+                                  decoration: const BoxDecoration(),
+                                  buttonOptions: QuillSimpleToolbarButtonOptions(
+                                    base: QuillToolbarBaseButtonOptions(
+                                      iconTheme: QuillIconTheme(
+                                        iconButtonSelectedData: IconButtonData(
+                                          color: accentColor,
+                                        ),
+                                        iconButtonUnselectedData: IconButtonData(
+                                          color: isDark ? Colors.white70 : null,
+                                        ),
+                                      ),
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
+                            EditorTextControls(
+                                themeState: widget.themeState),
+                            const SizedBox(width: 4),
+                          ],
                         ),
                       ),
 
@@ -449,48 +459,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               placeholder: 'Start writing your thoughts...',
                               padding: const EdgeInsets.all(8),
                               expands: true,
-                              customStyles: DefaultStyles(
-                                placeHolder: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 15,
-                                    height: 1.6,
-                                    color: isDark
-                                        ? Colors.white38
-                                        : Colors.grey.shade400,
-                                  ),
-                                  const HorizontalSpacing(0, 0),
-                                  const VerticalSpacing(6, 6),
-                                  const VerticalSpacing(0, 0),
-                                  null,
-                                ),
-                                paragraph: DefaultTextBlockStyle(
-                                  TextStyle(
-                                    fontSize: 15,
-                                    height: 1.6,
-                                    color: isDark
-                                        ? Colors.white
-                                        : Colors.grey.shade800,
-                                  ),
-                                  const HorizontalSpacing(0, 0),
-                                  const VerticalSpacing(6, 6),
-                                  const VerticalSpacing(0, 0),
-                                  null,
-                                ),
-                                lists: DefaultListBlockStyle(
-                                  TextStyle(
-                                    fontSize: 15,
-                                    height: 1.6,
-                                    color: isDark
-                                        ? Colors.white
-                                        : Colors.grey.shade800,
-                                  ),
-                                  const HorizontalSpacing(0, 0),
-                                  const VerticalSpacing(6, 6),
-                                  const VerticalSpacing(0, 0),
-                                  null,
-                                  null,
-                                ),
+                              textSelectionThemeData: TextSelectionThemeData(
+                                cursorColor: isDark ? Colors.white : Colors.black,
                               ),
+                              customStyles: _buildQuillStyles(isDark),
                             ),
                           ),
                         ),
@@ -502,6 +474,48 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  DefaultStyles _buildQuillStyles(bool isDark) {
+    final fontSize = widget.themeState.editorFontSize;
+    final lh = widget.themeState.editorLineHeight;
+
+    return DefaultStyles(
+      placeHolder: DefaultTextBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          height: lh,
+          color: isDark ? Colors.white38 : Colors.grey.shade400,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(6, 6),
+        const VerticalSpacing(0, 0),
+        null,
+      ),
+      paragraph: DefaultTextBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          height: lh,
+          color: isDark ? Colors.white : Colors.grey.shade800,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(6, 6),
+        const VerticalSpacing(0, 0),
+        null,
+      ),
+      lists: DefaultListBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          height: lh,
+          color: isDark ? Colors.white : Colors.grey.shade800,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(6, 6),
+        const VerticalSpacing(0, 0),
+        null,
+        null,
       ),
     );
   }
