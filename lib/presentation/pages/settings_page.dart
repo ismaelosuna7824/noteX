@@ -781,7 +781,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   isSelected: currentPath == assetPath,
                   accentColor: accentColor,
                   onTap: () => themeState.setBackgroundImage(assetPath),
-                  child: Image.asset(assetPath, fit: BoxFit.cover),
+                  child: Image.asset(assetPath, fit: BoxFit.cover, cacheWidth: 240),
                 );
               }
 
@@ -915,6 +915,7 @@ class _SettingsPageState extends State<SettingsPage> {
                 height: 90,
                 width: double.infinity,
                 fit: BoxFit.cover,
+                cacheWidth: 480,
                 errorBuilder: (context, error, stackTrace) => Container(
                   height: 90,
                   decoration: BoxDecoration(
@@ -1406,11 +1407,17 @@ class _RemoteVideoThumbnailState extends State<_RemoteVideoThumbnail> {
         ),
       );
     } else if (_downloaded && _localPath != null) {
-      // ── Downloaded: video thumbnail ────────────────────────────────
+      // ── Downloaded: use static thumbnail (avoids heavy Player instance) ──
       inner = Stack(
         fit: StackFit.expand,
         children: [
-          _VideoThumbnail(key: ValueKey(_localPath), videoPath: _localPath!),
+          Image.asset(
+            widget.bg.thumbnailAsset,
+            fit: BoxFit.cover,
+            cacheWidth: 240,
+            errorBuilder: (_, __, ___) =>
+                Container(color: const Color(0xFF12121E)),
+          ),
           Center(
             child: Container(
               padding: const EdgeInsets.all(6),
@@ -1436,6 +1443,7 @@ class _RemoteVideoThumbnailState extends State<_RemoteVideoThumbnail> {
           Image.asset(
             widget.bg.thumbnailAsset,
             fit: BoxFit.cover,
+            cacheWidth: 240,
             errorBuilder: (_, __, ___) =>
                 Container(color: const Color(0xFF12121E)),
           ),
@@ -1527,7 +1535,14 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
 
   Future<void> _initPlayer() async {
     final player = Player();
-    final controller = VideoController(player);
+    // Thumbnail only — decode at small resolution to save memory.
+    final controller = VideoController(
+      player,
+      configuration: const VideoControllerConfiguration(
+        width: 480,
+        height: 270,
+      ),
+    );
     _player = player;
     _controller = controller;
 

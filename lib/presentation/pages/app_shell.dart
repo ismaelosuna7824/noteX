@@ -129,7 +129,14 @@ class _AppShellState extends State<AppShell> with WindowListener {
       _currentVideoPath = path;
 
       final player = Player();
-      final controller = VideoController(player);
+      // Cap decoded resolution to 1920×1080 — saves ~50-70 % RAM vs raw 4K.
+      final controller = VideoController(
+        player,
+        configuration: const VideoControllerConfiguration(
+          width: 1920,
+          height: 1080,
+        ),
+      );
 
       player.setPlaylistMode(PlaylistMode.loop);
       player.setVolume(widget.themeState.backgroundVolume * 100);
@@ -169,6 +176,25 @@ class _AppShellState extends State<AppShell> with WindowListener {
   @override
   void onWindowUnmaximize() => setState(() => _isMaximized = false);
 
+  @override
+  void onWindowFocus() {
+    // Resume video playback when window regains focus.
+    if (_bgPlayer != null && _currentVideoPath != null) {
+      _bgPlayer!.play();
+    }
+  }
+
+  @override
+  void onWindowBlur() {
+    // Pause video when window loses focus to save CPU.
+    _bgPlayer?.pause();
+  }
+
+  @override
+  void onWindowMinimize() {
+    _bgPlayer?.pause();
+  }
+
   Future<void> _toggleMaximize() async {
     if (_isMaximized) {
       await windowManager.unmaximize();
@@ -187,7 +213,9 @@ class _AppShellState extends State<AppShell> with WindowListener {
           children: [
             // ── Full-screen background ──────────────────────────────
             Positioned.fill(
-              child: _buildBackground(widget.themeState),
+              child: RepaintBoundary(
+                child: _buildBackground(widget.themeState),
+              ),
             ),
 
             // ── Palette-loading indicator ───────────────────────────
@@ -221,14 +249,16 @@ class _AppShellState extends State<AppShell> with WindowListener {
                 Expanded(
                   child: Row(
                     children: [
-                      Sidebar(
-                        selectedIndex: widget.appState.selectedPageIndex,
-                        onItemSelected: (index) {
-                          setState(() => _previousPageIndex =
-                              widget.appState.selectedPageIndex);
-                          widget.appState.navigateToPage(index);
-                        },
-                        accentColor: widget.themeState.accentColor,
+                      RepaintBoundary(
+                        child: Sidebar(
+                          selectedIndex: widget.appState.selectedPageIndex,
+                          onItemSelected: (index) {
+                            setState(() => _previousPageIndex =
+                                widget.appState.selectedPageIndex);
+                            widget.appState.navigateToPage(index);
+                          },
+                          accentColor: widget.themeState.accentColor,
+                        ),
                       ),
                       Expanded(
                         child: Column(
@@ -409,19 +439,20 @@ class _AppShellState extends State<AppShell> with WindowListener {
       );
     }
 
+    // Cap decoded resolution to 1920px wide — saves ~70 % RAM vs raw 4K.
     if (ThemeState.isAssetImage(path)) {
-      // Bundled preset image
       return Image.asset(
         path,
         fit: BoxFit.cover,
+        cacheWidth: 1920,
         errorBuilder: (_, _, _) => _buildDefaultBg(themeState.accentColor),
       );
     }
 
-    // User-uploaded file image
     return Image.file(
       File(path),
       fit: BoxFit.cover,
+      cacheWidth: 1920,
       errorBuilder: (_, _, _) => _buildDefaultBg(themeState.accentColor),
     );
   }

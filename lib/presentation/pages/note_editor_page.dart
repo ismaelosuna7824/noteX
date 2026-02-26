@@ -57,6 +57,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   // Snapshots used by the poller to detect real edits.
   String _prevContent = '';
   String _prevTitle = '';
+  int _prevDocLength = 0;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -130,6 +131,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     // Initialize snapshots.
     _prevContent = _serializeContent();
     _prevTitle = _titleController.text;
+    _prevDocLength = _quillController.document.length;
 
     // Register lazy getters for the service's periodic safety-net timer.
     widget.appState.autoSaveService.watch(
@@ -139,8 +141,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     );
 
     // Start polling for edits — immune to phantom QuillEditor events.
+    // 1.5 s is enough since the debounce save is 3 s after last edit.
     _editPoller = Timer.periodic(
-      const Duration(milliseconds: 500),
+      const Duration(milliseconds: 1500),
       (_) => _pollForEdits(),
     );
   }
@@ -150,13 +153,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   String _serializeContent() =>
       jsonEncode(_quillController.document.toDelta().toJson());
 
-  /// Called every 500 ms — compares current state against previous snapshot.
+  /// Called every 1.5 s — compares current state against previous snapshot.
+  /// Uses a cheap length check first to skip expensive serialization when idle.
   void _pollForEdits() {
-    final content = _serializeContent();
     final title = _titleController.text;
-    if (content == _prevContent && title == _prevTitle) return;
+    final doc = _quillController.document;
+
+    // Cheap check: if title and doc length are unchanged, likely no edit.
+    if (title == _prevTitle && doc.length == _prevDocLength) return;
+
+    final content = _serializeContent();
+    if (content == _prevContent && title == _prevTitle) {
+      _prevDocLength = doc.length;
+      return;
+    }
     _prevContent = content;
     _prevTitle = title;
+    _prevDocLength = doc.length;
     _onUserEdit();
   }
 

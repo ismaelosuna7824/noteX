@@ -17,6 +17,11 @@ import 'domain/repositories/auth_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Cap image cache at 50 MB to prevent unbounded memory growth from
+  // background images and gallery thumbnails.
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 50 * 1024 * 1024;
+
   MediaKit.ensureInitialized();
 
   // 1. Initialize acrylic (transparent window effect) and window manager

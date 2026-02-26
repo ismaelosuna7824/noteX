@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
+import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
 import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
@@ -42,6 +43,7 @@ class _HomePageState extends State<HomePage>
     Interval(0.25, 0.75, curve: Curves.easeOutCubic), // enjoy card
     Interval(0.35, 0.85, curve: Curves.easeOutCubic), // stats card
     Interval(0.45, 1.0, curve: Curves.easeOutCubic), // right column
+    Interval(0.15, 0.65, curve: Curves.easeOutCubic), // recent activity
   ];
 
   late final List<Animation<double>> _fadeAnims;
@@ -77,6 +79,14 @@ class _HomePageState extends State<HomePage>
 
   AppState get appState => widget.appState;
   ThemeState get themeState => widget.themeState;
+
+  /// Most recently updated non-empty note (for "Continue writing" card).
+  Note? _mostRecentNote() {
+    final notes = appState.notes.where((n) => !n.isEmpty).toList();
+    if (notes.isEmpty) return null;
+    notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return notes.first;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -132,6 +142,26 @@ class _HomePageState extends State<HomePage>
                 ),
               ),
             ),
+
+            // Recent activity card (center-right)
+            if (_mostRecentNote() != null)
+              Positioned(
+                right: 32,
+                bottom: constraints.maxHeight * 0.38,
+                child: FadeTransition(
+                  opacity: _fadeAnims[5],
+                  child: SlideTransition(
+                    position: _slideAnims[5],
+                    child: _RecentActivityCard(
+                      note: _mostRecentNote()!,
+                      heroColor: heroColor,
+                      accentColor: accentColor,
+                      shadows: heroShadows,
+                      onTap: () => appState.selectNote(_mostRecentNote()!),
+                    ),
+                  ),
+                ),
+              ),
 
             // Stats & Actions at bottom
             Positioned(
@@ -839,8 +869,197 @@ class _HeroTextState extends State<_HeroText>
             );
           },
         ),
+
+        const SizedBox(height: 16),
+
+        // ── Greeting + date ───────────────────────────────────────────
+        Text(
+          _greeting(),
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: widget.heroColor.withValues(alpha: 0.7),
+            fontWeight: FontWeight.w500,
+            shadows: widget.shadows,
+          ),
+        ),
+
+        const SizedBox(height: 6),
+
+        // ── Daily quote ───────────────────────────────────────────────
+        Text(
+          _dailyQuote(),
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: widget.heroColor.withValues(alpha: 0.45),
+            fontStyle: FontStyle.italic,
+            shadows: widget.shadows,
+          ),
+        ),
       ],
     );
+  }
+
+  // ── Helpers ─────────────────────────────────────────────────────────────
+
+  static const _weekdays = [
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
+    'Friday', 'Saturday', 'Sunday',
+  ];
+  static const _months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+
+  String _greeting() {
+    final now = DateTime.now();
+    final hour = now.hour;
+    final salute = hour < 12
+        ? 'Good morning'
+        : hour < 18
+            ? 'Good afternoon'
+            : 'Good evening';
+    final day = _weekdays[now.weekday - 1];
+    final month = _months[now.month - 1];
+    return '$salute  ·  $day, $month ${now.day}';
+  }
+
+  static const _quotes = [
+    'Your ideas matter.',
+    'Create something today.',
+    'Capture the moment.',
+    'Think it. Write it.',
+    'Great notes start small.',
+    'Let your thoughts flow.',
+    'One word at a time.',
+    'Write now, edit later.',
+    'Ideas need a home.',
+    'Your story begins here.',
+    'Clarity comes from writing.',
+    'Small notes, big ideas.',
+    'Write what inspires you.',
+    'Every note counts.',
+    'Put your mind on paper.',
+    'Today is a fresh page.',
+    'Notes are seeds of ideas.',
+    'Write freely, think deeply.',
+    'Your thoughts deserve space.',
+    'Start with a single line.',
+  ];
+
+  String _dailyQuote() {
+    final dayOfYear = DateTime.now().difference(
+      DateTime(DateTime.now().year),
+    ).inDays;
+    return '\u00AB${_quotes[dayOfYear % _quotes.length]}\u00BB';
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Recent activity card — "Continue writing" prompt for the last edited note.
+// Compact, semi-transparent, uses heroColor for text so it sits naturally
+// over the background image.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _RecentActivityCard extends StatelessWidget {
+  final Note note;
+  final Color heroColor;
+  final Color accentColor;
+  final List<Shadow> shadows;
+  final VoidCallback onTap;
+
+  const _RecentActivityCard({
+    required this.note,
+    required this.heroColor,
+    required this.accentColor,
+    required this.shadows,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final timeAgo = _formatTimeAgo(note.updatedAt);
+    final title = note.title.isNotEmpty ? note.title : 'Untitled';
+
+    final cardBg = heroColor.withValues(alpha: 0.08);
+    final cardBorder = heroColor.withValues(alpha: 0.10);
+    final labelColor = heroColor.withValues(alpha: 0.45);
+    final titleColor = heroColor.withValues(alpha: 0.85);
+    final timeColor = heroColor.withValues(alpha: 0.35);
+
+    return _PressButton(
+      onTap: onTap,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 240),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        decoration: BoxDecoration(
+          color: cardBg,
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(8),
+            bottomLeft: Radius.circular(8),
+            bottomRight: Radius.circular(20),
+          ),
+          border: Border.all(color: cardBorder),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Continue writing',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: labelColor,
+                letterSpacing: 1,
+                fontWeight: FontWeight.w600,
+                shadows: shadows,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodyLarge?.copyWith(
+                      color: titleColor,
+                      fontWeight: FontWeight.w700,
+                      shadows: shadows,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Icon(
+                  Icons.north_east_rounded,
+                  size: 14,
+                  color: accentColor,
+                  shadows: shadows,
+                ),
+              ],
+            ),
+            const SizedBox(height: 2),
+            Text(
+              timeAgo,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: timeColor,
+                shadows: shadows,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static String _formatTimeAgo(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.day}/${date.month}/${date.year}';
   }
 }
 
