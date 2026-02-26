@@ -18,6 +18,8 @@ import 'timer_page.dart';
 import 'markdown_page.dart';
 import 'reminder_page.dart';
 import '../../injection.dart';
+import '../../infrastructure/network/connectivity_adapter.dart';
+import '../../domain/services/connectivity_service.dart';
 import '../../application/services/sync_engine.dart';
 
 /// Corner radius used for the rounded window frame.
@@ -31,11 +33,7 @@ class AppShell extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
-  const AppShell({
-    super.key,
-    required this.appState,
-    required this.themeState,
-  });
+  const AppShell({super.key, required this.appState, required this.themeState});
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -81,6 +79,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
     // Push any pending local changes to Supabase before closing.
     // Remote sync only runs on app open/close to avoid excessive API calls.
     await getIt<SyncEngine>().syncIfAuthenticated();
+
+    // Release connectivity listener.
+    final connectivity = getIt<ConnectivityService>();
+    if (connectivity is ConnectivityAdapter) connectivity.dispose();
 
     // Stop playback first, then dispose — gives libmpv time to release
     // native resources cleanly instead of crashing on process exit.
@@ -143,8 +145,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
       // Asset videos use the 'asset:///' URI scheme for media_kit;
       // user-uploaded files use the raw filesystem path.
-      final mediaUri =
-          ThemeState.isAssetImage(path!) ? 'asset:///$path' : path;
+      final mediaUri = ThemeState.isAssetImage(path!) ? 'asset:///$path' : path;
       player.open(Media(mediaUri));
 
       _bgPlayer = player;
@@ -253,8 +254,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
                         child: Sidebar(
                           selectedIndex: widget.appState.selectedPageIndex,
                           onItemSelected: (index) {
-                            setState(() => _previousPageIndex =
-                                widget.appState.selectedPageIndex);
+                            setState(
+                              () => _previousPageIndex =
+                                  widget.appState.selectedPageIndex,
+                            );
                             widget.appState.navigateToPage(index);
                           },
                           accentColor: widget.themeState.accentColor,
@@ -284,7 +287,8 @@ class _AppShellState extends State<AppShell> with WindowListener {
                                 return UpdateBanner(
                                   update: widget.appState.availableUpdate!,
                                   accentColor: widget.themeState.accentColor,
-                                  onDismiss: widget.appState.dismissUpdateBanner,
+                                  onDismiss:
+                                      widget.appState.dismissUpdateBanner,
                                   appState: widget.appState,
                                 );
                               },
@@ -295,14 +299,20 @@ class _AppShellState extends State<AppShell> with WindowListener {
                                 transitionBuilder: (child, animation) {
                                   final isForward =
                                       widget.appState.selectedPageIndex >=
-                                          _previousPageIndex;
-                                  final slide = Tween<Offset>(
-                                    begin: Offset(0, isForward ? 0.03 : -0.03),
-                                    end: Offset.zero,
-                                  ).animate(CurvedAnimation(
-                                    parent: animation,
-                                    curve: Curves.easeOutCubic,
-                                  ));
+                                      _previousPageIndex;
+                                  final slide =
+                                      Tween<Offset>(
+                                        begin: Offset(
+                                          0,
+                                          isForward ? 0.03 : -0.03,
+                                        ),
+                                        end: Offset.zero,
+                                      ).animate(
+                                        CurvedAnimation(
+                                          parent: animation,
+                                          curve: Curves.easeOutCubic,
+                                        ),
+                                      );
                                   return SlideTransition(
                                     position: slide,
                                     child: FadeTransition(
@@ -315,7 +325,8 @@ class _AppShellState extends State<AppShell> with WindowListener {
                                   );
                                 },
                                 child: _buildPage(
-                                    widget.appState.selectedPageIndex),
+                                  widget.appState.selectedPageIndex,
+                                ),
                               ),
                             ),
                           ],
@@ -513,15 +524,17 @@ class _WinButtonState extends State<_WinButton> {
             decoration: BoxDecoration(
               color: _hovered
                   ? (widget.isClose
-                      ? Colors.red.shade400
-                      : Colors.white.withValues(alpha: 0.25))
+                        ? Colors.red.shade400
+                        : Colors.white.withValues(alpha: 0.25))
                   : Colors.white.withValues(alpha: 0.12),
               shape: BoxShape.circle,
             ),
             child: Icon(
               widget.icon,
               size: 11,
-              color: _hovered ? Colors.white : Colors.white.withValues(alpha: 0.6),
+              color: _hovered
+                  ? Colors.white
+                  : Colors.white.withValues(alpha: 0.6),
             ),
           ),
         ),

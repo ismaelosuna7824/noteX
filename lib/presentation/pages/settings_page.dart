@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -1525,6 +1526,7 @@ class _VideoThumbnail extends StatefulWidget {
 class _VideoThumbnailState extends State<_VideoThumbnail> {
   Player? _player;
   VideoController? _controller;
+  StreamSubscription? _videoParamsSub;
   bool _ready = false;
 
   @override
@@ -1550,7 +1552,7 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
     await player.setVolume(0);
 
     // Pause as soon as the first video frame is decoded.
-    player.stream.videoParams.listen((params) {
+    _videoParamsSub = player.stream.videoParams.listen((params) {
       if (params.w != null && params.w! > 0 && mounted && !_ready) {
         Future.delayed(const Duration(milliseconds: 150), () {
           if (mounted) {
@@ -1570,6 +1572,7 @@ class _VideoThumbnailState extends State<_VideoThumbnail> {
 
   @override
   void dispose() {
+    _videoParamsSub?.cancel();
     _player?.dispose();
     super.dispose();
   }

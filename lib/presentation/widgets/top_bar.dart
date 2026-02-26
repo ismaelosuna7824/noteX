@@ -236,6 +236,7 @@ class _TopBarState extends State<TopBar>
     _searchCurved.dispose();
     _searchAnimController.dispose();
     _searchController.dispose();
+    _searchFocusNode.removeListener(_onFocusChange);
     _searchFocusNode.dispose();
     super.dispose();
   }

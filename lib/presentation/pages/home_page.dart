@@ -22,11 +22,7 @@ class HomePage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
-  const HomePage({
-    super.key,
-    required this.appState,
-    required this.themeState,
-  });
+  const HomePage({super.key, required this.appState, required this.themeState});
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -81,11 +77,14 @@ class _HomePageState extends State<HomePage>
   ThemeState get themeState => widget.themeState;
 
   /// Most recently updated non-empty note (for "Continue writing" card).
-  Note? _mostRecentNote() {
-    final notes = appState.notes.where((n) => !n.isEmpty).toList();
-    if (notes.isEmpty) return null;
-    notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return notes.first;
+  Note? get _mostRecentNote {
+    final notes = appState.notes;
+    Note? best;
+    for (final n in notes) {
+      if (n.isEmpty) continue;
+      if (best == null || n.updatedAt.isAfter(best.updatedAt)) best = n;
+    }
+    return best;
   }
 
   @override
@@ -104,6 +103,8 @@ class _HomePageState extends State<HomePage>
         blurRadius: 12,
       ),
     ];
+
+    final recentNote = _mostRecentNote;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -144,7 +145,7 @@ class _HomePageState extends State<HomePage>
             ),
 
             // Recent activity card (center-right)
-            if (_mostRecentNote() != null)
+            if (recentNote != null)
               Positioned(
                 right: 32,
                 bottom: constraints.maxHeight * 0.38,
@@ -153,11 +154,11 @@ class _HomePageState extends State<HomePage>
                   child: SlideTransition(
                     position: _slideAnims[5],
                     child: _RecentActivityCard(
-                      note: _mostRecentNote()!,
+                      note: recentNote,
                       heroColor: heroColor,
                       accentColor: accentColor,
                       shadows: heroShadows,
-                      onTap: () => appState.selectNote(_mostRecentNote()!),
+                      onTap: () => appState.selectNote(recentNote),
                     ),
                   ),
                 ),
@@ -208,7 +209,11 @@ class _HomePageState extends State<HomePage>
               child: SlideTransition(
                 position: _slideAnims[3],
                 child: _buildCombinedStatsCard(
-                    context, theme, accentColor, isDark),
+                  context,
+                  theme,
+                  accentColor,
+                  isDark,
+                ),
               ),
             ),
           ),
@@ -328,8 +333,9 @@ class _HomePageState extends State<HomePage>
 
     final primaryText = isDark ? Colors.white : Colors.black87;
     final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
-    final dividerColor =
-        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade100;
+    final dividerColor = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.grey.shade100;
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -427,8 +433,8 @@ class _HomePageState extends State<HomePage>
                     color: hasTodayNote
                         ? accentColor.withValues(alpha: 0.15)
                         : (isDark
-                            ? Colors.white.withValues(alpha: 0.10)
-                            : Colors.grey.shade100),
+                              ? Colors.white.withValues(alpha: 0.10)
+                              : Colors.grey.shade100),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
@@ -626,7 +632,6 @@ class _HomePageState extends State<HomePage>
                 ),
               ],
             ),
-
           ],
         ),
       ),
@@ -756,7 +761,11 @@ class _HeroTextState extends State<_HeroText>
   LinearGradient _buildShimmerGradient() {
     final base = widget.heroColor;
     final isDark = base.computeLuminance() < 0.4;
-    final highlight = Color.lerp(base, widget.accentColor, isDark ? 0.65 : 0.5)!;
+    final highlight = Color.lerp(
+      base,
+      widget.accentColor,
+      isDark ? 0.65 : 0.5,
+    )!;
 
     // Band sweeps from offscreen-left (-0.2) to offscreen-right (1.2).
     final pos = -0.2 + (_shimmer.value * 1.4);
@@ -765,13 +774,7 @@ class _HeroTextState extends State<_HeroText>
     return LinearGradient(
       begin: Alignment.centerLeft,
       end: Alignment.centerRight,
-      colors: [
-        base,
-        base,
-        highlight,
-        base,
-        base,
-      ],
+      colors: [base, base, highlight, base, base],
       stops: [
         0.0,
         (pos - 0.08).clamp(0.001, 0.999),
@@ -803,10 +806,14 @@ class _HeroTextState extends State<_HeroText>
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('IMMERSE IN',
-              style: smallStyle?.copyWith(color: color, shadows: shadows)),
-          Text('YOUR NOTES',
-              style: mediumStyle?.copyWith(color: color, shadows: shadows)),
+          Text(
+            'IMMERSE IN',
+            style: smallStyle?.copyWith(color: color, shadows: shadows),
+          ),
+          Text(
+            'YOUR NOTES',
+            style: mediumStyle?.copyWith(color: color, shadows: shadows),
+          ),
         ],
       );
     }
@@ -819,10 +826,7 @@ class _HeroTextState extends State<_HeroText>
         Stack(
           children: [
             // Shadow layer — transparent glyphs, visible shadows.
-            textColumn(
-              color: Colors.transparent,
-              shadows: widget.shadows,
-            ),
+            textColumn(color: Colors.transparent, shadows: widget.shadows),
 
             // Gradient + shimmer layer — no shadows.
             AnimatedBuilder(
@@ -876,7 +880,7 @@ class _HeroTextState extends State<_HeroText>
         Text(
           _greeting(),
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: widget.heroColor.withValues(alpha: 0.7),
+            color: widget.heroColor.withValues(alpha: 0.8),
             fontWeight: FontWeight.w500,
             shadows: widget.shadows,
           ),
@@ -888,7 +892,7 @@ class _HeroTextState extends State<_HeroText>
         Text(
           _dailyQuote(),
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: widget.heroColor.withValues(alpha: 0.45),
+            color: widget.heroColor.withValues(alpha: 0.60),
             fontStyle: FontStyle.italic,
             shadows: widget.shadows,
           ),
@@ -900,12 +904,27 @@ class _HeroTextState extends State<_HeroText>
   // ── Helpers ─────────────────────────────────────────────────────────────
 
   static const _weekdays = [
-    'Monday', 'Tuesday', 'Wednesday', 'Thursday',
-    'Friday', 'Saturday', 'Sunday',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
   static const _months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
   ];
 
   String _greeting() {
@@ -914,8 +933,8 @@ class _HeroTextState extends State<_HeroText>
     final salute = hour < 12
         ? 'Good morning'
         : hour < 18
-            ? 'Good afternoon'
-            : 'Good evening';
+        ? 'Good afternoon'
+        : 'Good evening';
     final day = _weekdays[now.weekday - 1];
     final month = _months[now.month - 1];
     return '$salute  ·  $day, $month ${now.day}';
@@ -945,9 +964,9 @@ class _HeroTextState extends State<_HeroText>
   ];
 
   String _dailyQuote() {
-    final dayOfYear = DateTime.now().difference(
-      DateTime(DateTime.now().year),
-    ).inDays;
+    final dayOfYear = DateTime.now()
+        .difference(DateTime(DateTime.now().year))
+        .inDays;
     return '\u00AB${_quotes[dayOfYear % _quotes.length]}\u00BB';
   }
 }
@@ -979,16 +998,16 @@ class _RecentActivityCard extends StatelessWidget {
     final timeAgo = _formatTimeAgo(note.updatedAt);
     final title = note.title.isNotEmpty ? note.title : 'Untitled';
 
-    final cardBg = heroColor.withValues(alpha: 0.08);
+    final cardBg = heroColor.withValues(alpha: 0.15);
     final cardBorder = heroColor.withValues(alpha: 0.10);
-    final labelColor = heroColor.withValues(alpha: 0.45);
+    final labelColor = heroColor.withValues(alpha: 0.70);
     final titleColor = heroColor.withValues(alpha: 0.85);
-    final timeColor = heroColor.withValues(alpha: 0.35);
+    final timeColor = heroColor.withValues(alpha: 0.80);
 
     return _PressButton(
       onTap: onTap,
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 240),
+        width: 190,
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
           color: cardBg,
@@ -1120,8 +1139,7 @@ class _ReminderCard extends StatelessWidget {
                 shape: shape,
                 shadows: [
                   BoxShadow(
-                    color: Colors.black
-                        .withValues(alpha: isDark ? 0.30 : 0.07),
+                    color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
                     blurRadius: 20,
                     offset: const Offset(0, 6),
                   ),
@@ -1192,8 +1210,9 @@ class _ReminderCard extends StatelessWidget {
                           isDark: isDark,
                           primaryText: primaryText,
                           onComplete: () {
-                            GetIt.instance<ReminderState>()
-                                .completeReminder(reminder.id);
+                            GetIt.instance<ReminderState>().completeReminder(
+                              reminder.id,
+                            );
                           },
                         );
                       },
@@ -1250,15 +1269,14 @@ class _HomeReminderItemState extends State<_HomeReminderItem>
       vsync: this,
       duration: const Duration(milliseconds: 300),
     );
-    _exitOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
-      CurvedAnimation(parent: _exitController, curve: Curves.easeIn),
-    );
-    _exitSlide = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(0.15, 0),
-    ).animate(
-      CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
-    );
+    _exitOpacity = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(CurvedAnimation(parent: _exitController, curve: Curves.easeIn));
+    _exitSlide = Tween<Offset>(begin: Offset.zero, end: const Offset(0.15, 0))
+        .animate(
+          CurvedAnimation(parent: _exitController, curve: Curves.easeInCubic),
+        );
   }
 
   @override
@@ -1298,8 +1316,7 @@ class _HomeReminderItemState extends State<_HomeReminderItem>
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(4),
                   ),
-                  materialTapTargetSize:
-                      MaterialTapTargetSize.shrinkWrap,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   visualDensity: VisualDensity.compact,
                 ),
               ),
@@ -1336,11 +1353,7 @@ class _PressButton extends StatefulWidget {
   /// How far the widget scales down while pressed (0.94 = 6 % smaller).
   final double pressScale;
 
-  const _PressButton({
-    required this.child,
-    this.onTap,
-    this.pressScale = 0.94,
-  });
+  const _PressButton({required this.child, this.onTap, this.pressScale = 0.94});
 
   @override
   State<_PressButton> createState() => _PressButtonState();
@@ -1352,7 +1365,9 @@ class _PressButtonState extends State<_PressButton> {
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTapDown: widget.onTap != null ? (_) => setState(() => _pressed = true) : null,
+      onTapDown: widget.onTap != null
+          ? (_) => setState(() => _pressed = true)
+          : null,
       onTapUp: widget.onTap != null
           ? (_) {
               setState(() => _pressed = false);
