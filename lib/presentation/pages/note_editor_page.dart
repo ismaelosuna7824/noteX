@@ -620,6 +620,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         null,
         null,
       ),
+      leading: DefaultTextBlockStyle(
+        TextStyle(
+          fontSize: fontSize,
+          height: lh,
+          color: isDark ? Colors.white : Colors.grey.shade800,
+        ),
+        const HorizontalSpacing(0, 0),
+        const VerticalSpacing(0, 0),
+        const VerticalSpacing(0, 0),
+        null,
+      ),
     );
   }
 

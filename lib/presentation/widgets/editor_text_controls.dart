@@ -78,8 +78,8 @@ class EditorTextControls extends StatelessWidget {
         ),
         _ToolbarButton(
           icon: Icons.add_rounded,
-          color: _lineHeight < 2.5 ? iconColor : disabledColor,
-          onTap: _lineHeight < 2.5
+          color: _lineHeight < 1.5 ? iconColor : disabledColor,
+          onTap: _lineHeight < 1.5
               ? () => _setLineHeight(
                   ((_lineHeight + 0.1) * 10).round() / 10)
               : null,
