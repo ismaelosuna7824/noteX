@@ -1,5 +1,5 @@
 #define MyAppName "NoteX"
-#define MyAppVersion "1.29.0"
+#define MyAppVersion "1.30.0"
 #define MyAppPublisher "ismaelosuna7824"
 #define MyAppURL "https://github.com/ismaelosuna7824/noteX"
 #define MyAppExeName "notex.exe"
