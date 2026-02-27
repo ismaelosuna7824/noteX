@@ -4,6 +4,8 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
 
+import '../../main.dart' show WindowSizeStore;
+
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/sidebar.dart';
@@ -72,7 +74,21 @@ class _AppShellState extends State<AppShell> with WindowListener {
   }
 
   @override
+  void onWindowResized() async {
+    // Persist window size so it's restored on next launch.
+    if (await windowManager.isMaximized()) return;
+    final size = await windowManager.getSize();
+    WindowSizeStore.save(size.width, size.height);
+  }
+
+  @override
   void onWindowClose() async {
+    // Persist window size before closing.
+    if (!await windowManager.isMaximized()) {
+      final size = await windowManager.getSize();
+      await WindowSizeStore.save(size.width, size.height);
+    }
+
     // Clean up empty notes before closing
     await widget.appState.cleanupEmptyNotes();
 
@@ -206,9 +222,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(_kWindowRadius),
-      child: Scaffold(
+    return DragToResizeArea(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(_kWindowRadius),
+        child: Scaffold(
         backgroundColor: Colors.transparent,
         body: Stack(
           children: [
@@ -338,6 +355,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
               ],
             ),
           ],
+        ),
         ),
       ),
     );

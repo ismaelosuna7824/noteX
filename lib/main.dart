@@ -1,5 +1,11 @@
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math' show min;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:screen_retriever/screen_retriever.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:window_manager/window_manager.dart';
@@ -71,8 +77,27 @@ void main() async {
   }
 
   // 8. Configure: transparent + frameless + centered
-  const windowOptions = WindowOptions(
-    size: Size(1280, 900),
+  // Clamp window size to fit the screen (accounts for display scaling).
+  final display = await ScreenRetriever.instance.getPrimaryDisplay();
+  final scale = (display.scaleFactor ?? 1.0).toDouble();
+  // visibleSize excludes the taskbar; fall back to full size.
+  final usable = display.visibleSize ?? display.size;
+  final screenW = usable.width / scale;
+  final screenH = usable.height / scale;
+  const margin = 40.0;
+  const minW = 900.0;
+  const minH = 600.0;
+
+  // Restore persisted window size, falling back to 1280x900.
+  final saved = await WindowSizeStore.load();
+  final defaultW = saved?['width'] ?? 1280.0;
+  final defaultH = saved?['height'] ?? 900.0;
+  // Ensure it fits the current screen and respects the minimum.
+  final windowW = min(defaultW, screenW - margin).clamp(minW, screenW - margin);
+  final windowH = min(defaultH, screenH - margin).clamp(minH, screenH - margin);
+
+  final windowOptions = WindowOptions(
+    size: Size(windowW, windowH),
     center: true,
     backgroundColor: Colors.transparent,
     skipTaskbar: false,
@@ -87,6 +112,9 @@ void main() async {
       color: Colors.transparent,
     );
     await windowManager.setAsFrameless();
+    // Allow resizing and enforce a minimum window size on all platforms.
+    await windowManager.setResizable(true);
+    await windowManager.setMinimumSize(const Size(900, 600));
     await windowManager.show();
     await windowManager.focus();
   });
@@ -97,4 +125,40 @@ void main() async {
       themeState: themeState,
     ),
   );
+}
+
+/// Persists and restores window size across sessions.
+class WindowSizeStore {
+  static const _fileName = 'notex_window_size.json';
+
+  static Future<File> _file() async {
+    final dir = await getApplicationSupportDirectory();
+    return File('${dir.path}/$_fileName');
+  }
+
+  static Future<Map<String, double>?> load() async {
+    try {
+      final file = await _file();
+      if (!await file.exists()) return null;
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      return {
+        'width': (json['width'] as num).toDouble(),
+        'height': (json['height'] as num).toDouble(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> save(double width, double height) async {
+    try {
+      final file = await _file();
+      await file.writeAsString(jsonEncode({
+        'width': width,
+        'height': height,
+      }));
+    } catch (_) {
+      // Non-critical — silently ignore write failures.
+    }
+  }
 }

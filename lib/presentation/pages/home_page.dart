@@ -144,11 +144,14 @@ class _HomePageState extends State<HomePage>
               ),
             ),
 
-            // Recent activity card (center-right)
+            // Recent activity card (center-right, above stats row).
+            // Use max() to guarantee it never overlaps the bottom cards
+            // (~200px stats row + 24px padding + 16px gap).
             if (recentNote != null)
               Positioned(
                 right: 32,
-                bottom: constraints.maxHeight * 0.38,
+                bottom: (constraints.maxHeight * 0.38)
+                    .clamp(240.0, constraints.maxHeight - 120),
                 child: FadeTransition(
                   opacity: _fadeAnims[5],
                   child: SlideTransition(
