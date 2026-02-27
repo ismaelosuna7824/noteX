@@ -720,7 +720,11 @@ class _NotesListPageState extends State<NotesListPage> {
                   placeholder: 'Empty note',
                   padding: EdgeInsets.zero,
                   expands: true,
-                  showCursor: false,
+                  showCursor: true,
+                  textSelectionThemeData: TextSelectionThemeData(
+                    cursorColor: accentColor,
+                    selectionColor: accentColor.withValues(alpha: 0.3),
+                  ),
                   customStyles: _buildQuillStyles(theme),
                 ),
               ),
