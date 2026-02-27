@@ -33,10 +33,15 @@ class _NotesListPageState extends State<NotesListPage> {
   /// Persistent scroll controller for the Quill editor.
   final ScrollController _quillScrollController = ScrollController();
 
+  /// Persistent focus node for the read-only preview editor.
+  /// canRequestFocus must be true so the user can select & copy text.
+  final FocusNode _previewFocusNode = FocusNode();
+
   @override
   void dispose() {
     _quillController?.dispose();
     _quillScrollController.dispose();
+    _previewFocusNode.dispose();
     super.dispose();
   }
 
@@ -710,7 +715,7 @@ class _NotesListPageState extends State<NotesListPage> {
               child: QuillEditor(
                 controller: _quillController!,
                 scrollController: _quillScrollController,
-                focusNode: FocusNode(canRequestFocus: false),
+                focusNode: _previewFocusNode,
                 config: QuillEditorConfig(
                   placeholder: 'Empty note',
                   padding: EdgeInsets.zero,
