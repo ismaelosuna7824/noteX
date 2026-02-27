@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
@@ -9,7 +10,7 @@ import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_card.dart';
 
-/// Notes list view with inline preview/edit panel.
+/// Notes list view with inline edit panel.
 ///
 /// Left: scrollable note list. Right: live editor for the selected note.
 class NotesListPage extends StatefulWidget {
@@ -28,27 +29,83 @@ class NotesListPage extends StatefulWidget {
 
 class _NotesListPageState extends State<NotesListPage> {
   QuillController? _quillController;
+  late TextEditingController _titleController;
   String? _loadedNoteId;
 
-  /// Persistent scroll controller for the Quill editor.
-  final ScrollController _quillScrollController = ScrollController();
+  final FocusNode _editorFocusNode = FocusNode();
 
-  /// Persistent focus node for the read-only preview editor.
-  /// canRequestFocus must be true so the user can select & copy text.
-  final FocusNode _previewFocusNode = FocusNode();
+  // ── Auto-save state ──────────────────────────────────────────────────
+  final ValueNotifier<String> _saveStatus = ValueNotifier('');
+  Timer? _debounce;
+  Timer? _hideTimer;
+  Timer? _editPoller;
+  String _prevContent = '';
+  String _prevTitle = '';
+  int _prevDocLength = 0;
+
+  // ignore: experimental_member_use
+  static final _controllerConfig = QuillControllerConfig(
+    // ignore: experimental_member_use
+    clipboardConfig: QuillClipboardConfig(
+      // ignore: experimental_member_use
+      enableExternalRichPaste: false,
+    ),
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController();
+  }
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _hideTimer?.cancel();
+    _editPoller?.cancel();
+
+    // Force-save current note before disposing.
+    final note = widget.appState.currentNote;
+    if (note != null && _quillController != null) {
+      widget.appState.autoSaveService.forceSave(
+        noteId: note.id,
+        title: _titleController.text,
+        content: _serializeContent(),
+      );
+    }
+    widget.appState.autoSaveService.unwatch();
+
     _quillController?.dispose();
-    _quillScrollController.dispose();
-    _previewFocusNode.dispose();
+    _titleController.dispose();
+    _editorFocusNode.dispose();
+    _saveStatus.dispose();
     super.dispose();
   }
 
-  void _loadPreview() {
+  // ── Note loading ────────────────────────────────────────────────────
+
+  void _loadNote() {
     final note = widget.appState.currentNote;
     if (note == null || note.id == _loadedNoteId) return;
+
+    // Force-save previous note before switching.
+    if (_loadedNoteId != null && _quillController != null) {
+      final prevId = _loadedNoteId!;
+      widget.appState.autoSaveService.forceSave(
+        noteId: prevId,
+        title: _titleController.text,
+        content: _serializeContent(),
+      );
+    }
+
+    _debounce?.cancel();
+    _hideTimer?.cancel();
+    _editPoller?.cancel();
+    _saveStatus.value = '';
+    widget.appState.autoSaveService.unwatch();
+
     _loadedNoteId = note.id;
+    _titleController.text = note.title;
 
     _quillController?.dispose();
     try {
@@ -56,10 +113,86 @@ class _NotesListPageState extends State<NotesListPage> {
       _quillController = QuillController(
         document: delta,
         selection: const TextSelection.collapsed(offset: 0),
-        readOnly: true,
+        config: _controllerConfig,
       );
     } catch (_) {
-      _quillController = QuillController.basic()..readOnly = true;
+      _quillController = QuillController.basic(config: _controllerConfig);
+    }
+
+    // Initialize snapshots for edit detection.
+    _prevContent = _serializeContent();
+    _prevTitle = _titleController.text;
+    _prevDocLength = _quillController!.document.length;
+
+    // Register with auto-save service.
+    widget.appState.autoSaveService.watch(
+      noteId: note.id,
+      getTitle: () => _titleController.text,
+      getContent: _serializeContent,
+    );
+
+    // Start polling for edits.
+    _editPoller = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) => _pollForEdits(),
+    );
+  }
+
+  // ── Edit detection & save ────────────────────────────────────────────
+
+  String _serializeContent() =>
+      jsonEncode(_quillController!.document.toDelta().toJson());
+
+  void _pollForEdits() {
+    if (!mounted || _quillController == null) return;
+    final title = _titleController.text;
+    final doc = _quillController!.document;
+
+    if (title == _prevTitle && doc.length == _prevDocLength) return;
+
+    final content = _serializeContent();
+    if (content == _prevContent && title == _prevTitle) {
+      _prevDocLength = doc.length;
+      return;
+    }
+    _prevContent = content;
+    _prevTitle = title;
+    _prevDocLength = doc.length;
+    _onUserEdit();
+  }
+
+  void _onUserEdit() {
+    if (!mounted) return;
+    _hideTimer?.cancel();
+    _saveStatus.value = '';
+    widget.appState.autoSaveService.markDirty();
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 3), _save);
+  }
+
+  Future<void> _save() async {
+    if (!mounted) return;
+    final note = widget.appState.currentNote;
+    if (note == null || _quillController == null) return;
+
+    final content = _serializeContent();
+    final title = _titleController.text;
+
+    final ok = await widget.appState.autoSaveService.forceSave(
+      noteId: note.id,
+      title: title,
+      content: content,
+    );
+
+    if (!mounted) return;
+    _prevContent = content;
+    _prevTitle = title;
+    if (ok) {
+      _saveStatus.value = 'saved';
+      _hideTimer?.cancel();
+      _hideTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) _saveStatus.value = '';
+      });
     }
   }
 
@@ -68,9 +201,9 @@ class _NotesListPageState extends State<NotesListPage> {
     final theme = Theme.of(context);
     final accentColor = widget.themeState.accentColor;
 
-    // Reload preview if note changed
+    // Reload editor if note changed
     if (widget.appState.currentNote?.id != _loadedNoteId) {
-      _loadPreview();
+      _loadNote();
     }
 
     final showPinned = widget.appState.showPinnedTab;
@@ -201,7 +334,7 @@ class _NotesListPageState extends State<NotesListPage> {
                                   accentColor: accentColor,
                                   onTap: () {
                                     widget.appState.previewNote(note);
-                                    setState(() => _loadPreview());
+                                    setState(() => _loadNote());
                                   },
                                   onPin: () =>
                                       widget.appState.togglePin(note),
@@ -590,26 +723,27 @@ class _NotesListPageState extends State<NotesListPage> {
       BuildContext context, ThemeData theme, Color accentColor) {
     final note = widget.appState.currentNote;
 
+    final isDark = theme.brightness == Brightness.dark;
+    final chipBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : Colors.grey.shade200;
+
     if (note == null || _quillController == null) {
       return GlassmorphicContainer(
         borderRadius: 20,
-        opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
+        opacity: isDark ? 0.90 : 0.92,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.edit_note_rounded,
                   size: 56,
-                  color: theme.brightness == Brightness.dark
-                      ? Colors.white30
-                      : Colors.grey.shade300),
+                  color: isDark ? Colors.white30 : Colors.grey.shade300),
               const SizedBox(height: 12),
               Text(
-                'Select a note to preview',
+                'Select a note to edit',
                 style: TextStyle(
-                  color: theme.brightness == Brightness.dark
-                      ? Colors.white54
-                      : Colors.grey.shade400,
+                  color: isDark ? Colors.white54 : Colors.grey.shade400,
                   fontSize: 15,
                 ),
               ),
@@ -621,65 +755,124 @@ class _NotesListPageState extends State<NotesListPage> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
-      opacity: theme.brightness == Brightness.dark ? 0.90 : 0.95,
+      opacity: isDark ? 0.90 : 0.95,
       padding: EdgeInsets.zero,
       child: Column(
         children: [
-          // Title + Open in editor button
+          // Title + Open in full editor button
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 0),
             child: Row(
               children: [
                 Expanded(
-                  child: Text(
-                    note.title.isEmpty ? 'Untitled' : note.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
+                  child: SizedBox(
+                    height: 40,
+                    child: TextField(
+                      controller: _titleController,
+                      onChanged: (_) {
+                        _prevTitle = _titleController.text;
+                        _onUserEdit();
+                      },
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: isDark ? Colors.white : Colors.grey.shade800,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Note title...',
+                        filled: true,
+                        fillColor: isDark
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.grey.shade50,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: chipBorder,
+                            width: 1,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                          borderSide: BorderSide(
+                            color: accentColor.withValues(alpha: 0.4),
+                            width: 1.5,
+                          ),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                        hintStyle: TextStyle(
+                          color: isDark ? Colors.white38 : Colors.grey.shade400,
+                          fontWeight: FontWeight.w500,
+                          fontSize: 16,
+                        ),
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const SizedBox(width: 8),
-                // Date
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: theme.brightness == Brightness.dark
-                        ? Colors.white.withValues(alpha: 0.1)
-                        : Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.access_time_rounded,
-                          size: 12,
-                          color: theme.brightness == Brightness.dark
-                              ? Colors.white54
-                              : Colors.grey.shade500),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${note.updatedAt.month}/${note.updatedAt.day}',
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: theme.brightness == Brightness.dark
-                                ? Colors.white54
-                                : Colors.grey.shade500),
-                      ),
-                    ],
-                  ),
+                // Save indicator
+                ValueListenableBuilder<String>(
+                  valueListenable: _saveStatus,
+                  builder: (context, status, _) {
+                    return AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      alignment: Alignment.centerLeft,
+                      child: status == 'saved'
+                          ? Container(
+                              height: 32,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.green.withValues(alpha: 0.15)
+                                    : Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.green.withValues(alpha: 0.30)
+                                      : Colors.green.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 13,
+                                    color: isDark
+                                        ? Colors.green.shade300
+                                        : Colors.green.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Saved',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark
+                                          ? Colors.green.shade300
+                                          : Colors.green.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    );
+                  },
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 8),
                 // Open in full editor
                 InkWell(
                   onTap: () => widget.appState.selectNote(note),
                   borderRadius: BorderRadius.circular(10),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                        horizontal: 10, vertical: 8),
                     decoration: BoxDecoration(
                       color: accentColor.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
@@ -691,7 +884,7 @@ class _NotesListPageState extends State<NotesListPage> {
                             size: 14, color: accentColor),
                         const SizedBox(width: 4),
                         Text(
-                          'Open Editor',
+                          'Full Editor',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
@@ -708,19 +901,17 @@ class _NotesListPageState extends State<NotesListPage> {
 
           Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
 
-          // Read-only content preview
+          // Editable content
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: QuillEditor(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: QuillEditor.basic(
                 controller: _quillController!,
-                scrollController: _quillScrollController,
-                focusNode: _previewFocusNode,
+                focusNode: _editorFocusNode,
                 config: QuillEditorConfig(
-                  placeholder: 'Empty note',
-                  padding: EdgeInsets.zero,
+                  placeholder: 'Start writing...',
+                  padding: const EdgeInsets.all(8),
                   expands: true,
-                  showCursor: true,
                   textSelectionThemeData: TextSelectionThemeData(
                     cursorColor: accentColor,
                     selectionColor: accentColor.withValues(alpha: 0.3),

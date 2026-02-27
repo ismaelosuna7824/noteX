@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
@@ -52,6 +53,11 @@ class _MarkdownPageState extends State<MarkdownPage> {
   TextEditingController? _contentController;
   String? _loadedFileId;
 
+  // ── Save indicator & debounce ──────────────────────────────────────
+  final ValueNotifier<String> _saveStatus = ValueNotifier('');
+  Timer? _debounce;
+  Timer? _hideTimer;
+
   @override
   void initState() {
     super.initState();
@@ -62,11 +68,14 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
   @override
   void dispose() {
+    _debounce?.cancel();
+    _hideTimer?.cancel();
     _forceSave();
     _mdState.autoSaveService.unwatch();
     _mdState.removeListener(_onStateChanged);
     _titleController?.dispose();
     _contentController?.dispose();
+    _saveStatus.dispose();
     super.dispose();
   }
 
@@ -79,6 +88,9 @@ class _MarkdownPageState extends State<MarkdownPage> {
     if (file == null || file.id == _loadedFileId) return;
 
     _forceSave();
+    _debounce?.cancel();
+    _hideTimer?.cancel();
+    _saveStatus.value = '';
     _loadedFileId = file.id;
 
     _titleController?.dispose();
@@ -93,6 +105,36 @@ class _MarkdownPageState extends State<MarkdownPage> {
       getTitle: () => _titleController?.text ?? '',
       getContent: () => _contentController!.text,
     );
+  }
+
+  void _onUserEdit() {
+    if (!mounted) return;
+    _hideTimer?.cancel();
+    _saveStatus.value = '';
+    _mdState.autoSaveService.markDirty();
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 3), _save);
+  }
+
+  Future<void> _save() async {
+    if (!mounted) return;
+    final fileId = _loadedFileId;
+    if (fileId == null || _contentController == null) return;
+
+    final ok = await _mdState.autoSaveService.forceSave(
+      fileId: fileId,
+      title: _titleController?.text ?? '',
+      content: _contentController!.text,
+    );
+
+    if (!mounted) return;
+    if (ok) {
+      _saveStatus.value = 'saved';
+      _hideTimer?.cancel();
+      _hideTimer = Timer(const Duration(seconds: 2), () {
+        if (mounted) _saveStatus.value = '';
+      });
+    }
   }
 
   void _forceSave() {
@@ -496,7 +538,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                 Expanded(
                   child: TextField(
                     controller: _titleController,
-                    onChanged: (_) => _mdState.autoSaveService.markDirty(),
+                    onChanged: (_) => _onUserEdit(),
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 18,
@@ -510,6 +552,60 @@ class _MarkdownPageState extends State<MarkdownPage> {
                       ),
                     ),
                   ),
+                ),
+                const SizedBox(width: 8),
+                // Save indicator
+                ValueListenableBuilder<String>(
+                  valueListenable: _saveStatus,
+                  builder: (context, status, _) {
+                    return AnimatedSize(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeInOut,
+                      alignment: Alignment.centerLeft,
+                      child: status == 'saved'
+                          ? Container(
+                              height: 32,
+                              padding:
+                                  const EdgeInsets.symmetric(horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: isDark
+                                    ? Colors.green.withValues(alpha: 0.15)
+                                    : Colors.green.shade50,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: isDark
+                                      ? Colors.green.withValues(alpha: 0.30)
+                                      : Colors.green.shade200,
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.check_circle_outline_rounded,
+                                    size: 13,
+                                    color: isDark
+                                        ? Colors.green.shade300
+                                        : Colors.green.shade600,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Saved',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w500,
+                                      color: isDark
+                                          ? Colors.green.shade300
+                                          : Colors.green.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    );
+                  },
                 ),
                 const SizedBox(width: 8),
                 // Date chip
@@ -654,7 +750,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
       padding: const EdgeInsets.all(16),
       child: TextField(
         controller: _contentController,
-        onChanged: (_) => _mdState.autoSaveService.markDirty(),
+        onChanged: (_) => _onUserEdit(),
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,

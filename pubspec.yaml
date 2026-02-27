@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.33.0+1
+version: 1.34.0+1
 
 environment:
   sdk: ^3.11.0
