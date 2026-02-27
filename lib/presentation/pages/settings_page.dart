@@ -77,7 +77,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 16),
 
-            // Two-column layout: Left = [AccentColor + BgImage], Right = [Font + Account]
+            // Two-column layout: Left = [AccentColor + BgImage + Account + About], Right = [Font + Editors]
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -247,136 +247,6 @@ class _SettingsPageState extends State<SettingsPage> {
                         accentColor: accentColor,
                         child: _buildBackgroundPicker(context, accentColor),
                       ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 16),
-
-                // ── Right column ─────────────────────────────────────
-                Expanded(
-                  child: Column(
-                    children: [
-                      // Font Family
-                      _buildSection(
-                        context,
-                        isDark: isDark,
-                        title: 'Font Family',
-                        icon: Icons.text_fields_rounded,
-                        accentColor: accentColor,
-                        child: Column(
-                          children: ThemeState.availableFonts.map((font) {
-                            final isSelected = themeState.fontFamily == font;
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: InkWell(
-                                onTap: () => themeState.setFontFamily(font),
-                                borderRadius: BorderRadius.circular(10),
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 14,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isSelected
-                                        ? accentColor.withValues(alpha: 0.08)
-                                        : innerBg,
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(
-                                      color: isSelected
-                                          ? accentColor
-                                          : innerBorder,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        font,
-                                        style: GoogleFonts.getFont(
-                                          font,
-                                          fontWeight: isSelected
-                                              ? FontWeight.w600
-                                              : FontWeight.w400,
-                                          color: isSelected
-                                              ? accentColor
-                                              : null,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                      const Spacer(),
-                                      if (isSelected)
-                                        Icon(Icons.check,
-                                            color: accentColor, size: 16),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Notes Editor
-                      _buildSection(
-                        context,
-                        isDark: isDark,
-                        title: 'Notes Editor',
-                        icon: Icons.edit_note_rounded,
-                        accentColor: accentColor,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildFontSizeSlider(
-                              isDark: isDark,
-                              accentColor: accentColor,
-                              mutedText: mutedText,
-                              value: themeState.editorFontSize,
-                              onChanged: themeState.setEditorFontSize,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildLineHeightSlider(
-                              isDark: isDark,
-                              accentColor: accentColor,
-                              mutedText: mutedText,
-                              value: themeState.editorLineHeight,
-                              onChanged: themeState.setEditorLineHeight,
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 16),
-
-                      // Markdown Editor
-                      _buildSection(
-                        context,
-                        isDark: isDark,
-                        title: 'Markdown Editor',
-                        icon: Icons.code_rounded,
-                        accentColor: accentColor,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildFontSizeSlider(
-                              isDark: isDark,
-                              accentColor: accentColor,
-                              mutedText: mutedText,
-                              value: themeState.markdownFontSize,
-                              onChanged: themeState.setMarkdownFontSize,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildLineHeightSlider(
-                              isDark: isDark,
-                              accentColor: accentColor,
-                              mutedText: mutedText,
-                              value: themeState.markdownLineHeight,
-                              onChanged: themeState.setMarkdownLineHeight,
-                            ),
-                          ],
-                        ),
-                      ),
 
                       const SizedBox(height: 16),
 
@@ -517,6 +387,136 @@ class _SettingsPageState extends State<SettingsPage> {
                         accentColor: accentColor,
                         child: _buildAboutSection(
                           context, isDark, accentColor, mutedText),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 16),
+
+                // ── Right column ─────────────────────────────────────
+                Expanded(
+                  child: Column(
+                    children: [
+                      // Font Family
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Font Family',
+                        icon: Icons.text_fields_rounded,
+                        accentColor: accentColor,
+                        child: Column(
+                          children: ThemeState.availableFonts.map((font) {
+                            final isSelected = themeState.fontFamily == font;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 6),
+                              child: InkWell(
+                                onTap: () => themeState.setFontFamily(font),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 14,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? accentColor.withValues(alpha: 0.08)
+                                        : innerBg,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? accentColor
+                                          : innerBorder,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        font,
+                                        style: GoogleFonts.getFont(
+                                          font,
+                                          fontWeight: isSelected
+                                              ? FontWeight.w600
+                                              : FontWeight.w400,
+                                          color: isSelected
+                                              ? accentColor
+                                              : null,
+                                          fontSize: 14,
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      if (isSelected)
+                                        Icon(Icons.check,
+                                            color: accentColor, size: 16),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Notes Editor
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Notes Editor',
+                        icon: Icons.edit_note_rounded,
+                        accentColor: accentColor,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildFontSizeSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.editorFontSize,
+                              onChanged: themeState.setEditorFontSize,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildLineHeightSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.editorLineHeight,
+                              onChanged: themeState.setEditorLineHeight,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Markdown Editor
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Markdown Editor',
+                        icon: Icons.code_rounded,
+                        accentColor: accentColor,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildFontSizeSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.markdownFontSize,
+                              onChanged: themeState.setMarkdownFontSize,
+                            ),
+                            const SizedBox(height: 16),
+                            _buildLineHeightSlider(
+                              isDark: isDark,
+                              accentColor: accentColor,
+                              mutedText: mutedText,
+                              value: themeState.markdownLineHeight,
+                              onChanged: themeState.setMarkdownLineHeight,
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
