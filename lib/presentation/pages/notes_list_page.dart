@@ -902,21 +902,31 @@ class _NotesListPageState extends State<NotesListPage> {
           Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
 
           // Editable content
+          // Listener ensures keyboard focus transfers on any pointer
+          // interaction so Cmd+C / Ctrl+C works on the first try
+          // (macOS requires explicit focus for shortcuts).
           Expanded(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: QuillEditor.basic(
-                controller: _quillController!,
-                focusNode: _editorFocusNode,
-                config: QuillEditorConfig(
-                  placeholder: 'Start writing...',
-                  padding: const EdgeInsets.all(8),
-                  expands: true,
-                  textSelectionThemeData: TextSelectionThemeData(
-                    cursorColor: accentColor,
-                    selectionColor: accentColor.withValues(alpha: 0.3),
+            child: Listener(
+              onPointerDown: (_) {
+                if (!_editorFocusNode.hasFocus) {
+                  _editorFocusNode.requestFocus();
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                child: QuillEditor.basic(
+                  controller: _quillController!,
+                  focusNode: _editorFocusNode,
+                  config: QuillEditorConfig(
+                    placeholder: 'Start writing...',
+                    padding: const EdgeInsets.all(8),
+                    expands: true,
+                    textSelectionThemeData: TextSelectionThemeData(
+                      cursorColor: accentColor,
+                      selectionColor: accentColor.withValues(alpha: 0.3),
+                    ),
+                    customStyles: _buildQuillStyles(theme),
                   ),
-                  customStyles: _buildQuillStyles(theme),
                 ),
               ),
             ),
