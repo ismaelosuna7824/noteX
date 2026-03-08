@@ -51,6 +51,9 @@ class AppState extends ChangeNotifier {
   String? _authErrorMessage;
   StreamSubscription<bool>? _authSub;
 
+  // Compact / sticky note mode
+  bool _isCompactMode = false;
+
   // Auto-update state
   UpdateInfo? _availableUpdate;
   bool _updateBannerDismissed = false;
@@ -117,6 +120,7 @@ class AppState extends ChangeNotifier {
   UpdateInfo? get availableUpdate => _availableUpdate;
   bool get hasUpdate => _availableUpdate != null;
   bool get showUpdateBanner => _availableUpdate != null && !_updateBannerDismissed;
+  bool get isCompactMode => _isCompactMode;
   bool get isUpdating => _isUpdating;
   double get updateProgress => _updateProgress;
   String? get updateError => _updateError;
@@ -247,6 +251,34 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Enter compact "sticky note" mode for a specific note.
+  void enterCompactMode(Note note) {
+    _currentNote = note;
+    _isCompactMode = true;
+    notifyListeners();
+  }
+
+  /// Exit compact mode and return to the full app.
+  void exitCompactMode() {
+    _isCompactMode = false;
+    _selectedPageIndex = 1; // back to notes list
+    notifyListeners();
+  }
+
+  /// Restore compact mode on startup using a saved note ID.
+  /// Called from main.dart before the first frame.
+  void restoreCompactMode(String noteId) {
+    final note = _notes.cast<Note?>().firstWhere(
+          (n) => n?.id == noteId,
+          orElse: () => null,
+        );
+    if (note != null) {
+      _currentNote = note;
+      _isCompactMode = true;
+      // notifyListeners will be called by the framework on first build.
+    }
+  }
+
   /// Update the search query and filter notes in-memory.
   void search(String query) {
     _searchQuery = query;
@@ -302,6 +334,10 @@ class AppState extends ChangeNotifier {
   Future<void> deleteNote(String noteId) async {
     await _deleteNote.execute(noteId);
     await refreshNotes();
+    // If the deleted note was in compact mode, exit compact mode.
+    if (_isCompactMode && _currentNote?.id == noteId) {
+      _isCompactMode = false;
+    }
     if (_currentNote?.id == noteId) {
       _currentNote = _notes.isNotEmpty ? _notes.first : null;
     }

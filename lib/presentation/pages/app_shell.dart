@@ -47,6 +47,11 @@ class _AppShellState extends State<AppShell> with WindowListener {
   /// Tracks the previous page index for direction-aware page transitions.
   int _previousPageIndex = 0;
 
+  // ── Compact / sticky note mode ────────────────────────────────────────────
+  bool _wasCompactMode = false;
+  Size? _fullModeSize;
+  bool _isAlwaysOnTop = false;
+
   // ── Video background player ─────────────────────────────────────────────
   Player? _bgPlayer;
   VideoController? _bgVideoController;
@@ -62,11 +67,16 @@ class _AppShellState extends State<AppShell> with WindowListener {
     windowManager.setPreventClose(true);
     _syncMaximizedState();
     widget.themeState.addListener(_syncVideoPlayer);
+    widget.appState.addListener(_onAppStateChanged);
     _syncVideoPlayer();
+    // Sync initial compact mode state (for restored sessions).
+    _wasCompactMode = widget.appState.isCompactMode;
+    _isAlwaysOnTop = widget.appState.isCompactMode;
   }
 
   @override
   void dispose() {
+    widget.appState.removeListener(_onAppStateChanged);
     widget.themeState.removeListener(_syncVideoPlayer);
     _disposeVideoPlayer();
     windowManager.removeListener(this);
@@ -78,7 +88,11 @@ class _AppShellState extends State<AppShell> with WindowListener {
     // Persist window size so it's restored on next launch.
     if (await windowManager.isMaximized()) return;
     final size = await windowManager.getSize();
-    WindowSizeStore.save(size.width, size.height);
+    if (widget.appState.isCompactMode) {
+      WindowSizeStore.saveCompact(size.width, size.height);
+    } else {
+      WindowSizeStore.save(size.width, size.height);
+    }
   }
 
   @override
@@ -86,8 +100,20 @@ class _AppShellState extends State<AppShell> with WindowListener {
     // Persist window size before closing.
     if (!await windowManager.isMaximized()) {
       final size = await windowManager.getSize();
-      await WindowSizeStore.save(size.width, size.height);
+      if (widget.appState.isCompactMode) {
+        await WindowSizeStore.saveCompact(size.width, size.height);
+      } else {
+        await WindowSizeStore.save(size.width, size.height);
+      }
     }
+
+    // Persist compact mode state so we can restore on next launch.
+    await WindowSizeStore.saveCompactState(
+      isCompact: widget.appState.isCompactMode,
+      noteId: widget.appState.isCompactMode
+          ? widget.appState.currentNote?.id
+          : null,
+    );
 
     // Clean up empty notes before closing
     await widget.appState.cleanupEmptyNotes();
@@ -121,6 +147,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
       oldWidget.themeState.removeListener(_syncVideoPlayer);
       widget.themeState.addListener(_syncVideoPlayer);
       _syncVideoPlayer();
+    }
+    if (oldWidget.appState != widget.appState) {
+      oldWidget.appState.removeListener(_onAppStateChanged);
+      widget.appState.addListener(_onAppStateChanged);
     }
   }
 
@@ -188,7 +218,14 @@ class _AppShellState extends State<AppShell> with WindowListener {
   }
 
   @override
-  void onWindowMaximize() => setState(() => _isMaximized = true);
+  void onWindowMaximize() {
+    if (widget.appState.isCompactMode) {
+      // Prevent maximize in compact mode.
+      windowManager.unmaximize();
+      return;
+    }
+    setState(() => _isMaximized = true);
+  }
 
   @override
   void onWindowUnmaximize() => setState(() => _isMaximized = false);
@@ -218,6 +255,62 @@ class _AppShellState extends State<AppShell> with WindowListener {
     } else {
       await windowManager.maximize();
     }
+  }
+
+  // ── Compact mode transitions ────────────────────────────────────────────
+
+  void _onAppStateChanged() {
+    final isCompact = widget.appState.isCompactMode;
+    if (isCompact && !_wasCompactMode) {
+      _wasCompactMode = true;
+      _applyCompactWindow();
+    } else if (!isCompact && _wasCompactMode) {
+      _wasCompactMode = false;
+      _applyFullWindow();
+    }
+  }
+
+  Future<void> _applyCompactWindow() async {
+    // Save current full-mode window size so we can restore later.
+    _fullModeSize = await windowManager.getSize();
+    await WindowSizeStore.save(_fullModeSize!.width, _fullModeSize!.height);
+
+    // Un-maximize first if needed.
+    if (_isMaximized) await windowManager.unmaximize();
+
+    // Lower minimum size and resize to compact dimensions.
+    await windowManager.setMinimumSize(const Size(300, 350));
+    final compact = await WindowSizeStore.loadCompact();
+    final w = compact?['width'] ?? 400.0;
+    final h = compact?['height'] ?? 500.0;
+    await windowManager.setSize(Size(w, h));
+
+    // Pin on top by default.
+    _isAlwaysOnTop = true;
+    await windowManager.setAlwaysOnTop(true);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _applyFullWindow() async {
+    // Persist compact size for next time.
+    final compactSize = await windowManager.getSize();
+    await WindowSizeStore.saveCompact(compactSize.width, compactSize.height);
+
+    // Unpin from top.
+    _isAlwaysOnTop = false;
+    await windowManager.setAlwaysOnTop(false);
+
+    // Restore full-mode minimum size and dimensions.
+    await windowManager.setMinimumSize(const Size(900, 600));
+    final size = _fullModeSize ?? const Size(1280, 900);
+    await windowManager.setSize(size);
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _toggleAlwaysOnTop() async {
+    _isAlwaysOnTop = !_isAlwaysOnTop;
+    await windowManager.setAlwaysOnTop(_isAlwaysOnTop);
+    if (mounted) setState(() {});
   }
 
   @override
@@ -258,104 +351,174 @@ class _AppShellState extends State<AppShell> with WindowListener {
             ),
 
             // ── Main layout ─────────────────────────────────────────
-            Column(
-              children: [
-                // Thin draggable title strip with window controls
-                _buildTitleBar(),
-
-                // Sidebar + content
-                Expanded(
-                  child: Row(
-                    children: [
-                      RepaintBoundary(
-                        child: Sidebar(
-                          selectedIndex: widget.appState.selectedPageIndex,
-                          onItemSelected: (index) {
-                            setState(
-                              () => _previousPageIndex =
-                                  widget.appState.selectedPageIndex,
-                            );
-                            widget.appState.navigateToPage(index);
-                          },
-                          accentColor: widget.themeState.accentColor,
-                        ),
-                      ),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            ListenableBuilder(
-                              listenable: widget.appState,
-                              builder: (context, _) => TopBar(
-                                appState: widget.appState,
-                                themeState: widget.themeState,
-                                userName: widget.appState.userName,
-                                avatarUrl: widget.appState.userAvatar,
-                                onProfileTap: () =>
-                                    widget.appState.navigateToPage(6),
-                              ),
-                            ),
-                            // Update banner (slides in when a new version is available)
-                            ListenableBuilder(
-                              listenable: widget.appState,
-                              builder: (context, _) {
-                                if (!widget.appState.showUpdateBanner) {
-                                  return const SizedBox.shrink();
-                                }
-                                return UpdateBanner(
-                                  update: widget.appState.availableUpdate!,
-                                  accentColor: widget.themeState.accentColor,
-                                  onDismiss:
-                                      widget.appState.dismissUpdateBanner,
-                                  appState: widget.appState,
-                                );
-                              },
-                            ),
-                            Expanded(
-                              child: AnimatedSwitcher(
-                                duration: const Duration(milliseconds: 300),
-                                transitionBuilder: (child, animation) {
-                                  final isForward =
-                                      widget.appState.selectedPageIndex >=
-                                      _previousPageIndex;
-                                  final slide =
-                                      Tween<Offset>(
-                                        begin: Offset(
-                                          0,
-                                          isForward ? 0.03 : -0.03,
-                                        ),
-                                        end: Offset.zero,
-                                      ).animate(
-                                        CurvedAnimation(
-                                          parent: animation,
-                                          curve: Curves.easeOutCubic,
-                                        ),
-                                      );
-                                  return SlideTransition(
-                                    position: slide,
-                                    child: FadeTransition(
-                                      opacity: CurvedAnimation(
-                                        parent: animation,
-                                        curve: Curves.easeIn,
-                                      ),
-                                      child: child,
-                                    ),
-                                  );
-                                },
-                                child: _buildPage(
-                                  widget.appState.selectedPageIndex,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+            widget.appState.isCompactMode
+                ? _buildCompactLayout()
+                : _buildFullLayout(),
           ],
         ),
+        ),
+      ),
+    );
+  }
+
+  // ── Full layout (normal mode) ──────────────────────────────────────────
+
+  Widget _buildFullLayout() {
+    return Column(
+      children: [
+        _buildTitleBar(),
+        Expanded(
+          child: Row(
+            children: [
+              RepaintBoundary(
+                child: Sidebar(
+                  selectedIndex: widget.appState.selectedPageIndex,
+                  onItemSelected: (index) {
+                    setState(
+                      () => _previousPageIndex =
+                          widget.appState.selectedPageIndex,
+                    );
+                    widget.appState.navigateToPage(index);
+                  },
+                  accentColor: widget.themeState.accentColor,
+                ),
+              ),
+              Expanded(
+                child: Column(
+                  children: [
+                    ListenableBuilder(
+                      listenable: widget.appState,
+                      builder: (context, _) => TopBar(
+                        appState: widget.appState,
+                        themeState: widget.themeState,
+                        userName: widget.appState.userName,
+                        avatarUrl: widget.appState.userAvatar,
+                        onProfileTap: () =>
+                            widget.appState.navigateToPage(6),
+                      ),
+                    ),
+                    ListenableBuilder(
+                      listenable: widget.appState,
+                      builder: (context, _) {
+                        if (!widget.appState.showUpdateBanner) {
+                          return const SizedBox.shrink();
+                        }
+                        return UpdateBanner(
+                          update: widget.appState.availableUpdate!,
+                          accentColor: widget.themeState.accentColor,
+                          onDismiss: widget.appState.dismissUpdateBanner,
+                          appState: widget.appState,
+                        );
+                      },
+                    ),
+                    Expanded(
+                      child: AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        transitionBuilder: (child, animation) {
+                          final isForward =
+                              widget.appState.selectedPageIndex >=
+                              _previousPageIndex;
+                          final slide = Tween<Offset>(
+                            begin: Offset(0, isForward ? 0.03 : -0.03),
+                            end: Offset.zero,
+                          ).animate(CurvedAnimation(
+                            parent: animation,
+                            curve: Curves.easeOutCubic,
+                          ));
+                          return SlideTransition(
+                            position: slide,
+                            child: FadeTransition(
+                              opacity: CurvedAnimation(
+                                parent: animation,
+                                curve: Curves.easeIn,
+                              ),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: _buildPage(
+                          widget.appState.selectedPageIndex,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ── Compact layout (sticky note mode) ──────────────────────────────────
+
+  Widget _buildCompactLayout() {
+    return Column(
+      children: [
+        _buildCompactTitleBar(),
+        Expanded(
+          child: NoteEditorPage(
+            key: const ValueKey('compact-editor'),
+            appState: widget.appState,
+            themeState: widget.themeState,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCompactTitleBar() {
+    return DragToMoveArea(
+      child: SizedBox(
+        height: 30,
+        child: Row(
+          children: [
+            const SizedBox(width: 10),
+            Icon(
+              Icons.sticky_note_2_rounded,
+              size: 14,
+              color: Colors.white.withValues(alpha: 0.6),
+            ),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                widget.appState.currentNote?.title ?? 'Sticky Note',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: Colors.white.withValues(alpha: 0.7),
+                  fontWeight: FontWeight.w500,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            // Pin on top toggle
+            _WinButton(
+              icon: _isAlwaysOnTop
+                  ? Icons.push_pin_rounded
+                  : Icons.push_pin_outlined,
+              tooltip: _isAlwaysOnTop ? 'Unpin from top' : 'Pin on top',
+              onTap: _toggleAlwaysOnTop,
+            ),
+            // Restore to full app
+            _WinButton(
+              icon: Icons.open_in_full_rounded,
+              tooltip: 'Full App',
+              onTap: () => widget.appState.exitCompactMode(),
+            ),
+            _WinButton(
+              icon: Icons.remove_rounded,
+              tooltip: 'Minimize',
+              onTap: () => windowManager.minimize(),
+            ),
+            _WinButton(
+              icon: Icons.close_rounded,
+              tooltip: 'Close',
+              onTap: () => windowManager.close(),
+              isClose: true,
+            ),
+            const SizedBox(width: 8),
+          ],
         ),
       ),
     );

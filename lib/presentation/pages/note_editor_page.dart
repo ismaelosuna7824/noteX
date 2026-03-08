@@ -271,8 +271,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       );
     }
 
+    final isCompact = widget.appState.isCompactMode;
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: isCompact
+          ? const EdgeInsets.fromLTRB(4, 0, 4, 4)
+          : const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         children: [
           // Top controls row: title + toolbar
@@ -387,6 +391,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
 
+              const SizedBox(width: 8),
+
+              // Compact ↔ full toggle
+              InkWell(
+                onTap: () => isCompact
+                    ? widget.appState.exitCompactMode()
+                    : widget.appState.enterCompactMode(note),
+                borderRadius: BorderRadius.circular(14),
+                child: Container(
+                  height: 44,
+                  width: 44,
+                  decoration: BoxDecoration(
+                    color: chipBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: chipBorder,
+                      width: 1,
+                    ),
+                  ),
+                  child: Icon(
+                    isCompact
+                        ? Icons.fullscreen_rounded
+                        : Icons.picture_in_picture_alt_outlined,
+                    size: 18,
+                    color: accentColor,
+                  ),
+                ),
+              ),
+
               // Save indicator — only shows "Saved", collapses when hidden
               ValueListenableBuilder<String>(
                 valueListenable: _saveStatus,
@@ -453,24 +486,26 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 Expanded(
                   child: Column(
                     children: [
-                      // Quill toolbar
+                      // Quill toolbar — compact mode shows only essentials.
                       Container(
                         decoration: BoxDecoration(
                           color: isDark
                               ? darkCard.withValues(alpha: 0.90)
                               : Colors.white.withValues(alpha: 0.92),
-                          borderRadius: const BorderRadius.only(
-                            topLeft: Radius.circular(20),
-                            topRight: Radius.circular(20),
+                          borderRadius: BorderRadius.only(
+                            topLeft: const Radius.circular(20),
+                            topRight: const Radius.circular(20),
+                            bottomLeft: Radius.zero,
+                            bottomRight: Radius.zero,
                           ),
                           border: Border.all(
                             color: chipBorder,
                             width: 1,
                           ),
                         ),
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
+                        padding: EdgeInsets.symmetric(
+                          horizontal: isCompact ? 4 : 8,
+                          vertical: isCompact ? 2 : 4,
                         ),
                         child: Focus(
                           canRequestFocus: false,
@@ -481,14 +516,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                 child: QuillSimpleToolbar(
                                   controller: _quillController,
                                   config: QuillSimpleToolbarConfig(
-                                    showAlignmentButtons: true,
+                                    showAlignmentButtons: !isCompact,
                                     showBackgroundColorButton: false,
                                     showClearFormat: false,
                                     showFontFamily: false,
                                     showFontSize: false,
-                                    showInlineCode: true,
-                                    showCodeBlock: true,
+                                    showInlineCode: !isCompact,
+                                    showCodeBlock: !isCompact,
                                     showListCheck: true,
+                                    showQuote: !isCompact,
+                                    showLink: !isCompact,
+                                    showStrikeThrough: !isCompact,
+                                    showSearchButton: !isCompact,
+                                    showSubscript: !isCompact,
+                                    showSuperscript: !isCompact,
+                                    showColorButton: !isCompact,
+                                    showSmallButton: !isCompact,
                                     multiRowsDisplay: false,
                                     decoration: const BoxDecoration(),
                                     buttonOptions:
@@ -510,9 +553,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                   ),
                                 ),
                               ),
-                              EditorTextControls(
-                                  themeState: widget.themeState),
-                              const SizedBox(width: 4),
+                              if (!isCompact) ...[
+                                EditorTextControls(
+                                    themeState: widget.themeState),
+                                const SizedBox(width: 4),
+                              ],
                             ],
                           ),
                         ),
@@ -552,13 +597,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               ),
                             ],
                           ),
-                          padding: const EdgeInsets.all(24),
+                          padding: EdgeInsets.all(isCompact ? 8 : 24),
                           child: QuillEditor.basic(
                             controller: _quillController,
                             focusNode: _editorFocusNode,
                             config: QuillEditorConfig(
                               placeholder: 'Start writing your thoughts...',
-                              padding: const EdgeInsets.all(8),
+                              padding: EdgeInsets.all(isCompact ? 4 : 8),
                               expands: true,
                               textSelectionThemeData: TextSelectionThemeData(
                                 cursorColor: accentColor,

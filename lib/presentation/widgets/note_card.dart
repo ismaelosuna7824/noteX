@@ -12,6 +12,7 @@ class NoteCard extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback? onDelete;
   final VoidCallback? onPin;
+  final VoidCallback? onCompactMode;
   final Color accentColor;
 
   const NoteCard({
@@ -21,6 +22,7 @@ class NoteCard extends StatefulWidget {
     required this.onTap,
     this.onDelete,
     this.onPin,
+    this.onCompactMode,
     required this.accentColor,
   });
 
@@ -96,6 +98,24 @@ class _NoteCardState extends State<NoteCard> {
                     ],
                   ),
                 ),
+
+                // Sticky note mode button
+                if (_hovered && widget.onCompactMode != null)
+                  IconButton(
+                    onPressed: widget.onCompactMode,
+                    icon: Icon(
+                      Icons.sticky_note_2_outlined,
+                      size: 18,
+                      color: Colors.grey.shade400,
+                    ),
+                    tooltip: 'Sticky Note',
+                    splashRadius: 18,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                  ),
 
                 // Sync indicator
                 _buildSyncIcon(),

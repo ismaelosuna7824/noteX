@@ -85,16 +85,39 @@ void main() async {
   final screenW = usable.width / scale;
   final screenH = usable.height / scale;
   const margin = 40.0;
-  const minW = 900.0;
-  const minH = 600.0;
 
-  // Restore persisted window size, falling back to 1280x900.
-  final saved = await WindowSizeStore.load();
-  final defaultW = saved?['width'] ?? 1280.0;
-  final defaultH = saved?['height'] ?? 900.0;
-  // Ensure it fits the current screen and respects the minimum.
-  final windowW = min(defaultW, screenW - margin).clamp(minW, screenW - margin);
-  final windowH = min(defaultH, screenH - margin).clamp(minH, screenH - margin);
+  // Check if the app was closed in compact mode.
+  final compactState = await WindowSizeStore.loadCompactState();
+  final restoreCompact = compactState != null;
+
+  double windowW;
+  double windowH;
+  double minW;
+  double minH;
+
+  if (restoreCompact) {
+    // Restore compact window size.
+    minW = 300.0;
+    minH = 350.0;
+    final compact = await WindowSizeStore.loadCompact();
+    windowW = compact?['width'] ?? 400.0;
+    windowH = compact?['height'] ?? 500.0;
+
+    // Restore compact mode in AppState.
+    final noteId = compactState['compact_note_id'] as String?;
+    if (noteId != null) {
+      appState.restoreCompactMode(noteId);
+    }
+  } else {
+    // Restore normal window size, falling back to 1280x900.
+    minW = 900.0;
+    minH = 600.0;
+    final saved = await WindowSizeStore.load();
+    final defaultW = saved?['width'] ?? 1280.0;
+    final defaultH = saved?['height'] ?? 900.0;
+    windowW = min(defaultW, screenW - margin).clamp(minW, screenW - margin);
+    windowH = min(defaultH, screenH - margin).clamp(minH, screenH - margin);
+  }
 
   final windowOptions = WindowOptions(
     size: Size(windowW, windowH),
@@ -114,7 +137,10 @@ void main() async {
     await windowManager.setAsFrameless();
     // Allow resizing and enforce a minimum window size on all platforms.
     await windowManager.setResizable(true);
-    await windowManager.setMinimumSize(const Size(900, 600));
+    await windowManager.setMinimumSize(Size(minW, minH));
+    if (restoreCompact) {
+      await windowManager.setAlwaysOnTop(true);
+    }
     await windowManager.show();
     await windowManager.focus();
   });
@@ -153,12 +179,76 @@ class WindowSizeStore {
   static Future<void> save(double width, double height) async {
     try {
       final file = await _file();
-      await file.writeAsString(jsonEncode({
-        'width': width,
-        'height': height,
-      }));
+      Map<String, dynamic> json = {};
+      if (await file.exists()) {
+        json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      }
+      json['width'] = width;
+      json['height'] = height;
+      await file.writeAsString(jsonEncode(json));
     } catch (_) {
       // Non-critical — silently ignore write failures.
+    }
+  }
+
+  static Future<Map<String, double>?> loadCompact() async {
+    try {
+      final file = await _file();
+      if (!await file.exists()) return null;
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      if (!json.containsKey('compact_width')) return null;
+      return {
+        'width': (json['compact_width'] as num).toDouble(),
+        'height': (json['compact_height'] as num).toDouble(),
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static Future<void> saveCompact(double width, double height) async {
+    try {
+      final file = await _file();
+      Map<String, dynamic> json = {};
+      if (await file.exists()) {
+        json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      }
+      json['compact_width'] = width;
+      json['compact_height'] = height;
+      await file.writeAsString(jsonEncode(json));
+    } catch (_) {}
+  }
+
+  /// Save whether the app was closed in compact mode (and which note).
+  static Future<void> saveCompactState({
+    required bool isCompact,
+    String? noteId,
+  }) async {
+    try {
+      final file = await _file();
+      Map<String, dynamic> json = {};
+      if (await file.exists()) {
+        json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      }
+      json['compact_mode'] = isCompact;
+      json['compact_note_id'] = noteId;
+      await file.writeAsString(jsonEncode(json));
+    } catch (_) {}
+  }
+
+  /// Load the compact mode state saved at last close.
+  static Future<Map<String, dynamic>?> loadCompactState() async {
+    try {
+      final file = await _file();
+      if (!await file.exists()) return null;
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      if (json['compact_mode'] != true) return null;
+      return {
+        'compact_mode': true,
+        'compact_note_id': json['compact_note_id'] as String?,
+      };
+    } catch (_) {
+      return null;
     }
   }
 }

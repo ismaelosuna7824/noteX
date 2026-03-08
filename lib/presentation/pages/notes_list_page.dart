@@ -64,11 +64,12 @@ class _NotesListPageState extends State<NotesListPage> {
     _hideTimer?.cancel();
     _editPoller?.cancel();
 
-    // Force-save current note before disposing.
-    final note = widget.appState.currentNote;
-    if (note != null && _quillController != null) {
+    // Force-save the note that is actually loaded in the editor (not
+    // necessarily currentNote, which may already point to a different note
+    // if e.g. compact mode was triggered from another card).
+    if (_loadedNoteId != null && _quillController != null) {
       widget.appState.autoSaveService.forceSave(
-        noteId: note.id,
+        noteId: _loadedNoteId!,
         title: _titleController.text,
         content: _serializeContent(),
       );
@@ -172,14 +173,14 @@ class _NotesListPageState extends State<NotesListPage> {
 
   Future<void> _save() async {
     if (!mounted) return;
-    final note = widget.appState.currentNote;
-    if (note == null || _quillController == null) return;
+    final noteId = _loadedNoteId;
+    if (noteId == null || _quillController == null) return;
 
     final content = _serializeContent();
     final title = _titleController.text;
 
     final ok = await widget.appState.autoSaveService.forceSave(
-      noteId: note.id,
+      noteId: noteId,
       title: title,
       content: content,
     );
@@ -336,6 +337,8 @@ class _NotesListPageState extends State<NotesListPage> {
                                     widget.appState.previewNote(note);
                                     setState(() => _loadNote());
                                   },
+                                  onCompactMode: () =>
+                                      widget.appState.enterCompactMode(note),
                                   onPin: () =>
                                       widget.appState.togglePin(note),
                                   onDelete: () =>
@@ -866,34 +869,28 @@ class _NotesListPageState extends State<NotesListPage> {
                   },
                 ),
                 const SizedBox(width: 8),
-                // Open in full editor
-                InkWell(
-                  onTap: () => widget.appState.selectNote(note),
-                  borderRadius: BorderRadius.circular(10),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: accentColor.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.open_in_new_rounded,
-                            size: 14, color: accentColor),
-                        const SizedBox(width: 4),
-                        Text(
-                          'Full Editor',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: accentColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+                // Sticky note mode — icon only to save space
+                IconButton(
+                  onPressed: () => widget.appState.enterCompactMode(note),
+                  icon: Icon(Icons.sticky_note_2_outlined,
+                      size: 18, color: accentColor),
+                  tooltip: 'Sticky Note',
+                  splashRadius: 16,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                ),
+                const SizedBox(width: 2),
+                // Open in full editor — icon only to save space
+                IconButton(
+                  onPressed: () => widget.appState.selectNote(note),
+                  icon: Icon(Icons.open_in_new_rounded,
+                      size: 18, color: accentColor),
+                  tooltip: 'Full Editor',
+                  splashRadius: 16,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
                 ),
               ],
             ),
