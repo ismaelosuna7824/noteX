@@ -221,14 +221,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     final accentColor = widget.themeState.accentColor;
     final note = widget.appState.currentNote;
 
-    const darkCard = Color(0xFF1A1A2E);
-    final chipBg = isDark
-        ? darkCard.withValues(alpha: 0.90)
-        : Colors.white.withValues(alpha: 0.85);
-    final chipBorder = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.grey.shade200;
-    final chipText = isDark ? Colors.white70 : Colors.grey.shade600;
+    final editorBg = widget.themeState.editorBgColor;
+    final chipBg = editorBg.withValues(alpha: 0.90);
+    final chipBorder = widget.themeState.editorBorderColor;
+    final chipText = widget.themeState.editorTextColor.withValues(alpha: 0.70);
 
     if (note == null) {
       return Center(
@@ -296,7 +292,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 15,
-                      color: isDark ? Colors.white : Colors.grey.shade800,
+                      color: widget.themeState.editorTextColor,
                     ),
                     decoration: InputDecoration(
                       hintText: 'Note title...',
@@ -326,7 +322,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         size: 20,
                       ),
                       hintStyle: TextStyle(
-                        color: isDark ? Colors.white38 : Colors.grey.shade400,
+                        color: widget.themeState.editorMutedTextColor,
                         fontWeight: FontWeight.w500,
                         fontSize: 15,
                       ),
@@ -489,9 +485,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       // Quill toolbar — compact mode shows only essentials.
                       Container(
                         decoration: BoxDecoration(
-                          color: isDark
-                              ? darkCard.withValues(alpha: 0.90)
-                              : Colors.white.withValues(alpha: 0.92),
+                          color: editorBg.withValues(alpha: 0.92),
                           borderRadius: BorderRadius.only(
                             topLeft: const Radius.circular(20),
                             topRight: const Radius.circular(20),
@@ -544,8 +538,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                           ),
                                           iconButtonUnselectedData:
                                               IconButtonData(
-                                            color:
-                                                isDark ? Colors.white70 : null,
+                                            color: widget.themeState
+                                                        .editorTextColor
+                                                        .withValues(
+                                                            alpha: 0.70),
                                           ),
                                         ),
                                       ),
@@ -567,9 +563,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       Expanded(
                         child: Container(
                           decoration: BoxDecoration(
-                            color: isDark
-                                ? darkCard.withValues(alpha: 0.90)
-                                : Colors.white,
+                            color: editorBg.withValues(alpha: 0.90),
                             borderRadius: const BorderRadius.only(
                               bottomLeft: Radius.circular(20),
                               bottomRight: Radius.circular(20),
@@ -635,7 +629,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white38 : Colors.grey.shade400,
+          color: widget.themeState.editorMutedTextColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(6, 6),
@@ -646,7 +640,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: widget.themeState.editorTextColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(6, 6),
@@ -657,7 +651,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: widget.themeState.editorTextColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(6, 6),
@@ -669,7 +663,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: widget.themeState.editorTextColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(0, 0),

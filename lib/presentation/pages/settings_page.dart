@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
@@ -13,9 +14,6 @@ import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
 import 'auth_dialog.dart';
 import '../widgets/animated_dialog.dart';
-
-/// Dark-mode card surface — same navy used across the app.
-const _kDarkCard = Color(0xFF1A1A2E);
 
 /// Settings page for theme, font, background, and auth management.
 ///
@@ -56,10 +54,12 @@ class _SettingsPageState extends State<SettingsPage> {
     final accentColor = themeState.accentColor;
 
     // Adaptive colors used in inner items (font rows, account box, etc.)
-    final innerBg =
-        isDark ? Colors.white.withValues(alpha: 0.07) : Colors.grey.shade50;
-    final innerBorder =
-        isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade200;
+    final innerBg = isDark
+        ? Colors.white.withValues(alpha: 0.07)
+        : Colors.grey.shade50;
+    final innerBorder = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.grey.shade200;
     final mutedText = isDark ? Colors.white38 : Colors.grey.shade500;
 
     return Padding(
@@ -110,8 +110,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                         themeState.setAccentColor(color),
                                     borderRadius: BorderRadius.circular(20),
                                     child: AnimatedContainer(
-                                      duration:
-                                          const Duration(milliseconds: 200),
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
                                       width: 36,
                                       height: 36,
                                       decoration: BoxDecoration(
@@ -122,98 +123,119 @@ class _SettingsPageState extends State<SettingsPage> {
                                                 color: isDark
                                                     ? Colors.white
                                                     : Colors.black87,
-                                                width: 3)
+                                                width: 3,
+                                              )
                                             : (isLight && !isDark
-                                                ? Border.all(
-                                                    color: Colors.grey.shade300,
-                                                    width: 1)
-                                                : null),
+                                                  ? Border.all(
+                                                      color:
+                                                          Colors.grey.shade300,
+                                                      width: 1,
+                                                    )
+                                                  : null),
                                         boxShadow: isSelected
                                             ? [
                                                 BoxShadow(
                                                   color: color.withValues(
-                                                      alpha: 0.5),
+                                                    alpha: 0.5,
+                                                  ),
                                                   blurRadius: 12,
                                                   spreadRadius: 2,
-                                                )
+                                                ),
                                               ]
                                             : null,
                                       ),
                                       child: isSelected
-                                          ? Icon(Icons.check,
+                                          ? Icon(
+                                              Icons.check,
                                               color: isLight
                                                   ? Colors.black87
                                                   : Colors.white,
-                                              size: 16)
+                                              size: 16,
+                                            )
                                           : null,
                                     ),
                                   );
                                 }),
                                 // White accent — only visible in dark mode
                                 if (isDark)
-                                  Builder(builder: (context) {
-                                    const whiteColor =
-                                        ThemeState.darkModeWhiteAccent;
-                                    final isSelected =
-                                        themeState.accentColor == whiteColor;
-                                    return InkWell(
-                                      onTap: () =>
-                                          themeState.setAccentColor(whiteColor),
-                                      borderRadius: BorderRadius.circular(20),
-                                      child: AnimatedContainer(
-                                        duration:
-                                            const Duration(milliseconds: 200),
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: whiteColor,
-                                          shape: BoxShape.circle,
-                                          border: isSelected
-                                              ? Border.all(
-                                                  color: Colors.white,
-                                                  width: 3)
-                                              : Border.all(
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.3),
-                                                  width: 1),
-                                          boxShadow: isSelected
-                                              ? [
-                                                  BoxShadow(
-                                                    color: whiteColor.withValues(
-                                                        alpha: 0.5),
-                                                    blurRadius: 12,
-                                                    spreadRadius: 2,
+                                  Builder(
+                                    builder: (context) {
+                                      const whiteColor =
+                                          ThemeState.darkModeWhiteAccent;
+                                      final isSelected =
+                                          themeState.accentColor == whiteColor;
+                                      return InkWell(
+                                        onTap: () => themeState.setAccentColor(
+                                          whiteColor,
+                                        ),
+                                        borderRadius: BorderRadius.circular(20),
+                                        child: AnimatedContainer(
+                                          duration: const Duration(
+                                            milliseconds: 200,
+                                          ),
+                                          width: 36,
+                                          height: 36,
+                                          decoration: BoxDecoration(
+                                            color: whiteColor,
+                                            shape: BoxShape.circle,
+                                            border: isSelected
+                                                ? Border.all(
+                                                    color: Colors.white,
+                                                    width: 3,
                                                   )
-                                                ]
+                                                : Border.all(
+                                                    color: Colors.white
+                                                        .withValues(alpha: 0.3),
+                                                    width: 1,
+                                                  ),
+                                            boxShadow: isSelected
+                                                ? [
+                                                    BoxShadow(
+                                                      color: whiteColor
+                                                          .withValues(
+                                                            alpha: 0.5,
+                                                          ),
+                                                      blurRadius: 12,
+                                                      spreadRadius: 2,
+                                                    ),
+                                                  ]
+                                                : null,
+                                          ),
+                                          child: isSelected
+                                              ? const Icon(
+                                                  Icons.check,
+                                                  color: Colors.black87,
+                                                  size: 16,
+                                                )
                                               : null,
                                         ),
-                                        child: isSelected
-                                            ? const Icon(Icons.check,
-                                                color: Colors.black87,
-                                                size: 16)
-                                            : null,
-                                      ),
-                                    );
-                                  }),
+                                      );
+                                    },
+                                  ),
                               ],
                             ),
                             const SizedBox(height: 10),
                             // Info badge: colors auto-adapt when a bg is chosen
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 6),
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: accentColor.withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(8),
                                 border: Border.all(
-                                    color:
-                                        accentColor.withValues(alpha: 0.2)),
+                                  color: accentColor.withValues(alpha: 0.2),
+                                ),
                               ),
                               child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(Icons.auto_awesome_rounded,
-                                      size: 13, color: accentColor),
+                                  Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 13,
+                                    color: accentColor,
+                                  ),
                                   const SizedBox(width: 6),
                                   Text(
                                     'Auto-adapts to your background',
@@ -232,16 +254,266 @@ class _SettingsPageState extends State<SettingsPage> {
 
                       const SizedBox(height: 16),
 
+                      // Editor Background Color
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Theme Background',
+                        icon: Icons.format_paint_rounded,
+                        accentColor: accentColor,
+                        child: Builder(
+                          builder: (context) {
+                            final presets = isDark
+                                ? ThemeState.darkBgPresets
+                                : ThemeState.lightBgPresets;
+                            final currentBg = themeState.editorBgColor;
+                            return Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                ...presets.map((color) {
+                                  final isSelected = currentBg == color;
+                                  final isLight =
+                                      color.computeLuminance() > 0.6;
+                                  return InkWell(
+                                    onTap: () =>
+                                        themeState.setEditorBgColor(color),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: isSelected
+                                            ? Border.all(
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : Colors.black87,
+                                                width: 3,
+                                              )
+                                            : Border.all(
+                                                color: isLight
+                                                    ? Colors.grey.shade400
+                                                    : Colors.white.withValues(
+                                                        alpha: 0.20,
+                                                      ),
+                                                width: 1.5,
+                                              ),
+                                        boxShadow: isSelected
+                                            ? [
+                                                BoxShadow(
+                                                  color: accentColor.withValues(
+                                                    alpha: 0.5,
+                                                  ),
+                                                  blurRadius: 12,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: isSelected
+                                          ? Icon(
+                                              Icons.check,
+                                              color: isLight
+                                                  ? Colors.black87
+                                                  : Colors.white,
+                                              size: 16,
+                                            )
+                                          : null,
+                                    ),
+                                  );
+                                }),
+                                // Custom color button
+                                _buildCustomColorSwatch(
+                                  context,
+                                  currentColor: currentBg,
+                                  presets: presets,
+                                  accentColor: accentColor,
+                                  isDark: isDark,
+                                  onColorPicked: (c) =>
+                                      themeState.setEditorBgColor(c),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Sidebar Icon Color
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Sidebar Icons',
+                        icon: Icons.interests_rounded,
+                        accentColor: accentColor,
+                        child: Builder(
+                          builder: (context) {
+                            final currentIcon = themeState.sidebarIconColor;
+                            return Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                // Auto option
+                                InkWell(
+                                  onTap: () =>
+                                      themeState.setSidebarIconColor(null),
+                                  borderRadius: BorderRadius.circular(20),
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 200),
+                                    width: 36,
+                                    height: 36,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: isDark
+                                          ? Colors.white.withValues(alpha: 0.10)
+                                          : Colors.grey.shade200,
+                                      border:
+                                          themeState.sidebarIconColorOverride ==
+                                              null
+                                          ? Border.all(
+                                              color: isDark
+                                                  ? Colors.white
+                                                  : Colors.black87,
+                                              width: 3,
+                                            )
+                                          : Border.all(
+                                              color: isDark
+                                                  ? Colors.white.withValues(
+                                                      alpha: 0.15,
+                                                    )
+                                                  : Colors.grey.shade400,
+                                              width: 1,
+                                            ),
+                                      boxShadow:
+                                          themeState.sidebarIconColorOverride ==
+                                              null
+                                          ? [
+                                              BoxShadow(
+                                                color: accentColor.withValues(
+                                                  alpha: 0.5,
+                                                ),
+                                                blurRadius: 12,
+                                                spreadRadius: 2,
+                                              ),
+                                            ]
+                                          : null,
+                                    ),
+                                    child:
+                                        themeState.sidebarIconColorOverride ==
+                                            null
+                                        ? Icon(
+                                            Icons.auto_awesome_rounded,
+                                            size: 14,
+                                            color: isDark
+                                                ? Colors.white70
+                                                : Colors.grey.shade600,
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                                ...ThemeState.sidebarIconPresets.map((color) {
+                                  final isSelected =
+                                      themeState.sidebarIconColorOverride ==
+                                      color;
+                                  final isLight =
+                                      color.computeLuminance() > 0.6;
+                                  return InkWell(
+                                    onTap: () =>
+                                        themeState.setSidebarIconColor(color),
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 200,
+                                      ),
+                                      width: 36,
+                                      height: 36,
+                                      decoration: BoxDecoration(
+                                        color: color,
+                                        shape: BoxShape.circle,
+                                        border: isSelected
+                                            ? Border.all(
+                                                color: isDark
+                                                    ? Colors.white
+                                                    : Colors.black87,
+                                                width: 3,
+                                              )
+                                            : (isLight
+                                                  ? Border.all(
+                                                      color:
+                                                          Colors.grey.shade400,
+                                                      width: 1,
+                                                    )
+                                                  : Border.all(
+                                                      color: Colors.white
+                                                          .withValues(
+                                                            alpha: 0.15,
+                                                          ),
+                                                      width: 1,
+                                                    )),
+                                        boxShadow: isSelected
+                                            ? [
+                                                BoxShadow(
+                                                  color: accentColor.withValues(
+                                                    alpha: 0.5,
+                                                  ),
+                                                  blurRadius: 12,
+                                                  spreadRadius: 2,
+                                                ),
+                                              ]
+                                            : null,
+                                      ),
+                                      child: isSelected
+                                          ? Icon(
+                                              Icons.check,
+                                              color: isLight
+                                                  ? Colors.black87
+                                                  : Colors.white,
+                                              size: 16,
+                                            )
+                                          : null,
+                                    ),
+                                  );
+                                }),
+                                // Custom color button
+                                _buildCustomColorSwatch(
+                                  context,
+                                  currentColor:
+                                      themeState.sidebarIconColorOverride ??
+                                      themeState.sidebarIconColor,
+                                  presets: ThemeState.sidebarIconPresets,
+                                  accentColor: accentColor,
+                                  isDark: isDark,
+                                  onColorPicked: (c) =>
+                                      themeState.setSidebarIconColor(c),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
                       // Background Image / Video
                       _buildSection(
                         context,
                         isDark: isDark,
-                        title: ThemeState.isVideoFile(
-                                themeState.backgroundImagePath)
+                        title:
+                            ThemeState.isVideoFile(
+                              themeState.backgroundImagePath,
+                            )
                             ? 'Background Video'
                             : 'Background Image',
-                        icon: ThemeState.isVideoFile(
-                                themeState.backgroundImagePath)
+                        icon:
+                            ThemeState.isVideoFile(
+                              themeState.backgroundImagePath,
+                            )
                             ? Icons.videocam_rounded
                             : Icons.image_rounded,
                         accentColor: accentColor,
@@ -270,8 +542,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                 children: [
                                   CircleAvatar(
                                     radius: 28,
-                                    backgroundColor:
-                                        accentColor.withValues(alpha: 0.15),
+                                    backgroundColor: accentColor.withValues(
+                                      alpha: 0.15,
+                                    ),
                                     child: Icon(
                                       appState.isAuthenticated
                                           ? Icons.person_rounded
@@ -285,9 +558,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                     appState.isAuthenticated
                                         ? 'Hi, ${appState.userName ?? 'User'}'
                                         : 'Not signed in',
-                                    style: theme.textTheme.titleSmall
-                                        ?.copyWith(
-                                            fontWeight: FontWeight.w600),
+                                    style: theme.textTheme.titleSmall?.copyWith(
+                                      fontWeight: FontWeight.w600,
+                                    ),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -295,8 +568,9 @@ class _SettingsPageState extends State<SettingsPage> {
                                         ? 'Notes synced to cloud'
                                         : 'Sign in to sync across devices',
                                     style: TextStyle(
-                                        color: mutedText,
-                                        fontSize: 12),
+                                      color: mutedText,
+                                      fontSize: 12,
+                                    ),
                                     textAlign: TextAlign.center,
                                   ),
                                   const SizedBox(height: 14),
@@ -304,13 +578,12 @@ class _SettingsPageState extends State<SettingsPage> {
                                     width: double.infinity,
                                     child: appState.isAuthenticated
                                         ? OutlinedButton.icon(
-                                            onPressed: () =>
-                                                appState.signOut(),
+                                            onPressed: () => appState.signOut(),
                                             icon: const Icon(
-                                                Icons.logout_rounded,
-                                                size: 16),
-                                            label:
-                                                const Text('Sign Out'),
+                                              Icons.logout_rounded,
+                                              size: 16,
+                                            ),
+                                            label: const Text('Sign Out'),
                                             style: OutlinedButton.styleFrom(
                                               shape: RoundedRectangleBorder(
                                                 borderRadius:
@@ -318,21 +591,26 @@ class _SettingsPageState extends State<SettingsPage> {
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                      vertical: 12),
+                                                    vertical: 12,
+                                                  ),
                                             ),
                                           )
                                         : FilledButton.icon(
                                             onPressed: () {
                                               showAnimatedDialog(
                                                 context: context,
-                                                builder: (_) => AuthDialog(appState: appState),
+                                                builder: (_) => AuthDialog(
+                                                  appState: appState,
+                                                ),
                                               );
                                             },
                                             icon: const Icon(
-                                                Icons.login_rounded,
-                                                size: 16),
+                                              Icons.login_rounded,
+                                              size: 16,
+                                            ),
                                             label: const Text(
-                                                'Sign in / Register'),
+                                              'Sign in / Register',
+                                            ),
                                             style: FilledButton.styleFrom(
                                               backgroundColor: accentColor,
                                               shape: RoundedRectangleBorder(
@@ -341,7 +619,8 @@ class _SettingsPageState extends State<SettingsPage> {
                                               ),
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                      vertical: 12),
+                                                    vertical: 12,
+                                                  ),
                                             ),
                                           ),
                                   ),
@@ -357,15 +636,19 @@ class _SettingsPageState extends State<SettingsPage> {
                                 border: Border.all(color: innerBorder),
                               ),
                               child: SwitchListTile(
-                                title: const Text('Dark Mode',
-                                    style: TextStyle(fontSize: 14)),
-                                subtitle: Text('Toggle dark theme',
-                                    style: TextStyle(
-                                        fontSize: 12,
-                                        color: mutedText)),
+                                title: const Text(
+                                  'Dark Mode',
+                                  style: TextStyle(fontSize: 14),
+                                ),
+                                subtitle: Text(
+                                  'Toggle dark theme',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: mutedText,
+                                  ),
+                                ),
                                 value: themeState.isDarkMode,
-                                onChanged: (_) =>
-                                    themeState.toggleDarkMode(),
+                                onChanged: (_) => themeState.toggleDarkMode(),
                                 activeTrackColor: accentColor,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
@@ -386,7 +669,11 @@ class _SettingsPageState extends State<SettingsPage> {
                         icon: Icons.info_outline_rounded,
                         accentColor: accentColor,
                         child: _buildAboutSection(
-                          context, isDark, accentColor, mutedText),
+                          context,
+                          isDark,
+                          accentColor,
+                          mutedText,
+                        ),
                       ),
                     ],
                   ),
@@ -446,8 +733,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                       ),
                                       const Spacer(),
                                       if (isSelected)
-                                        Icon(Icons.check,
-                                            color: accentColor, size: 16),
+                                        Icon(
+                                          Icons.check,
+                                          color: accentColor,
+                                          size: 16,
+                                        ),
                                     ],
                                   ),
                                 ),
@@ -585,17 +875,18 @@ class _SettingsPageState extends State<SettingsPage> {
             decoration: BoxDecoration(
               color: accentColor.withValues(alpha: 0.08),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: accentColor.withValues(alpha: 0.2),
-              ),
+              border: Border.all(color: accentColor.withValues(alpha: 0.2)),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    Icon(Icons.system_update_rounded,
-                        size: 16, color: accentColor),
+                    Icon(
+                      Icons.system_update_rounded,
+                      size: 16,
+                      color: accentColor,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       'v${update.version} available',
@@ -631,7 +922,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     Text(
                       appState.updateError!,
                       style: const TextStyle(
-                          fontSize: 11, color: Colors.redAccent),
+                        fontSize: 11,
+                        color: Colors.redAccent,
+                      ),
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -647,8 +940,10 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         padding: const EdgeInsets.symmetric(vertical: 10),
                       ),
-                      label: const Text('Update Now',
-                          style: TextStyle(fontSize: 12)),
+                      label: const Text(
+                        'Update Now',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                   ),
                 ],
@@ -688,7 +983,8 @@ class _SettingsPageState extends State<SettingsPage> {
           child: InkWell(
             onTap: () async {
               final uri = Uri.parse(
-                  'https://github.com/${AppConfig.githubOwner}/${AppConfig.githubRepo}');
+                'https://github.com/${AppConfig.githubOwner}/${AppConfig.githubRepo}',
+              );
               if (await canLaunchUrl(uri)) {
                 await launchUrl(uri, mode: LaunchMode.externalApplication);
               }
@@ -699,8 +995,7 @@ class _SettingsPageState extends State<SettingsPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.open_in_new_rounded,
-                      size: 13, color: mutedText),
+                  Icon(Icons.open_in_new_rounded, size: 13, color: mutedText),
                   const SizedBox(width: 6),
                   Text(
                     'View on GitHub',
@@ -716,6 +1011,167 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         ),
       ],
+    );
+  }
+
+  // ── Custom color swatch button ─────────────────────────────────────────────
+
+  /// A rainbow gradient circle that opens [_showCustomColorPicker].
+  /// Shows the current custom color if it's not one of [presets].
+  Widget _buildCustomColorSwatch(
+    BuildContext context, {
+    required Color currentColor,
+    required List<Color> presets,
+    required Color accentColor,
+    required bool isDark,
+    required ValueChanged<Color> onColorPicked,
+  }) {
+    final isCustomActive = !presets.contains(currentColor);
+    return InkWell(
+      onTap: () async {
+        final result = await _showCustomColorPicker(
+          context,
+          initialColor: currentColor,
+          accentColor: accentColor,
+          isDark: isDark,
+        );
+        if (result != null) onColorPicked(result);
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: isCustomActive
+              ? null
+              : const SweepGradient(
+                  colors: [
+                    Color(0xFFFF0000),
+                    Color(0xFFFFFF00),
+                    Color(0xFF00FF00),
+                    Color(0xFF00FFFF),
+                    Color(0xFF0000FF),
+                    Color(0xFFFF00FF),
+                    Color(0xFFFF0000),
+                  ],
+                ),
+          color: isCustomActive ? currentColor : null,
+          border: isCustomActive
+              ? Border.all(
+                  color: isDark ? Colors.white : Colors.black87,
+                  width: 3,
+                )
+              : Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.20)
+                      : Colors.grey.shade400,
+                  width: 1.5,
+                ),
+          boxShadow: isCustomActive
+              ? [
+                  BoxShadow(
+                    color: accentColor.withValues(alpha: 0.5),
+                    blurRadius: 12,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : null,
+        ),
+        child: isCustomActive
+            ? Icon(
+                Icons.check,
+                color: currentColor.computeLuminance() > 0.5
+                    ? Colors.black87
+                    : Colors.white,
+                size: 16,
+              )
+            : null,
+      ),
+    );
+  }
+
+  // ── Custom color picker dialog ─────────────────────────────────────────────
+
+  /// Opens an HSV color picker dialog and returns the chosen color, or null if
+  /// the user dismissed without selecting.
+  Future<Color?> _showCustomColorPicker(
+    BuildContext context, {
+    required Color initialColor,
+    required Color accentColor,
+    required bool isDark,
+  }) async {
+    Color picked = initialColor;
+    return showDialog<Color>(
+      context: context,
+      builder: (ctx) {
+        final bg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
+        return StatefulBuilder(
+          builder: (ctx, setDialogState) {
+            return Dialog(
+              backgroundColor: bg,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'Custom Color',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        color: isDark ? Colors.white : Colors.grey.shade800,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    ColorPicker(
+                      pickerColor: picked,
+                      onColorChanged: (c) => setDialogState(() => picked = c),
+                      colorPickerWidth: 300,
+                      pickerAreaHeightPercent: 0.7,
+                      enableAlpha: false,
+                      displayThumbColor: true,
+                      hexInputBar: true,
+                      labelTypes: const [],
+                      pickerAreaBorderRadius: const BorderRadius.all(
+                        Radius.circular(12),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(null),
+                          child: Text(
+                            'Cancel',
+                            style: TextStyle(color: Colors.grey.shade500),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: accentColor,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () => Navigator.of(ctx).pop(picked),
+                          child: const Text('Apply'),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -735,10 +1191,7 @@ class _SettingsPageState extends State<SettingsPage> {
           child: ScrollConfiguration(
             // Enable mouse-drag scrolling on desktop
             behavior: ScrollConfiguration.of(context).copyWith(
-              dragDevices: {
-                PointerDeviceKind.touch,
-                PointerDeviceKind.mouse,
-              },
+              dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
             ),
             child: Scrollbar(
               thumbVisibility: true,
@@ -748,61 +1201,71 @@ class _SettingsPageState extends State<SettingsPage> {
                 child: ListView.separated(
                   controller: _bgScrollController,
                   scrollDirection: Axis.horizontal,
-                  itemCount: ThemeState.presetBackgrounds.length +
+                  itemCount:
+                      ThemeState.presetBackgrounds.length +
                       ThemeState.remoteVideos.length +
                       1,
                   separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, index) {
-              // ── Slot 0: "No background" ──────────────────────────────
-              if (index == 0) {
-                return _BgThumbnail(
-                  isSelected: currentPath == null,
-                  accentColor: accentColor,
-                  onTap: () => themeState.setBackgroundImage(null),
-                  child: Container(
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                        colors: [Color(0xFF0F1120), Color(0xFF1A1D2E)],
-                      ),
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.hide_image_outlined,
-                          color: Colors.white38, size: 22),
-                    ),
-                  ),
-                );
-              }
+                    // ── Slot 0: "No background" ──────────────────────────────
+                    if (index == 0) {
+                      return _BgThumbnail(
+                        isSelected: currentPath == null,
+                        accentColor: accentColor,
+                        onTap: () => themeState.setBackgroundImage(null),
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [Color(0xFF0F1120), Color(0xFF1A1D2E)],
+                            ),
+                          ),
+                          child: const Center(
+                            child: Icon(
+                              Icons.hide_image_outlined,
+                              color: Colors.white38,
+                              size: 22,
+                            ),
+                          ),
+                        ),
+                      );
+                    }
 
-              // ── Slots 1…N: bundled images ────────────────────────────
-              if (index <= ThemeState.presetBackgrounds.length) {
-                final assetPath = ThemeState.presetBackgrounds[index - 1];
-                return _BgThumbnail(
-                  isSelected: currentPath == assetPath,
-                  accentColor: accentColor,
-                  onTap: () => themeState.setBackgroundImage(assetPath),
-                  child: Image.asset(assetPath, fit: BoxFit.cover, cacheWidth: 240),
-                );
-              }
+                    // ── Slots 1…N: bundled images ────────────────────────────
+                    if (index <= ThemeState.presetBackgrounds.length) {
+                      final assetPath = ThemeState.presetBackgrounds[index - 1];
+                      return _BgThumbnail(
+                        isSelected: currentPath == assetPath,
+                        accentColor: accentColor,
+                        onTap: () => themeState.setBackgroundImage(assetPath),
+                        child: Image.asset(
+                          assetPath,
+                          fit: BoxFit.cover,
+                          cacheWidth: 240,
+                        ),
+                      );
+                    }
 
-              // ── Remaining slots: remote videos ───────────────────────
-              final bg = ThemeState.remoteVideos[
-                  index - ThemeState.presetBackgrounds.length - 1];
-              return _RemoteVideoThumbnail(
-                key: ValueKey(bg.filename),
-                bg: bg,
-                currentBackgroundPath: currentPath,
-                accentColor: accentColor,
-                onSelect: (localPath) =>
-                    themeState.setBackgroundImage(localPath),
-              );
-            },
-                ),   // ListView.separated
-              ),     // Padding
-            ),       // Scrollbar
-          ),         // ScrollConfiguration
-        ),           // SizedBox
+                    // ── Remaining slots: remote videos ───────────────────────
+                    final bg =
+                        ThemeState.remoteVideos[index -
+                            ThemeState.presetBackgrounds.length -
+                            1];
+                    return _RemoteVideoThumbnail(
+                      key: ValueKey(bg.filename),
+                      bg: bg,
+                      currentBackgroundPath: currentPath,
+                      accentColor: accentColor,
+                      onSelect: (localPath) =>
+                          themeState.setBackgroundImage(localPath),
+                    );
+                  },
+                ), // ListView.separated
+              ), // Padding
+            ), // Scrollbar
+          ), // ScrollConfiguration
+        ), // SizedBox
 
         const SizedBox(height: 12),
 
@@ -858,7 +1321,9 @@ class _SettingsPageState extends State<SettingsPage> {
                       bottom: 0,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: const BoxDecoration(
                           gradient: LinearGradient(
                             begin: Alignment.topCenter,
@@ -868,14 +1333,15 @@ class _SettingsPageState extends State<SettingsPage> {
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.videocam_rounded,
-                                color: accentColor, size: 14),
+                            Icon(
+                              Icons.videocam_rounded,
+                              color: accentColor,
+                              size: 14,
+                            ),
                             const SizedBox(width: 6),
                             Expanded(
                               child: Text(
-                                currentPath
-                                    .split(Platform.pathSeparator)
-                                    .last,
+                                currentPath.split(Platform.pathSeparator).last,
                                 style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 11,
@@ -923,9 +1389,7 @@ class _SettingsPageState extends State<SettingsPage> {
                     color: Colors.grey.shade100,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Center(
-                    child: Icon(Icons.broken_image_rounded),
-                  ),
+                  child: const Center(child: Icon(Icons.broken_image_rounded)),
                 ),
               ),
             ),
@@ -952,8 +1416,9 @@ class _SettingsPageState extends State<SettingsPage> {
                     thumbColor: accentColor,
                     overlayColor: accentColor.withValues(alpha: 0.12),
                     trackHeight: 4,
-                    thumbShape:
-                        const RoundSliderThumbShape(enabledThumbRadius: 7),
+                    thumbShape: const RoundSliderThumbShape(
+                      enabledThumbRadius: 7,
+                    ),
                   ),
                   child: Slider(
                     value: themeState.backgroundVolume,
@@ -1007,8 +1472,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const Spacer(),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: accentColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
@@ -1032,8 +1496,7 @@ class _SettingsPageState extends State<SettingsPage> {
             thumbColor: accentColor,
             overlayColor: accentColor.withValues(alpha: 0.12),
             trackHeight: 4,
-            thumbShape:
-                const RoundSliderThumbShape(enabledThumbRadius: 7),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
           ),
           child: Slider(
             value: value,
@@ -1046,10 +1509,8 @@ class _SettingsPageState extends State<SettingsPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('10px',
-                style: TextStyle(fontSize: 10, color: mutedText)),
-            Text('24px',
-                style: TextStyle(fontSize: 10, color: mutedText)),
+            Text('10px', style: TextStyle(fontSize: 10, color: mutedText)),
+            Text('24px', style: TextStyle(fontSize: 10, color: mutedText)),
           ],
         ),
       ],
@@ -1067,8 +1528,11 @@ class _SettingsPageState extends State<SettingsPage> {
       children: [
         Row(
           children: [
-            Icon(Icons.format_line_spacing_rounded,
-                size: 18, color: accentColor),
+            Icon(
+              Icons.format_line_spacing_rounded,
+              size: 18,
+              color: accentColor,
+            ),
             const SizedBox(width: 8),
             Text(
               'Line Spacing',
@@ -1080,8 +1544,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const Spacer(),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: accentColor.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(6),
@@ -1105,8 +1568,7 @@ class _SettingsPageState extends State<SettingsPage> {
             thumbColor: accentColor,
             overlayColor: accentColor.withValues(alpha: 0.12),
             trackHeight: 4,
-            thumbShape:
-                const RoundSliderThumbShape(enabledThumbRadius: 7),
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
           ),
           child: Slider(
             value: value,
@@ -1119,10 +1581,8 @@ class _SettingsPageState extends State<SettingsPage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('1.0',
-                style: TextStyle(fontSize: 10, color: mutedText)),
-            Text('2.5',
-                style: TextStyle(fontSize: 10, color: mutedText)),
+            Text('1.0', style: TextStyle(fontSize: 10, color: mutedText)),
+            Text('2.5', style: TextStyle(fontSize: 10, color: mutedText)),
           ],
         ),
       ],
@@ -1141,14 +1601,9 @@ class _SettingsPageState extends State<SettingsPage> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: isDark
-            ? _kDarkCard.withValues(alpha: 0.90)
-            : Colors.white.withValues(alpha: 0.92),
+        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.92),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade200,
-          width: 1,
-        ),
+        border: Border.all(color: themeState.editorBorderColor, width: 1),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: isDark ? 0.25 : 0.04),
@@ -1174,9 +1629,9 @@ class _SettingsPageState extends State<SettingsPage> {
               const SizedBox(width: 10),
               Text(
                 title,
-                style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
               ),
             ],
           ),
@@ -1209,7 +1664,9 @@ class _SettingsPageState extends State<SettingsPage> {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Could not open file picker. Try selecting a preset background instead.'),
+            content: Text(
+              'Could not open file picker. Try selecting a preset background instead.',
+            ),
           ),
         );
       }
@@ -1252,7 +1709,7 @@ class _BgThumbnail extends StatelessWidget {
                     color: accentColor.withValues(alpha: 0.35),
                     blurRadius: 10,
                     spreadRadius: 1,
-                  )
+                  ),
                 ]
               : null,
         ),
@@ -1273,8 +1730,11 @@ class _BgThumbnail extends StatelessWidget {
                       color: accentColor,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.check,
-                        color: Colors.white, size: 10),
+                    child: const Icon(
+                      Icons.check,
+                      color: Colors.white,
+                      size: 10,
+                    ),
                   ),
                 ),
             ],
@@ -1374,8 +1834,8 @@ class _RemoteVideoThumbnailState extends State<_RemoteVideoThumbnail> {
     }
   }
 
-  bool get _isSelected => _localPath != null &&
-      widget.currentBackgroundPath == _localPath;
+  bool get _isSelected =>
+      _localPath != null && widget.currentBackgroundPath == _localPath;
 
   @override
   Widget build(BuildContext context) {
@@ -1461,8 +1921,11 @@ class _RemoteVideoThumbnailState extends State<_RemoteVideoThumbnail> {
                     color: Colors.black54,
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.download_rounded,
-                      color: Colors.white, size: 16),
+                  child: const Icon(
+                    Icons.download_rounded,
+                    color: Colors.white,
+                    size: 16,
+                  ),
                 ),
                 const SizedBox(height: 3),
                 Padding(
@@ -1488,8 +1951,7 @@ class _RemoteVideoThumbnailState extends State<_RemoteVideoThumbnail> {
     }
 
     // ── Selection border + tap ─────────────────────────────────────────
-    final borderColor =
-        _isSelected ? widget.accentColor : Colors.transparent;
+    final borderColor = _isSelected ? widget.accentColor : Colors.transparent;
 
     return GestureDetector(
       onTap: _downloaded ? () => widget.onSelect(_localPath!) : _download,

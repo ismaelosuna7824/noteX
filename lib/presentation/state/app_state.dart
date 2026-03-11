@@ -267,7 +267,9 @@ class AppState extends ChangeNotifier {
 
   /// Restore compact mode on startup using a saved note ID.
   /// Called from main.dart before the first frame.
-  void restoreCompactMode(String noteId) {
+  /// Returns true if the note was found and compact mode was restored,
+  /// false if the note no longer exists (e.g. it was deleted as empty).
+  bool restoreCompactMode(String noteId) {
     final note = _notes.cast<Note?>().firstWhere(
           (n) => n?.id == noteId,
           orElse: () => null,
@@ -276,7 +278,9 @@ class AppState extends ChangeNotifier {
       _currentNote = note;
       _isCompactMode = true;
       // notifyListeners will be called by the framework on first build.
+      return true;
     }
+    return false;
   }
 
   /// Update the search query and filter notes in-memory.

@@ -381,6 +381,8 @@ class _AppShellState extends State<AppShell> with WindowListener {
                     widget.appState.navigateToPage(index);
                   },
                   accentColor: widget.themeState.accentColor,
+                  editorBgColor: widget.themeState.editorBgColor,
+                  sidebarIconColor: widget.themeState.sidebarIconColor,
                 ),
               ),
               Expanded(

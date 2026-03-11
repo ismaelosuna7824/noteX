@@ -14,6 +14,7 @@ class NoteCard extends StatefulWidget {
   final VoidCallback? onPin;
   final VoidCallback? onCompactMode;
   final Color accentColor;
+  final Color? editorBgColor;
 
   const NoteCard({
     super.key,
@@ -24,6 +25,7 @@ class NoteCard extends StatefulWidget {
     this.onPin,
     this.onCompactMode,
     required this.accentColor,
+    this.editorBgColor,
   });
 
   @override
@@ -48,6 +50,7 @@ class _NoteCardState extends State<NoteCard> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           borderRadius: 16,
+          color: widget.editorBgColor,
           opacity: widget.isSelected ? 0.25 : (_hovered ? 0.18 : 0.12),
           blur: widget.isSelected ? 14 : (_hovered ? 10 : 8),
           border: widget.isSelected

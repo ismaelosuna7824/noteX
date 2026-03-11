@@ -551,6 +551,12 @@ LazyDatabase _openConnection() {
     final dbFolder = Directory(p.join(dir.path, 'NoteX'));
     if (!await dbFolder.exists()) {
       await dbFolder.create(recursive: true);
+      // Short delay after creating the directory for the first time.
+      // On some Windows machines antivirus or cloud-sync (OneDrive) briefly
+      // locks newly created folders, causing the subsequent SQLite open to fail.
+      if (Platform.isWindows) {
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
     }
     final file = File(p.join(dbFolder.path, 'notex.sqlite'));
     return NativeDatabase.createInBackground(file);

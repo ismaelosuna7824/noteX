@@ -47,6 +47,15 @@ class ThemeState extends ChangeNotifier {
   /// Markdown editor line height multiplier.
   double _markdownLineHeight = 1.0;
 
+  /// Custom editor background color for dark mode (null = default navy).
+  Color? _darkEditorBgColor;
+
+  /// Custom editor background color for light mode (null = default white).
+  Color? _lightEditorBgColor;
+
+  /// Custom sidebar icon color (null = auto-derived from editor background).
+  Color? _sidebarIconColor;
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -79,6 +88,35 @@ class ThemeState extends ChangeNotifier {
 
   /// Markdown editor line height multiplier.
   double get markdownLineHeight => _markdownLineHeight;
+
+  /// Current editor background color (respects dark/light mode selection).
+  static const Color _defaultDarkBg = Color(0xFF1A1A2E);
+  Color get editorBgColor => _isDarkMode
+      ? (_darkEditorBgColor ?? _defaultDarkBg)
+      : (_lightEditorBgColor ?? Colors.white);
+
+  /// Text color that contrasts with the current editor background.
+  Color get editorTextColor => editorBgColor.computeLuminance() > 0.5
+      ? Colors.grey.shade800
+      : Colors.white;
+
+  /// Muted text color for hints/placeholders on the editor background.
+  Color get editorMutedTextColor => editorBgColor.computeLuminance() > 0.5
+      ? Colors.grey.shade500
+      : Colors.white38;
+
+  /// Border color that works on the current editor background.
+  Color get editorBorderColor => editorBgColor.computeLuminance() > 0.5
+      ? Colors.grey.shade200
+      : Colors.white.withValues(alpha: 0.08);
+
+  /// Icon color for unselected sidebar nav buttons.
+  /// Returns the custom value if set, otherwise derives from editor background.
+  Color get sidebarIconColor =>
+      _sidebarIconColor ?? editorTextColor.withValues(alpha: 0.75);
+
+  /// The raw sidebar icon color override, or null if auto mode is active.
+  Color? get sidebarIconColorOverride => _sidebarIconColor;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -114,6 +152,48 @@ class ThemeState extends ChangeNotifier {
 
   /// White accent — only available in dark mode.
   static const Color darkModeWhiteAccent = Color(0xFFFFFFFF);
+
+  /// Preset editor background colors for dark mode.
+  static const List<Color> darkBgPresets = [
+    Color(0xFF1A1A2E), // Navy (default)
+    Color(0xFF0D1117), // GitHub dark
+    Color(0xFF1E1E2E), // Catppuccin mocha
+    Color(0xFF282C34), // One Dark
+    Color(0xFF2B2D30), // IntelliJ dark
+    Color(0xFF1B2838), // Steam blue
+    Color(0xFF1A1B26), // Tokyo Night
+    Color(0xFF292522), // Warm charcoal
+    Color(0xFF0F111A), // Material Oceanic
+    Color(0xFF2E3440), // Nord
+  ];
+
+  /// Preset editor background colors for light mode.
+  static const List<Color> lightBgPresets = [
+    Color(0xFFFFFFFF), // White (default)
+    Color(0xFFF5F0E8), // Warm paper
+    Color(0xFFE8F0F5), // Cool blue
+    Color(0xFFEEEEF5), // Soft lavender
+    Color(0xFFE8F5EC), // Soft mint
+    Color(0xFFF5EEE8), // Peach
+    Color(0xFFEEF5E8), // Soft green
+    Color(0xFFF5E8EE), // Soft rose
+    Color(0xFFE8EEF5), // Steel blue
+    Color(0xFFF0F0E8), // Soft yellow
+  ];
+
+  /// Preset colors for sidebar icon tinting.
+  static const List<Color> sidebarIconPresets = [
+    Color(0xFFFFFFFF), // White
+    Color(0xFFBBBBBB), // Light grey
+    Color(0xFF888888), // Mid grey
+    Color(0xFFFFD54F), // Amber
+    Color(0xFF6C5CE7), // Purple
+    Color(0xFF00B894), // Teal
+    Color(0xFF0984E3), // Blue
+    Color(0xFFE84393), // Pink
+    Color(0xFF00CEC9), // Cyan
+    Color(0xFFF5A623), // Orange
+  ];
 
   /// Bundled preset image backgrounds (from assets/images/).
   /// Videos are no longer bundled — see [remoteVideos].
@@ -234,6 +314,15 @@ class ThemeState extends ChangeNotifier {
 
       final heroColorValue = json['heroTextColor'] as int?;
       if (heroColorValue != null) _heroTextColor = Color(heroColorValue);
+
+      final darkBgValue = json['darkEditorBgColor'] as int?;
+      if (darkBgValue != null) _darkEditorBgColor = Color(darkBgValue);
+
+      final lightBgValue = json['lightEditorBgColor'] as int?;
+      if (lightBgValue != null) _lightEditorBgColor = Color(lightBgValue);
+
+      final sidebarIconValue = json['sidebarIconColor'] as int?;
+      if (sidebarIconValue != null) _sidebarIconColor = Color(sidebarIconValue);
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -269,6 +358,9 @@ class ThemeState extends ChangeNotifier {
         'editorLineHeight': _editorLineHeight,
         'markdownFontSize': _markdownFontSize,
         'markdownLineHeight': _markdownLineHeight,
+        'darkEditorBgColor': _darkEditorBgColor?.toARGB32(),
+        'lightEditorBgColor': _lightEditorBgColor?.toARGB32(),
+        'sidebarIconColor': _sidebarIconColor?.toARGB32(),
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -346,6 +438,25 @@ class ThemeState extends ChangeNotifier {
   /// Set the markdown editor line height and persist.
   void setMarkdownLineHeight(double height) {
     _markdownLineHeight = height.clamp(1.0, 2.5);
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Set the sidebar icon color and persist. Pass `null` to reset to auto.
+  void setSidebarIconColor(Color? color) {
+    _sidebarIconColor = color;
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Set the editor background color for the current mode and persist.
+  /// Pass `null` to reset to the default color.
+  void setEditorBgColor(Color? color) {
+    if (_isDarkMode) {
+      _darkEditorBgColor = color;
+    } else {
+      _lightEditorBgColor = color;
+    }
     _saveToDisk();
     notifyListeners();
   }

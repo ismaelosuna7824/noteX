@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.36.0+1
+version: 1.37.0+1
 
 environment:
   sdk: ^3.11.0
@@ -37,6 +37,9 @@ dependencies:
 
   # File picker
   file_picker: ^8.1.7
+
+  # Color picker
+  flutter_colorpicker: ^1.1.0
 
   # Icons
   cupertino_icons: ^1.0.8

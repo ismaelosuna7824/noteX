@@ -9,10 +9,6 @@ import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 
-/// Dark-mode card surface — deep navy, slightly transparent so the bg image
-/// shows through subtly.
-const _kDarkCard = Color(0xFF1A1A2E);
-
 /// Home/Dashboard page.
 ///
 /// Large hero area with background image, bold title text,
@@ -138,6 +134,7 @@ class _HomePageState extends State<HomePage>
                   position: _slideAnims[1],
                   child: _ReminderCard(
                     accentColor: accentColor,
+                    editorBgColor: themeState.editorBgColor,
                     onNavigateToReminders: () => appState.navigateToPage(7),
                   ),
                 ),
@@ -266,9 +263,7 @@ class _HomePageState extends State<HomePage>
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: ShapeDecoration(
-        color: isDark
-            ? _kDarkCard.withValues(alpha: 0.90)
-            : Colors.white.withValues(alpha: 0.94),
+        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
         shape: shape,
         shadows: [
           BoxShadow(
@@ -343,7 +338,7 @@ class _HomePageState extends State<HomePage>
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: ShapeDecoration(
-        color: isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white,
+        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
         shape: shape,
         shadows: [
           BoxShadow(
@@ -492,7 +487,7 @@ class _HomePageState extends State<HomePage>
           child: Container(
             clipBehavior: Clip.antiAlias,
             decoration: ShapeDecoration(
-              color: isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white,
+              color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
               shape: shape,
               shadows: [
                 BoxShadow(
@@ -583,7 +578,7 @@ class _HomePageState extends State<HomePage>
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: ShapeDecoration(
-          color: isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white,
+          color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
           shape: shape,
           shadows: [
             BoxShadow(
@@ -1093,10 +1088,12 @@ class _RecentActivityCard extends StatelessWidget {
 
 class _ReminderCard extends StatelessWidget {
   final Color accentColor;
+  final Color editorBgColor;
   final VoidCallback onNavigateToReminders;
 
   const _ReminderCard({
     required this.accentColor,
+    required this.editorBgColor,
     required this.onNavigateToReminders,
   });
 
@@ -1136,9 +1133,7 @@ class _ReminderCard extends StatelessWidget {
             child: Container(
               clipBehavior: Clip.antiAlias,
               decoration: ShapeDecoration(
-                color: isDark
-                    ? _kDarkCard.withValues(alpha: 0.90)
-                    : Colors.white,
+                color: editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
                 shape: shape,
                 shadows: [
                   BoxShadow(

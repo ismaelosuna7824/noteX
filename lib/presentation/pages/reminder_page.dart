@@ -7,9 +7,6 @@ import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/animated_dialog.dart';
 
-/// Dark-mode card surface — same as other pages for visual consistency.
-const _kDarkCard = Color(0xFF1A1A2E);
-
 /// Full CRUD page for managing reminders.
 class ReminderPage extends StatefulWidget {
   final AppState appState;
@@ -187,11 +184,9 @@ class _ReminderPageState extends State<ReminderPage> {
     final isDark = theme.brightness == Brightness.dark;
     final accentColor = widget.themeState.accentColor;
 
-    final cardColor = isDark
-        ? _kDarkCard.withValues(alpha: 0.90)
-        : Colors.white.withValues(alpha: 0.95);
-    final cardBorder =
-        isDark ? Colors.white.withValues(alpha: 0.08) : Colors.grey.shade200;
+    final cardColor =
+        widget.themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.95);
+    final cardBorder = widget.themeState.editorBorderColor;
     final cardShadow = Colors.black.withValues(alpha: isDark ? 0.30 : 0.04);
     final dividerColor =
         isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade200;

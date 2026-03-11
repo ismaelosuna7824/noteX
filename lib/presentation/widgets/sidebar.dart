@@ -24,12 +24,16 @@ class Sidebar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
   final Color accentColor;
+  final Color editorBgColor;
+  final Color sidebarIconColor;
 
   const Sidebar({
     super.key,
     required this.selectedIndex,
     required this.onItemSelected,
     required this.accentColor,
+    required this.editorBgColor,
+    required this.sidebarIconColor,
   });
 
   static const _navItems = [
@@ -85,6 +89,8 @@ class Sidebar extends StatelessWidget {
                       item: item,
                       isSelected: selectedIndex == pageIndex,
                       accentColor: accentColor,
+                      editorBgColor: editorBgColor,
+                      sidebarIconColor: sidebarIconColor,
                       onTap: () => onItemSelected(pageIndex),
                     ),
                   const Spacer(),
@@ -93,6 +99,8 @@ class Sidebar extends StatelessWidget {
                     item: _settingsItem.$2,
                     isSelected: selectedIndex == _settingsItem.$1,
                     accentColor: accentColor,
+                    editorBgColor: editorBgColor,
+                    sidebarIconColor: sidebarIconColor,
                     onTap: () => onItemSelected(_settingsItem.$1),
                   ),
                 ],
@@ -131,6 +139,8 @@ class _NavButton extends StatefulWidget {
   final _SidebarItem item;
   final bool isSelected;
   final Color accentColor;
+  final Color editorBgColor;
+  final Color sidebarIconColor;
   final VoidCallback onTap;
 
   const _NavButton({
@@ -138,6 +148,8 @@ class _NavButton extends StatefulWidget {
     required this.item,
     required this.isSelected,
     required this.accentColor,
+    required this.editorBgColor,
+    required this.sidebarIconColor,
     required this.onTap,
   });
 
@@ -155,17 +167,14 @@ class _NavButtonState extends State<_NavButton> {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     // Adapt circle color to dark/light mode.
+    final bgColor = widget.editorBgColor;
     final Color circleColor;
     if (isSelected) {
       circleColor = accent;
-    } else if (isDark) {
-      circleColor = _hovered
-          ? const Color(0xFF2A2A40)
-          : const Color(0xFF1A1A2E);
+    } else if (_hovered) {
+      circleColor = Color.lerp(bgColor, isDark ? Colors.white : Colors.black, 0.08)!;
     } else {
-      circleColor = _hovered
-          ? Colors.white.withValues(alpha: 0.88)
-          : Colors.white;
+      circleColor = bgColor;
     }
 
     final shadowColor = isSelected
@@ -209,10 +218,8 @@ class _NavButtonState extends State<_NavButton> {
               ),
               child: Icon(
                 widget.item.icon,
-                // Selected → always white; unselected adapts to dark/light.
-                color: isSelected
-                    ? Colors.white
-                    : (isDark ? Colors.white70 : Colors.grey.shade600),
+                // Selected → always white; unselected uses custom icon color.
+                color: isSelected ? Colors.white : widget.sidebarIconColor,
                 size: 22,
               ),
             ),

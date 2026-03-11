@@ -168,6 +168,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
             width: 320,
             child: GlassmorphicContainer(
               borderRadius: 20,
+              color: widget.themeState.editorBgColor,
               opacity: isDark ? 0.90 : 0.92,
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -303,18 +304,18 @@ class _MarkdownPageState extends State<MarkdownPage> {
         onChanged: (q) => _mdState.search(q),
         style: TextStyle(
           fontSize: 12,
-          color: isDark ? Colors.white : Colors.black87,
+          color: widget.themeState.editorTextColor,
         ),
         decoration: InputDecoration(
           hintText: 'Search files...',
           hintStyle: TextStyle(
             fontSize: 12,
-            color: isDark ? Colors.white38 : Colors.grey.shade400,
+            color: widget.themeState.editorMutedTextColor,
           ),
           prefixIcon: Icon(
             Icons.search_rounded,
             size: 16,
-            color: isDark ? Colors.white38 : Colors.grey.shade400,
+            color: widget.themeState.editorMutedTextColor,
           ),
           prefixIconConstraints: const BoxConstraints(
             minWidth: 32,
@@ -428,7 +429,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                             fontSize: 13,
                             color: isSelected
                                 ? accentColor
-                                : (isDark ? Colors.white : Colors.grey.shade800),
+                                : widget.themeState.editorTextColor,
                           ),
                         ),
                         const SizedBox(height: 2),
@@ -500,6 +501,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
     if (file == null || _contentController == null) {
       return GlassmorphicContainer(
         borderRadius: 20,
+        color: widget.themeState.editorBgColor,
         opacity: isDark ? 0.90 : 0.92,
         child: Center(
           child: Column(
@@ -525,6 +527,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
+      color: widget.themeState.editorBgColor,
       opacity: isDark ? 0.90 : 0.95,
       padding: EdgeInsets.zero,
       child: Column(
@@ -754,12 +757,12 @@ class _MarkdownPageState extends State<MarkdownPage> {
         maxLines: null,
         expands: true,
         textAlignVertical: TextAlignVertical.top,
-        cursorColor: isDark ? Colors.white : Colors.black,
+        cursorColor: widget.themeState.editorTextColor,
         cursorHeight: widget.themeState.markdownFontSize,
         style: GoogleFonts.sourceCodePro(
           fontSize: widget.themeState.markdownFontSize,
           height: widget.themeState.markdownLineHeight,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: widget.themeState.editorTextColor,
         ),
         decoration: InputDecoration(
           hintText: 'Write your markdown here...',
@@ -798,22 +801,22 @@ class _MarkdownPageState extends State<MarkdownPage> {
                 p: TextStyle(
                   fontSize: baseFontSize,
                   height: lineHeight,
-                  color: isDark ? Colors.white : Colors.grey.shade800,
+                  color: widget.themeState.editorTextColor,
                 ),
                 h1: TextStyle(
                   fontSize: (28 * scale).roundToDouble(),
                   fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : Colors.grey.shade900,
+                  color: widget.themeState.editorTextColor,
                 ),
                 h2: TextStyle(
                   fontSize: (22 * scale).roundToDouble(),
                   fontWeight: FontWeight.w700,
-                  color: isDark ? Colors.white : Colors.grey.shade900,
+                  color: widget.themeState.editorTextColor,
                 ),
                 h3: TextStyle(
                   fontSize: (18 * scale).roundToDouble(),
                   fontWeight: FontWeight.w600,
-                  color: isDark ? Colors.white : Colors.grey.shade900,
+                  color: widget.themeState.editorTextColor,
                 ),
                 code: GoogleFonts.sourceCodePro(
                   fontSize: (13 * scale).roundToDouble(),

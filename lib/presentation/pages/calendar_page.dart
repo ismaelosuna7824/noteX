@@ -5,9 +5,6 @@ import '../state/theme_state.dart';
 import '../../domain/entities/note.dart';
 import '../widgets/animated_dialog.dart';
 
-/// Dark-mode card surface — same as home page for visual consistency.
-const _kDarkCard = Color(0xFF1A1A2E);
-
 /// Calendar view for navigating notes by date.
 ///
 /// Uses adaptive card design: light white in light mode, dark navy in dark mode.
@@ -142,10 +139,8 @@ class _CalendarPageState extends State<CalendarPage> {
 
     // Adaptive surface colors
     final cardColor =
-        isDark ? _kDarkCard.withValues(alpha: 0.90) : Colors.white.withValues(alpha: 0.95);
-    final cardBorder = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.grey.shade200;
+        widget.themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.95);
+    final cardBorder = widget.themeState.editorBorderColor;
     final cardShadow = Colors.black.withValues(alpha: isDark ? 0.30 : 0.04);
     final innerItemBg =
         isDark ? Colors.white.withValues(alpha: 0.07) : Colors.grey.shade50;

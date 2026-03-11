@@ -220,6 +220,7 @@ class _NotesListPageState extends State<NotesListPage> {
             width: 320,
             child: GlassmorphicContainer(
               borderRadius: 20,
+              color: widget.themeState.editorBgColor,
               opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -333,6 +334,7 @@ class _NotesListPageState extends State<NotesListPage> {
                                   isSelected: note.id ==
                                       widget.appState.currentNote?.id,
                                   accentColor: accentColor,
+                                  editorBgColor: widget.themeState.editorBgColor,
                                   onTap: () {
                                     widget.appState.previewNote(note);
                                     setState(() => _loadNote());
@@ -669,16 +671,17 @@ class _NotesListPageState extends State<NotesListPage> {
   }
 
   DefaultStyles _buildQuillStyles(ThemeData theme) {
-    final isDark = theme.brightness == Brightness.dark;
     final fontSize = widget.themeState.editorFontSize;
     final lh = widget.themeState.editorLineHeight;
+    final textColor = widget.themeState.editorTextColor;
+    final mutedColor = widget.themeState.editorMutedTextColor;
 
     return DefaultStyles(
       placeHolder: DefaultTextBlockStyle(
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white38 : Colors.grey.shade400,
+          color: mutedColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
@@ -689,7 +692,7 @@ class _NotesListPageState extends State<NotesListPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: textColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
@@ -700,7 +703,7 @@ class _NotesListPageState extends State<NotesListPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: textColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
@@ -712,7 +715,7 @@ class _NotesListPageState extends State<NotesListPage> {
         TextStyle(
           fontSize: fontSize,
           height: lh,
-          color: isDark ? Colors.white : Colors.grey.shade800,
+          color: textColor,
         ),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(0, 0),
@@ -727,13 +730,12 @@ class _NotesListPageState extends State<NotesListPage> {
     final note = widget.appState.currentNote;
 
     final isDark = theme.brightness == Brightness.dark;
-    final chipBorder = isDark
-        ? Colors.white.withValues(alpha: 0.08)
-        : Colors.grey.shade200;
+    final chipBorder = widget.themeState.editorBorderColor;
 
     if (note == null || _quillController == null) {
       return GlassmorphicContainer(
         borderRadius: 20,
+        color: widget.themeState.editorBgColor,
         opacity: isDark ? 0.90 : 0.92,
         child: Center(
           child: Column(
@@ -758,6 +760,7 @@ class _NotesListPageState extends State<NotesListPage> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
+      color: widget.themeState.editorBgColor,
       opacity: isDark ? 0.90 : 0.95,
       padding: EdgeInsets.zero,
       child: Column(
@@ -779,14 +782,15 @@ class _NotesListPageState extends State<NotesListPage> {
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
-                        color: isDark ? Colors.white : Colors.grey.shade800,
+                        color: widget.themeState.editorTextColor,
                       ),
                       decoration: InputDecoration(
                         hintText: 'Note title...',
                         filled: true,
-                        fillColor: isDark
-                            ? Colors.white.withValues(alpha: 0.06)
-                            : Colors.grey.shade50,
+                        fillColor: widget.themeState.editorBgColor
+                            .computeLuminance() > 0.5
+                            ? Colors.grey.shade50
+                            : Colors.white.withValues(alpha: 0.06),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
                           borderSide: BorderSide(
@@ -806,7 +810,7 @@ class _NotesListPageState extends State<NotesListPage> {
                           vertical: 10,
                         ),
                         hintStyle: TextStyle(
-                          color: isDark ? Colors.white38 : Colors.grey.shade400,
+                          color: widget.themeState.editorMutedTextColor,
                           fontWeight: FontWeight.w500,
                           fontSize: 16,
                         ),

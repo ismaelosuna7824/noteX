@@ -30,8 +30,19 @@ void main() async {
 
   MediaKit.ensureInitialized();
 
-  // 1. Initialize acrylic (transparent window effect) and window manager
-  await Window.initialize();
+  // 1. Initialize acrylic (transparent window effect) and window manager.
+  // Retry once on failure — some Windows machines need a short delay on first
+  // launch for the DWM / display subsystem to be ready.
+  try {
+    await Window.initialize();
+  } catch (_) {
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    try {
+      await Window.initialize();
+    } catch (_) {
+      // Continue without acrylic — the app will still work.
+    }
+  }
   await windowManager.ensureInitialized();
 
   // 2. Initialize Supabase (auto-restores persisted session)
@@ -78,12 +89,25 @@ void main() async {
 
   // 8. Configure: transparent + frameless + centered
   // Clamp window size to fit the screen (accounts for display scaling).
-  final display = await ScreenRetriever.instance.getPrimaryDisplay();
-  final scale = (display.scaleFactor ?? 1.0).toDouble();
-  // visibleSize excludes the taskbar; fall back to full size.
-  final usable = display.visibleSize ?? display.size;
-  final screenW = usable.width / scale;
-  final screenH = usable.height / scale;
+  // Guard against ScreenRetriever failures on unusual Windows display configs
+  // (multi-monitor, RDP, non-standard DPI, missing drivers).
+  double screenW = 1920.0;
+  double screenH = 1080.0;
+  try {
+    final display = await ScreenRetriever.instance.getPrimaryDisplay();
+    final scale = (display.scaleFactor ?? 1.0).toDouble();
+    // visibleSize excludes the taskbar; fall back to full size.
+    final usable = display.visibleSize ?? display.size;
+    final w = usable.width / scale;
+    final h = usable.height / scale;
+    // Sanity-check: values must be positive and reasonable.
+    if (w > 0 && h > 0) {
+      screenW = w;
+      screenH = h;
+    }
+  } catch (_) {
+    // Fallback values already set above.
+  }
   const margin = 40.0;
 
   // Check if the app was closed in compact mode.
@@ -95,18 +119,33 @@ void main() async {
   double minW;
   double minH;
 
-  if (restoreCompact) {
-    // Restore compact window size.
-    minW = 300.0;
-    minH = 350.0;
-    final compact = await WindowSizeStore.loadCompact();
-    windowW = compact?['width'] ?? 400.0;
-    windowH = compact?['height'] ?? 500.0;
+  // Whether we actually end up in compact mode (note may have been deleted).
+  bool activeCompact = false;
 
-    // Restore compact mode in AppState.
+  if (restoreCompact) {
+    // Restore compact mode in AppState first — if the note was deleted
+    // (e.g. empty-note cleanup on last close) this returns false and we
+    // fall back to the normal window layout instead.
     final noteId = compactState['compact_note_id'] as String?;
-    if (noteId != null) {
-      appState.restoreCompactMode(noteId);
+    final noteFound = noteId != null && appState.restoreCompactMode(noteId);
+
+    if (noteFound) {
+      activeCompact = true;
+      minW = 300.0;
+      minH = 350.0;
+      final compact = await WindowSizeStore.loadCompact();
+      windowW = compact?['width'] ?? 400.0;
+      windowH = compact?['height'] ?? 500.0;
+    } else {
+      // Note no longer exists — clear the stale compact state and open normally.
+      await WindowSizeStore.saveCompactState(isCompact: false, noteId: null);
+      minW = 900.0;
+      minH = 600.0;
+      final saved = await WindowSizeStore.load();
+      final defaultW = saved?['width'] ?? 1280.0;
+      final defaultH = saved?['height'] ?? 900.0;
+      windowW = min(defaultW, screenW - margin).clamp(minW, screenW - margin);
+      windowH = min(defaultH, screenH - margin).clamp(minH, screenH - margin);
     }
   } else {
     // Restore normal window size, falling back to 1280x900.
@@ -130,27 +169,26 @@ void main() async {
   // waitUntilReadyToShow is intentionally NOT awaited —
   // it runs alongside runApp so rendering begins immediately.
   windowManager.waitUntilReadyToShow(windowOptions, () async {
-    await Window.setEffect(
-      effect: WindowEffect.transparent,
-      color: Colors.transparent,
-    );
+    try {
+      await Window.setEffect(
+        effect: WindowEffect.transparent,
+        color: Colors.transparent,
+      );
+    } catch (_) {
+      // Transparent effect unsupported — continue without it.
+    }
     await windowManager.setAsFrameless();
     // Allow resizing and enforce a minimum window size on all platforms.
     await windowManager.setResizable(true);
     await windowManager.setMinimumSize(Size(minW, minH));
-    if (restoreCompact) {
+    if (activeCompact) {
       await windowManager.setAlwaysOnTop(true);
     }
     await windowManager.show();
     await windowManager.focus();
   });
 
-  runApp(
-    NoteXApp(
-      appState: appState,
-      themeState: themeState,
-    ),
-  );
+  runApp(NoteXApp(appState: appState, themeState: themeState));
 }
 
 /// Persists and restores window size across sessions.
@@ -166,7 +204,8 @@ class WindowSizeStore {
     try {
       final file = await _file();
       if (!await file.exists()) return null;
-      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       return {
         'width': (json['width'] as num).toDouble(),
         'height': (json['height'] as num).toDouble(),
@@ -195,7 +234,8 @@ class WindowSizeStore {
     try {
       final file = await _file();
       if (!await file.exists()) return null;
-      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       if (!json.containsKey('compact_width')) return null;
       return {
         'width': (json['compact_width'] as num).toDouble(),
@@ -241,7 +281,8 @@ class WindowSizeStore {
     try {
       final file = await _file();
       if (!await file.exists()) return null;
-      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
+      final json =
+          jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       if (json['compact_mode'] != true) return null;
       return {
         'compact_mode': true,

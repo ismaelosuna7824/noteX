@@ -156,7 +156,8 @@ class _TimerBar extends StatelessWidget {
 
     return GlassmorphicContainer(
       borderRadius: 18,
-      opacity: Theme.of(context).brightness == Brightness.dark ? 0.90 : 0.92,
+      opacity: themeState.editorBgColor.computeLuminance() > 0.5 ? 0.92 : 0.90,
+      color: themeState.editorBgColor,
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
       child: Row(
         children: [
@@ -175,9 +176,7 @@ class _TimerBar extends StatelessWidget {
               style: TextStyle(
                 fontSize: 15,
                 fontWeight: FontWeight.w500,
-                color: Theme.of(context).brightness == Brightness.dark
-                    ? Colors.white
-                    : Colors.grey.shade800,
+                color: themeState.editorTextColor,
               ),
               decoration: InputDecoration(
                 hintText: isRunning
@@ -188,9 +187,7 @@ class _TimerBar extends StatelessWidget {
                 focusedBorder: InputBorder.none,
                 filled: false,
                 hintStyle: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white38
-                      : Colors.grey.shade400,
+                  color: themeState.editorMutedTextColor,
                   fontWeight: FontWeight.w400,
                 ),
                 contentPadding: EdgeInsets.zero,
@@ -282,7 +279,6 @@ class _ProjectChip extends StatelessWidget {
         ? timerState.runningEntry?.projectId
         : timerState.draftProjectId;
     final project = timerState.projectForId(selectedId);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return GestureDetector(
       onTap: enabled ? () => _showProjectMenu(context) : null,
@@ -291,9 +287,7 @@ class _ProjectChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: project != null
               ? project.color.withValues(alpha: 0.15)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.grey.shade100),
+              : themeState.editorMutedTextColor.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: project != null
@@ -327,7 +321,7 @@ class _ProjectChip extends StatelessWidget {
               Icon(
                 Icons.folder_outlined,
                 size: 14,
-                color: isDark ? Colors.white54 : Colors.grey.shade500,
+                color: themeState.editorMutedTextColor,
               ),
               const SizedBox(width: 6),
               Text(
@@ -335,7 +329,7 @@ class _ProjectChip extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: FontWeight.w500,
-                  color: isDark ? Colors.white54 : Colors.grey.shade500,
+                  color: themeState.editorMutedTextColor,
                 ),
               ),
             ],
@@ -344,7 +338,7 @@ class _ProjectChip extends StatelessWidget {
               Icon(
                 Icons.expand_more_rounded,
                 size: 14,
-                color: isDark ? Colors.white38 : Colors.grey.shade400,
+                color: themeState.editorMutedTextColor,
               ),
             ],
           ],
@@ -609,14 +603,14 @@ class _WeekNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = themeState.accentColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final label = timerState.isCurrentWeek
         ? 'This week · W${timerState.weekNumber}'
         : _weekRangeLabel(timerState.weekStart);
 
     return GlassmorphicContainer(
       borderRadius: 14,
-      opacity: isDark ? 0.90 : 0.92,
+      opacity: themeState.editorBgColor.computeLuminance() > 0.5 ? 0.92 : 0.90,
+      color: themeState.editorBgColor,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
@@ -627,7 +621,7 @@ class _WeekNavBar extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Icon(Icons.chevron_left_rounded,
-                  color: isDark ? Colors.white70 : Colors.grey.shade600),
+                  color: themeState.editorTextColor),
             ),
           ),
           const SizedBox(width: 8),
@@ -641,7 +635,7 @@ class _WeekNavBar extends StatelessWidget {
                 Icon(
                   Icons.calendar_today_rounded,
                   size: 13,
-                  color: isDark ? Colors.white54 : Colors.grey.shade500,
+                  color: themeState.editorMutedTextColor,
                 ),
                 const SizedBox(width: 6),
                 Text(
@@ -649,14 +643,14 @@ class _WeekNavBar extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
-                    color: isDark ? Colors.white : Colors.grey.shade800,
+                    color: themeState.editorTextColor,
                   ),
                 ),
                 const SizedBox(width: 3),
                 Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 16,
-                  color: isDark ? Colors.white38 : Colors.grey.shade400,
+                  color: themeState.editorMutedTextColor,
                 ),
               ],
             ),
@@ -670,7 +664,7 @@ class _WeekNavBar extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.all(4),
               child: Icon(Icons.chevron_right_rounded,
-                  color: isDark ? Colors.white70 : Colors.grey.shade600),
+                  color: themeState.editorTextColor),
             ),
           ),
 
@@ -682,7 +676,7 @@ class _WeekNavBar extends StatelessWidget {
             style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w600,
-              color: isDark ? Colors.white38 : Colors.grey.shade400,
+              color: themeState.editorMutedTextColor,
               letterSpacing: 0.8,
             ),
           ),
@@ -714,6 +708,7 @@ class _WeekNavBar extends StatelessWidget {
       builder: (ctx) => _WeekPickerDialog(
         currentWeekStart: timerState.weekStart,
         accentColor: themeState.accentColor,
+        themeState: themeState,
       ),
     );
     if (selected != null) {
@@ -729,10 +724,12 @@ class _WeekNavBar extends StatelessWidget {
 class _WeekPickerDialog extends StatefulWidget {
   final DateTime currentWeekStart;
   final Color accentColor;
+  final ThemeState themeState;
 
   const _WeekPickerDialog({
     required this.currentWeekStart,
     required this.accentColor,
+    required this.themeState,
   });
 
   @override
@@ -766,9 +763,9 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final accent = widget.accentColor;
-    final bg = isDark ? const Color(0xFF1E1E2E) : Colors.white;
+    final ts = widget.themeState;
+    final bg = ts.editorBgColor;
 
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -780,11 +777,11 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildShortcutsPanel(isDark, accent),
+              _buildShortcutsPanel(ts, accent),
               VerticalDivider(
                   width: 1,
-                  color: isDark ? Colors.white12 : Colors.grey.shade200),
-              Expanded(child: _buildCalendarPanel(isDark, accent)),
+                  color: ts.editorBorderColor),
+              Expanded(child: _buildCalendarPanel(ts, accent)),
             ],
           ),
         ),
@@ -794,7 +791,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
 
   // ── Left panel ─────────────────────────────────────────────────────────────
 
-  Widget _buildShortcutsPanel(bool isDark, Color accent) {
+  Widget _buildShortcutsPanel(ThemeState ts, Color accent) {
     final now = DateTime.now();
     final thisWeek = _isoMonday(now);
     final lastWeek = thisWeek.subtract(const Duration(days: 7));
@@ -823,7 +820,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1,
-                  color: isDark ? Colors.white38 : Colors.grey.shade400,
+                  color: ts.editorMutedTextColor,
                 ),
               ),
             ),
@@ -853,9 +850,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                             : FontWeight.w500,
                         color: isHighlighted
                             ? accent
-                            : (isDark
-                                ? Colors.white70
-                                : Colors.grey.shade700),
+                            : ts.editorTextColor,
                       ),
                     ),
                   ),
@@ -870,7 +865,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
 
   // ── Right panel ────────────────────────────────────────────────────────────
 
-  Widget _buildCalendarPanel(bool isDark, Color accent) {
+  Widget _buildCalendarPanel(ThemeState ts, Color accent) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
       child: Column(
@@ -881,7 +876,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
             children: [
               _NavBtn(
                 icon: Icons.chevron_left_rounded,
-                isDark: isDark,
+                iconColor: ts.editorTextColor,
                 onTap: () => setState(() {
                   _displayMonth = DateTime(
                       _displayMonth.year, _displayMonth.month - 1);
@@ -894,14 +889,14 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
-                      color: isDark ? Colors.white : Colors.grey.shade800,
+                      color: ts.editorTextColor,
                     ),
                   ),
                 ),
               ),
               _NavBtn(
                 icon: Icons.chevron_right_rounded,
-                isDark: isDark,
+                iconColor: ts.editorTextColor,
                 onTap: () => setState(() {
                   _displayMonth = DateTime(
                       _displayMonth.year, _displayMonth.month + 1);
@@ -923,8 +918,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
-                        color:
-                            isDark ? Colors.white38 : Colors.grey.shade400,
+                        color: ts.editorMutedTextColor,
                       ),
                     ),
                   ),
@@ -935,13 +929,13 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
           const SizedBox(height: 4),
 
           // Week rows
-          ..._buildWeekRows(isDark, accent),
+          ..._buildWeekRows(ts, accent),
         ],
       ),
     );
   }
 
-  List<Widget> _buildWeekRows(bool isDark, Color accent) {
+  List<Widget> _buildWeekRows(ThemeState ts, Color accent) {
     final firstOfMonth =
         DateTime(_displayMonth.year, _displayMonth.month, 1);
     DateTime monday =
@@ -955,14 +949,14 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
     for (var i = 0; i < 6; i++) {
       if (monday.isAfter(lastOfMonth) &&
           monday.month != _displayMonth.month) { break; }
-      rows.add(_buildWeekRow(monday, isDark, accent, todayMidnight));
+      rows.add(_buildWeekRow(monday, ts, accent, todayMidnight));
       monday = monday.add(const Duration(days: 7));
     }
     return rows;
   }
 
   Widget _buildWeekRow(
-      DateTime monday, bool isDark, Color accent, DateTime todayMidnight) {
+      DateTime monday, ThemeState ts, Color accent, DateTime todayMidnight) {
     final isSelected = monday.isAtSameMomentAs(_selectedWeekStart);
     final weekNum = _weekNumber(monday);
 
@@ -992,7 +986,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                     fontWeight: FontWeight.w700,
                     color: isSelected
                         ? accent
-                        : (isDark ? Colors.white24 : Colors.grey.shade300),
+                        : ts.editorMutedTextColor.withValues(alpha: 0.4),
                   ),
                 ),
               ),
@@ -1027,12 +1021,8 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                           color: isToday
                               ? Colors.white
                               : isCurrentMonth
-                                  ? (isDark
-                                      ? Colors.white
-                                      : Colors.grey.shade800)
-                                  : (isDark
-                                      ? Colors.white24
-                                      : Colors.grey.shade300),
+                                  ? ts.editorTextColor
+                                  : ts.editorMutedTextColor.withValues(alpha: 0.4),
                         ),
                       ),
                     ),
@@ -1050,11 +1040,11 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
 // Small arrow button used inside the calendar header
 class _NavBtn extends StatelessWidget {
   final IconData icon;
-  final bool isDark;
+  final Color iconColor;
   final VoidCallback onTap;
 
   const _NavBtn(
-      {required this.icon, required this.isDark, required this.onTap});
+      {required this.icon, required this.iconColor, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -1063,9 +1053,7 @@ class _NavBtn extends StatelessWidget {
       borderRadius: BorderRadius.circular(8),
       child: Padding(
         padding: const EdgeInsets.all(6),
-        child: Icon(icon,
-            size: 20,
-            color: isDark ? Colors.white70 : Colors.grey.shade600),
+        child: Icon(icon, size: 20, color: iconColor),
       ),
     );
   }
@@ -1119,28 +1107,26 @@ class _EntriesListState extends State<_EntriesList> {
   Widget build(BuildContext context) {
     final grouped = _applyFilter(widget.timerState.entriesByDay);
 
+    final ts = widget.themeState;
     if (grouped.isEmpty) {
       return GlassmorphicContainer(
         borderRadius: 20,
-        opacity: Theme.of(context).brightness == Brightness.dark ? 0.90 : 0.92,
+        opacity: ts.editorBgColor.computeLuminance() > 0.5 ? 0.92 : 0.90,
+        color: ts.editorBgColor,
         child: Center(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.timer_outlined,
                   size: 56,
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white24
-                      : Colors.grey.shade300),
+                  color: ts.editorMutedTextColor.withValues(alpha: 0.5)),
               const SizedBox(height: 12),
               Text(
                 widget.filterProjectId != null
                     ? 'No entries for this filter'
                     : 'No time tracked this week',
                 style: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white38
-                      : Colors.grey.shade400,
+                  color: ts.editorMutedTextColor,
                   fontSize: 15,
                 ),
               ),
@@ -1148,9 +1134,7 @@ class _EntriesListState extends State<_EntriesList> {
               Text(
                 'Hit ▶ to start tracking',
                 style: TextStyle(
-                  color: Theme.of(context).brightness == Brightness.dark
-                      ? Colors.white24
-                      : Colors.grey.shade300,
+                  color: ts.editorMutedTextColor.withValues(alpha: 0.6),
                   fontSize: 12,
                 ),
               ),
@@ -1162,7 +1146,8 @@ class _EntriesListState extends State<_EntriesList> {
 
     return GlassmorphicContainer(
       borderRadius: 20,
-      opacity: Theme.of(context).brightness == Brightness.dark ? 0.90 : 0.92,
+      opacity: ts.editorBgColor.computeLuminance() > 0.5 ? 0.92 : 0.90,
+      color: ts.editorBgColor,
       padding: const EdgeInsets.all(16),
       child: ListView.builder(
         controller: _scrollController,
@@ -1201,7 +1186,6 @@ class _DayGroup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final total = timerState.dailyTotal(date);
     final isToday = _isToday(date);
 
@@ -1224,7 +1208,7 @@ class _DayGroup extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   color: isToday
                       ? themeState.accentColor
-                      : (isDark ? Colors.white70 : Colors.grey.shade600),
+                      : themeState.editorTextColor,
                 ),
               ),
               const Expanded(
@@ -1241,7 +1225,7 @@ class _DayGroup extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.w600,
-                      color: isDark ? Colors.white38 : Colors.grey.shade400,
+                      color: themeState.editorMutedTextColor,
                       letterSpacing: 0.8,
                     ),
                   ),
@@ -1253,7 +1237,7 @@ class _DayGroup extends StatelessWidget {
                       fontWeight: FontWeight.w700,
                       color: isToday
                           ? themeState.accentColor
-                          : (isDark ? Colors.white70 : Colors.grey.shade700),
+                          : themeState.editorTextColor,
                       fontFeatures: const [FontFeature.tabularFigures()],
                     ),
                   ),
@@ -1303,26 +1287,26 @@ class _EntryTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final project = timerState.projectForId(entry.projectId);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isRunning = entry.isRunning;
     final accent = themeState.accentColor;
 
+    final isLight = themeState.editorBgColor.computeLuminance() > 0.5;
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.07)
-            : Colors.white,
+        color: isLight
+            ? Colors.white.withValues(alpha: 0.85)
+            : Colors.white.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(14),
-        boxShadow: isDark
-            ? null
-            : [
+        boxShadow: isLight
+            ? [
                 BoxShadow(
                   color: Colors.black.withValues(alpha: 0.06),
                   blurRadius: 8,
                   offset: const Offset(0, 2),
                 ),
-              ],
+              ]
+            : null,
         border: isRunning
             ? Border.all(
                 color: accent.withValues(alpha: 0.4),
@@ -1349,8 +1333,8 @@ class _EntryTile extends StatelessWidget {
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: entry.description.isEmpty
-                          ? (isDark ? Colors.white38 : Colors.grey.shade400)
-                          : (isDark ? Colors.white : Colors.grey.shade800),
+                          ? themeState.editorMutedTextColor
+                          : themeState.editorTextColor,
                       fontStyle: entry.description.isEmpty
                           ? FontStyle.italic
                           : FontStyle.normal,
@@ -1378,7 +1362,7 @@ class _EntryTile extends StatelessWidget {
               _timeRange(entry),
               style: TextStyle(
                 fontSize: 12,
-                color: isDark ? Colors.white38 : Colors.grey.shade400,
+                color: themeState.editorMutedTextColor,
               ),
             ),
             const SizedBox(width: 16),
@@ -1389,7 +1373,7 @@ class _EntryTile extends StatelessWidget {
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
-                color: isRunning ? accent : (isDark ? Colors.white70 : Colors.grey.shade700),
+                color: isRunning ? accent : themeState.editorTextColor,
                 fontFeatures: const [FontFeature.tabularFigures()],
               ),
             ),
@@ -1404,7 +1388,7 @@ class _EntryTile extends StatelessWidget {
                 child: Icon(
                   Icons.delete_outline_rounded,
                   size: 16,
-                  color: isDark ? Colors.white24 : Colors.grey.shade300,
+                  color: themeState.editorMutedTextColor.withValues(alpha: 0.5),
                 ),
               ),
             ),
