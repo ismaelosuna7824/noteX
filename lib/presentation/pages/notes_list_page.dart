@@ -244,75 +244,83 @@ class _NotesListPageState extends State<NotesListPage> {
   // ── Shared header ──────────────────────────────────────────────────
 
   Widget _buildHeader(ThemeData theme, Color accentColor, bool showPinned) {
-    return Row(
-      children: [
-        Text(
-          'My Notes',
-          style: theme.textTheme.titleMedium?.copyWith(
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const Spacer(),
-        // All / Pinned tab toggle
-        Container(
-          decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.all(2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildTabBtn(
-                icon: Icons.list_rounded,
-                label: _isGridMode ? 'All' : '',
-                isSelected: !showPinned,
-                accentColor: accentColor,
-                onTap: () => widget.appState.setShowPinnedTab(false),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isCompact = constraints.maxWidth < 250;
+        return Row(
+          children: [
+            Flexible(
+              child: Text(
+                'My Notes',
+                style: theme.textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w800,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              _buildTabBtn(
-                icon: Icons.push_pin_rounded,
-                label: _isGridMode ? 'Pinned' : '',
-                isSelected: showPinned,
-                accentColor: accentColor,
-                onTap: () => widget.appState.setShowPinnedTab(true),
+            ),
+            const SizedBox(width: 8),
+            // All / Pinned tab toggle
+            Container(
+              decoration: BoxDecoration(
+                color: theme.brightness == Brightness.dark
+                    ? Colors.white.withValues(alpha: 0.1)
+                    : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              padding: const EdgeInsets.all(2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildTabBtn(
+                    icon: Icons.list_rounded,
+                    label: _isGridMode && !isCompact ? 'All' : '',
+                    isSelected: !showPinned,
+                    accentColor: accentColor,
+                    onTap: () => widget.appState.setShowPinnedTab(false),
+                  ),
+                  _buildTabBtn(
+                    icon: Icons.push_pin_rounded,
+                    label: _isGridMode && !isCompact ? 'Pinned' : '',
+                    isSelected: showPinned,
+                    accentColor: accentColor,
+                    onTap: () => widget.appState.setShowPinnedTab(true),
+                  ),
+                ],
+              ),
+            ),
+            // List / Grid toggle — hidden when too compact
+            if (!isCompact) ...[
+              const SizedBox(width: 6),
+              Container(
+                decoration: BoxDecoration(
+                  color: theme.brightness == Brightness.dark
+                      ? Colors.white.withValues(alpha: 0.1)
+                      : Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                padding: const EdgeInsets.all(2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildTabBtn(
+                      icon: Icons.view_list_rounded,
+                      label: '',
+                      isSelected: !_isGridMode,
+                      accentColor: accentColor,
+                      onTap: () { if (_isGridMode) _toggleViewMode(); },
+                    ),
+                    _buildTabBtn(
+                      icon: Icons.grid_view_rounded,
+                      label: '',
+                      isSelected: _isGridMode,
+                      accentColor: accentColor,
+                      onTap: () { if (!_isGridMode) _toggleViewMode(); },
+                    ),
+                  ],
+                ),
               ),
             ],
-          ),
-        ),
-        const SizedBox(width: 6),
-        // List / Grid toggle
-        Container(
-          decoration: BoxDecoration(
-            color: theme.brightness == Brightness.dark
-                ? Colors.white.withValues(alpha: 0.1)
-                : Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.all(2),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildTabBtn(
-                icon: Icons.view_list_rounded,
-                label: '',
-                isSelected: !_isGridMode,
-                accentColor: accentColor,
-                onTap: () { if (_isGridMode) _toggleViewMode(); },
-              ),
-              _buildTabBtn(
-                icon: Icons.grid_view_rounded,
-                label: '',
-                isSelected: _isGridMode,
-                accentColor: accentColor,
-                onTap: () { if (!_isGridMode) _toggleViewMode(); },
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(width: 6),
+            const SizedBox(width: 6),
         InkWell(
           onTap: () async {
             await widget.appState.createNewNote();
@@ -331,7 +339,9 @@ class _NotesListPageState extends State<NotesListPage> {
             ),
           ),
         ),
-      ],
+        ],
+      );
+      },
     );
   }
 
