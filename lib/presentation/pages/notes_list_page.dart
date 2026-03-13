@@ -4,6 +4,7 @@ import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../domain/entities/note.dart';
 import '../../domain/entities/note_project.dart';
 import '../state/app_state.dart';
@@ -11,6 +12,7 @@ import '../state/theme_state.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_card.dart';
+import '../widgets/note_grid_card.dart';
 
 /// Notes list view with inline edit panel.
 ///
@@ -54,10 +56,13 @@ class _NotesListPageState extends State<NotesListPage> {
     ),
   );
 
+  bool _isGridMode = false;
+
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController();
+    _isGridMode = widget.themeState.notesDisplayMode == 'grid';
   }
 
   @override
@@ -199,13 +204,28 @@ class _NotesListPageState extends State<NotesListPage> {
     }
   }
 
+  void _toggleViewMode() {
+    // Force-save current note before switching modes.
+    if (_loadedNoteId != null && _quillController != null) {
+      widget.appState.autoSaveService.forceSave(
+        noteId: _loadedNoteId!,
+        title: _titleController.text,
+        content: _serializeContent(),
+      );
+    }
+    setState(() {
+      _isGridMode = !_isGridMode;
+      widget.themeState.setNotesDisplayMode(_isGridMode ? 'grid' : 'list');
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accentColor = widget.themeState.accentColor;
 
-    // Reload editor if note changed
-    if (widget.appState.currentNote?.id != _loadedNoteId) {
+    // Reload editor if note changed (only in list mode)
+    if (!_isGridMode && widget.appState.currentNote?.id != _loadedNoteId) {
       _loadNote();
     }
 
@@ -214,6 +234,145 @@ class _NotesListPageState extends State<NotesListPage> {
         ? widget.appState.pinnedNotes
         : widget.appState.filteredNotes;
 
+    if (_isGridMode) {
+      return _buildGridLayout(context, theme, accentColor, showPinned, displayedNotes);
+    }
+
+    return _buildListLayout(context, theme, accentColor, showPinned, displayedNotes);
+  }
+
+  // ── Shared header ──────────────────────────────────────────────────
+
+  Widget _buildHeader(ThemeData theme, Color accentColor, bool showPinned) {
+    return Row(
+      children: [
+        Text(
+          'My Notes',
+          style: theme.textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const Spacer(),
+        // All / Pinned tab toggle
+        Container(
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTabBtn(
+                icon: Icons.list_rounded,
+                label: _isGridMode ? 'All' : '',
+                isSelected: !showPinned,
+                accentColor: accentColor,
+                onTap: () => widget.appState.setShowPinnedTab(false),
+              ),
+              _buildTabBtn(
+                icon: Icons.push_pin_rounded,
+                label: _isGridMode ? 'Pinned' : '',
+                isSelected: showPinned,
+                accentColor: accentColor,
+                onTap: () => widget.appState.setShowPinnedTab(true),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        // List / Grid toggle
+        Container(
+          decoration: BoxDecoration(
+            color: theme.brightness == Brightness.dark
+                ? Colors.white.withValues(alpha: 0.1)
+                : Colors.grey.shade100,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.all(2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTabBtn(
+                icon: Icons.view_list_rounded,
+                label: '',
+                isSelected: !_isGridMode,
+                accentColor: accentColor,
+                onTap: () { if (_isGridMode) _toggleViewMode(); },
+              ),
+              _buildTabBtn(
+                icon: Icons.grid_view_rounded,
+                label: '',
+                isSelected: _isGridMode,
+                accentColor: accentColor,
+                onTap: () { if (!_isGridMode) _toggleViewMode(); },
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 6),
+        InkWell(
+          onTap: () async {
+            await widget.appState.createNewNote();
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: accentColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: const Icon(
+              Icons.add,
+              color: Colors.white,
+              size: 16,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmptyState(ThemeData theme, bool showPinned) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            showPinned ? Icons.push_pin_outlined : Icons.note_alt_outlined,
+            size: 40,
+            color: Colors.grey.shade300,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            showPinned
+                ? 'No pinned notes'
+                : (widget.appState.searchQuery.isEmpty
+                      ? 'No notes yet'
+                      : 'No notes found'),
+            style: TextStyle(
+              color: theme.brightness == Brightness.dark
+                  ? Colors.white70
+                  : Colors.grey.shade400,
+              fontSize: 13,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── List layout (original) ─────────────────────────────────────────
+
+  Widget _buildListLayout(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+    bool showPinned,
+    List<Note> displayedNotes,
+  ) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
@@ -228,106 +387,13 @@ class _NotesListPageState extends State<NotesListPage> {
               padding: const EdgeInsets.all(16),
               child: Column(
                 children: [
-                  // Header
-                  Row(
-                    children: [
-                      Text(
-                        'My Notes',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                      const Spacer(),
-                      // All / Pinned tab toggle
-                      Container(
-                        decoration: BoxDecoration(
-                          color: theme.brightness == Brightness.dark
-                              ? Colors.white.withValues(alpha: 0.1)
-                              : Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.all(2),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            _buildTabBtn(
-                              icon: Icons.list_rounded,
-                              label: 'All',
-                              isSelected: !showPinned,
-                              accentColor: accentColor,
-                              onTap: () =>
-                                  widget.appState.setShowPinnedTab(false),
-                            ),
-                            _buildTabBtn(
-                              icon: Icons.push_pin_rounded,
-                              label: 'Pinned',
-                              isSelected: showPinned,
-                              accentColor: accentColor,
-                              onTap: () =>
-                                  widget.appState.setShowPinnedTab(true),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      InkWell(
-                        onTap: () async {
-                          await widget.appState.createNewNote();
-                        },
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          padding: const EdgeInsets.all(6),
-                          decoration: BoxDecoration(
-                            color: accentColor,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.add,
-                            color: Colors.white,
-                            size: 16,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-
+                  _buildHeader(theme, accentColor, showPinned),
                   const SizedBox(height: 8),
-
-                  // Project filter chips (always visible so user can create first project)
                   _buildProjectChips(theme, accentColor),
                   const SizedBox(height: 8),
-
-                  // Notes list
                   Expanded(
                     child: displayedNotes.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  showPinned
-                                      ? Icons.push_pin_outlined
-                                      : Icons.note_alt_outlined,
-                                  size: 40,
-                                  color: Colors.grey.shade300,
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  showPinned
-                                      ? 'No pinned notes'
-                                      : (widget.appState.searchQuery.isEmpty
-                                            ? 'No notes yet'
-                                            : 'No notes found'),
-                                  style: TextStyle(
-                                    color: theme.brightness == Brightness.dark
-                                        ? Colors.white70
-                                        : Colors.grey.shade400,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
+                        ? _buildEmptyState(theme, showPinned)
                         : ListView.builder(
                             key: ValueKey(showPinned ? 'pinned' : 'all'),
                             itemCount: displayedNotes.length,
@@ -367,6 +433,78 @@ class _NotesListPageState extends State<NotesListPage> {
           // Preview/edit panel
           Expanded(child: _buildEditorPanel(context, theme, accentColor)),
         ],
+      ),
+    );
+  }
+
+  // ── Grid layout ────────────────────────────────────────────────────
+
+  Widget _buildGridLayout(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+    bool showPinned,
+    List<Note> displayedNotes,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      child: GlassmorphicContainer(
+        borderRadius: 20,
+        color: widget.themeState.editorBgColor,
+        opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildHeader(theme, accentColor, showPinned),
+            const SizedBox(height: 8),
+            _buildProjectChips(theme, accentColor),
+            const SizedBox(height: 8),
+            Expanded(
+              child: displayedNotes.isEmpty
+                  ? _buildEmptyState(theme, showPinned)
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final columns = (constraints.maxWidth / 280)
+                            .clamp(2, 5)
+                            .toInt();
+                        return MasonryGridView.builder(
+                          key: ValueKey(
+                            '${showPinned ? 'pinned' : 'all'}-grid',
+                          ),
+                          gridDelegate:
+                              SliverSimpleGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: columns,
+                          ),
+                          mainAxisSpacing: 12,
+                          crossAxisSpacing: 12,
+                          itemCount: displayedNotes.length,
+                          itemBuilder: (context, index) {
+                            final note = displayedNotes[index];
+                            return _StaggeredEntry(
+                              index: index,
+                              child: NoteGridCard(
+                                note: note,
+                                accentColor: accentColor,
+                                editorBgColor:
+                                    widget.themeState.editorBgColor,
+                                onTap: () {
+                                  widget.appState.selectNote(note);
+                                },
+                                onCompactMode: () =>
+                                    widget.appState.enterCompactMode(note),
+                                onPin: () =>
+                                    widget.appState.togglePin(note),
+                                onDelete: () =>
+                                    widget.appState.deleteNote(note.id),
+                              ),
+                            );
+                          },
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }

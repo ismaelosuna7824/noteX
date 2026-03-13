@@ -56,6 +56,9 @@ class ThemeState extends ChangeNotifier {
   /// Custom sidebar icon color (null = auto-derived from editor background).
   Color? _sidebarIconColor;
 
+  /// Notes display mode: 'list' or 'grid'.
+  String _notesDisplayMode = 'list';
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -117,6 +120,9 @@ class ThemeState extends ChangeNotifier {
 
   /// The raw sidebar icon color override, or null if auto mode is active.
   Color? get sidebarIconColorOverride => _sidebarIconColor;
+
+  /// Notes display mode ('list' or 'grid').
+  String get notesDisplayMode => _notesDisplayMode;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -323,6 +329,8 @@ class ThemeState extends ChangeNotifier {
 
       final sidebarIconValue = json['sidebarIconColor'] as int?;
       if (sidebarIconValue != null) _sidebarIconColor = Color(sidebarIconValue);
+
+      _notesDisplayMode = json['notesDisplayMode'] as String? ?? 'list';
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -361,6 +369,7 @@ class ThemeState extends ChangeNotifier {
         'darkEditorBgColor': _darkEditorBgColor?.toARGB32(),
         'lightEditorBgColor': _lightEditorBgColor?.toARGB32(),
         'sidebarIconColor': _sidebarIconColor?.toARGB32(),
+        'notesDisplayMode': _notesDisplayMode,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -368,6 +377,13 @@ class ThemeState extends ChangeNotifier {
   }
 
   // ── Setters ───────────────────────────────────────────────────────────────
+
+  /// Change notes display mode ('list' or 'grid') and persist.
+  void setNotesDisplayMode(String mode) {
+    _notesDisplayMode = mode;
+    _saveToDisk();
+    notifyListeners();
+  }
 
   /// Change the font family and persist.
   void setFontFamily(String family) {

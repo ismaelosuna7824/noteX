@@ -102,6 +102,26 @@ class Note {
     }
   }
 
+  /// Extracts a plain-text preview from the Quill Delta JSON content.
+  /// Returns the first ~200 characters, skipping embeds.
+  String get plainTextPreview {
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is! List) return '';
+      final buffer = StringBuffer();
+      for (final op in decoded) {
+        if (op is Map && op['insert'] is String) {
+          buffer.write(op['insert']);
+          if (buffer.length > 200) break;
+        }
+      }
+      final text = buffer.toString().trim();
+      return text.length > 200 ? text.substring(0, 200) : text;
+    } catch (_) {
+      return '';
+    }
+  }
+
   /// Returns a copy with updated fields.
   Note copyWith({
     String? title,
