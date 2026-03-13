@@ -9,11 +9,13 @@ import '../state/theme_state.dart';
 class EditorTextControls extends StatelessWidget {
   final ThemeState themeState;
   final bool isMarkdown;
+  final Color? noteColor;
 
   const EditorTextControls({
     super.key,
     required this.themeState,
     this.isMarkdown = false,
+    this.noteColor,
   });
 
   double get _fontSize =>
@@ -31,10 +33,11 @@ class EditorTextControls extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final iconColor = isDark ? Colors.white70 : Colors.grey.shade700;
-    final disabledColor = isDark ? Colors.white24 : Colors.grey.shade300;
-    final labelColor = isDark ? Colors.white60 : Colors.grey.shade600;
-    final dividerColor = isDark ? Colors.white12 : Colors.grey.shade300;
+    final hasNoteColor = noteColor != null;
+    final iconColor = hasNoteColor ? Colors.white70 : (isDark ? Colors.white70 : Colors.grey.shade700);
+    final disabledColor = hasNoteColor ? Colors.white30 : (isDark ? Colors.white24 : Colors.grey.shade300);
+    final labelColor = hasNoteColor ? Colors.white60 : (isDark ? Colors.white60 : Colors.grey.shade600);
+    final dividerColor = hasNoteColor ? Colors.white24 : (isDark ? Colors.white12 : Colors.grey.shade300);
 
     return Row(
       mainAxisSize: MainAxisSize.min,

@@ -311,6 +311,21 @@ class AppState extends ChangeNotifier {
   }
 
   /// Toggle the pin state of a note.
+  /// Update the color of a note (pass null to clear).
+  Future<void> updateNoteColor(Note note, String? color) async {
+    final updated = await _updateNote.execute(
+      noteId: note.id,
+      color: color,
+    );
+    if (updated != null) {
+      updateNoteInList(updated);
+      if (_currentNote?.id == note.id) {
+        _currentNote = updated;
+      }
+      notifyListeners();
+    }
+  }
+
   Future<void> togglePin(Note note) async {
     final updated = await _updateNote.execute(
       noteId: note.id,

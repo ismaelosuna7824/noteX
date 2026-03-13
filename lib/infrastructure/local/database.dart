@@ -32,6 +32,7 @@ class NoteEntries extends Table {
       text().withDefault(const Constant('localOnly'))();
   TextColumn get backgroundImage => text().nullable()();
   TextColumn get themeId => text().nullable()();
+  TextColumn get color => text().nullable()();
   BoolColumn get isPinned => boolean().withDefault(const Constant(false))();
   IntColumn get version => integer().withDefault(const Constant(1))();
   DateTimeColumn get deletedAt => dateTime().nullable()();
@@ -208,7 +209,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 9;
+  int get schemaVersion => 10;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -285,6 +286,17 @@ class AppDatabase extends _$AppDatabase {
       if (from < 9) {
         await m.createTable(reminderEntries);
       }
+      if (from < 10) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+        await safeAddColumn(noteEntries, noteEntries.color);
+      }
     },
   );
 
@@ -317,6 +329,7 @@ class AppDatabase extends _$AppDatabase {
       syncStatus: _parseSyncStatus(row.syncStatus),
       backgroundImage: row.backgroundImage,
       themeId: row.themeId,
+      color: row.color,
       isPinned: row.isPinned,
       version: row.version,
       deletedAt: row.deletedAt,
@@ -335,6 +348,7 @@ class AppDatabase extends _$AppDatabase {
       syncStatus: Value(note.syncStatus.name),
       backgroundImage: Value(note.backgroundImage),
       themeId: Value(note.themeId),
+      color: Value(note.color),
       isPinned: Value(note.isPinned),
       version: Value(note.version),
       deletedAt: Value(note.deletedAt),

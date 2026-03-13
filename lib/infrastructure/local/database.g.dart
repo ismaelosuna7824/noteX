@@ -96,6 +96,15 @@ class $NoteEntriesTable extends NoteEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _colorMeta = const VerificationMeta('color');
+  @override
+  late final GeneratedColumn<String> color = GeneratedColumn<String>(
+    'color',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _isPinnedMeta = const VerificationMeta(
     'isPinned',
   );
@@ -164,6 +173,7 @@ class $NoteEntriesTable extends NoteEntries
     syncStatus,
     backgroundImage,
     themeId,
+    color,
     isPinned,
     version,
     deletedAt,
@@ -234,6 +244,12 @@ class $NoteEntriesTable extends NoteEntries
       context.handle(
         _themeIdMeta,
         themeId.isAcceptableOrUnknown(data['theme_id']!, _themeIdMeta),
+      );
+    }
+    if (data.containsKey('color')) {
+      context.handle(
+        _colorMeta,
+        color.isAcceptableOrUnknown(data['color']!, _colorMeta),
       );
     }
     if (data.containsKey('is_pinned')) {
@@ -307,6 +323,10 @@ class $NoteEntriesTable extends NoteEntries
         DriftSqlType.string,
         data['${effectivePrefix}theme_id'],
       ),
+      color: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}color'],
+      ),
       isPinned: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_pinned'],
@@ -345,6 +365,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
   final String syncStatus;
   final String? backgroundImage;
   final String? themeId;
+  final String? color;
   final bool isPinned;
   final int version;
   final DateTime? deletedAt;
@@ -359,6 +380,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     required this.syncStatus,
     this.backgroundImage,
     this.themeId,
+    this.color,
     required this.isPinned,
     required this.version,
     this.deletedAt,
@@ -379,6 +401,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     }
     if (!nullToAbsent || themeId != null) {
       map['theme_id'] = Variable<String>(themeId);
+    }
+    if (!nullToAbsent || color != null) {
+      map['color'] = Variable<String>(color);
     }
     map['is_pinned'] = Variable<bool>(isPinned);
     map['version'] = Variable<int>(version);
@@ -408,6 +433,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       themeId: themeId == null && nullToAbsent
           ? const Value.absent()
           : Value(themeId),
+      color: color == null && nullToAbsent
+          ? const Value.absent()
+          : Value(color),
       isPinned: Value(isPinned),
       version: Value(version),
       deletedAt: deletedAt == null && nullToAbsent
@@ -436,6 +464,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       backgroundImage: serializer.fromJson<String?>(json['backgroundImage']),
       themeId: serializer.fromJson<String?>(json['themeId']),
+      color: serializer.fromJson<String?>(json['color']),
       isPinned: serializer.fromJson<bool>(json['isPinned']),
       version: serializer.fromJson<int>(json['version']),
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
@@ -455,6 +484,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       'syncStatus': serializer.toJson<String>(syncStatus),
       'backgroundImage': serializer.toJson<String?>(backgroundImage),
       'themeId': serializer.toJson<String?>(themeId),
+      'color': serializer.toJson<String?>(color),
       'isPinned': serializer.toJson<bool>(isPinned),
       'version': serializer.toJson<int>(version),
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
@@ -472,6 +502,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     String? syncStatus,
     Value<String?> backgroundImage = const Value.absent(),
     Value<String?> themeId = const Value.absent(),
+    Value<String?> color = const Value.absent(),
     bool? isPinned,
     int? version,
     Value<DateTime?> deletedAt = const Value.absent(),
@@ -488,6 +519,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
         ? backgroundImage.value
         : this.backgroundImage,
     themeId: themeId.present ? themeId.value : this.themeId,
+    color: color.present ? color.value : this.color,
     isPinned: isPinned ?? this.isPinned,
     version: version ?? this.version,
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
@@ -508,6 +540,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           ? data.backgroundImage.value
           : this.backgroundImage,
       themeId: data.themeId.present ? data.themeId.value : this.themeId,
+      color: data.color.present ? data.color.value : this.color,
       isPinned: data.isPinned.present ? data.isPinned.value : this.isPinned,
       version: data.version.present ? data.version.value : this.version,
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
@@ -527,6 +560,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           ..write('syncStatus: $syncStatus, ')
           ..write('backgroundImage: $backgroundImage, ')
           ..write('themeId: $themeId, ')
+          ..write('color: $color, ')
           ..write('isPinned: $isPinned, ')
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
@@ -546,6 +580,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     syncStatus,
     backgroundImage,
     themeId,
+    color,
     isPinned,
     version,
     deletedAt,
@@ -564,6 +599,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           other.syncStatus == this.syncStatus &&
           other.backgroundImage == this.backgroundImage &&
           other.themeId == this.themeId &&
+          other.color == this.color &&
           other.isPinned == this.isPinned &&
           other.version == this.version &&
           other.deletedAt == this.deletedAt &&
@@ -580,6 +616,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
   final Value<String> syncStatus;
   final Value<String?> backgroundImage;
   final Value<String?> themeId;
+  final Value<String?> color;
   final Value<bool> isPinned;
   final Value<int> version;
   final Value<DateTime?> deletedAt;
@@ -595,6 +632,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.syncStatus = const Value.absent(),
     this.backgroundImage = const Value.absent(),
     this.themeId = const Value.absent(),
+    this.color = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -611,6 +649,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.syncStatus = const Value.absent(),
     this.backgroundImage = const Value.absent(),
     this.themeId = const Value.absent(),
+    this.color = const Value.absent(),
     this.isPinned = const Value.absent(),
     this.version = const Value.absent(),
     this.deletedAt = const Value.absent(),
@@ -629,6 +668,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Expression<String>? syncStatus,
     Expression<String>? backgroundImage,
     Expression<String>? themeId,
+    Expression<String>? color,
     Expression<bool>? isPinned,
     Expression<int>? version,
     Expression<DateTime>? deletedAt,
@@ -645,6 +685,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       if (syncStatus != null) 'sync_status': syncStatus,
       if (backgroundImage != null) 'background_image': backgroundImage,
       if (themeId != null) 'theme_id': themeId,
+      if (color != null) 'color': color,
       if (isPinned != null) 'is_pinned': isPinned,
       if (version != null) 'version': version,
       if (deletedAt != null) 'deleted_at': deletedAt,
@@ -663,6 +704,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Value<String>? syncStatus,
     Value<String?>? backgroundImage,
     Value<String?>? themeId,
+    Value<String?>? color,
     Value<bool>? isPinned,
     Value<int>? version,
     Value<DateTime?>? deletedAt,
@@ -679,6 +721,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       syncStatus: syncStatus ?? this.syncStatus,
       backgroundImage: backgroundImage ?? this.backgroundImage,
       themeId: themeId ?? this.themeId,
+      color: color ?? this.color,
       isPinned: isPinned ?? this.isPinned,
       version: version ?? this.version,
       deletedAt: deletedAt ?? this.deletedAt,
@@ -715,6 +758,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     if (themeId.present) {
       map['theme_id'] = Variable<String>(themeId.value);
     }
+    if (color.present) {
+      map['color'] = Variable<String>(color.value);
+    }
     if (isPinned.present) {
       map['is_pinned'] = Variable<bool>(isPinned.value);
     }
@@ -747,6 +793,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
           ..write('syncStatus: $syncStatus, ')
           ..write('backgroundImage: $backgroundImage, ')
           ..write('themeId: $themeId, ')
+          ..write('color: $color, ')
           ..write('isPinned: $isPinned, ')
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
@@ -4633,6 +4680,7 @@ typedef $$NoteEntriesTableCreateCompanionBuilder =
       Value<String> syncStatus,
       Value<String?> backgroundImage,
       Value<String?> themeId,
+      Value<String?> color,
       Value<bool> isPinned,
       Value<int> version,
       Value<DateTime?> deletedAt,
@@ -4650,6 +4698,7 @@ typedef $$NoteEntriesTableUpdateCompanionBuilder =
       Value<String> syncStatus,
       Value<String?> backgroundImage,
       Value<String?> themeId,
+      Value<String?> color,
       Value<bool> isPinned,
       Value<int> version,
       Value<DateTime?> deletedAt,
@@ -4704,6 +4753,11 @@ class $$NoteEntriesTableFilterComposer
 
   ColumnFilters<String> get themeId => $composableBuilder(
     column: $table.themeId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get color => $composableBuilder(
+    column: $table.color,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -4782,6 +4836,11 @@ class $$NoteEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get color => $composableBuilder(
+    column: $table.color,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<bool> get isPinned => $composableBuilder(
     column: $table.isPinned,
     builder: (column) => ColumnOrderings(column),
@@ -4845,6 +4904,9 @@ class $$NoteEntriesTableAnnotationComposer
   GeneratedColumn<String> get themeId =>
       $composableBuilder(column: $table.themeId, builder: (column) => column);
 
+  GeneratedColumn<String> get color =>
+      $composableBuilder(column: $table.color, builder: (column) => column);
+
   GeneratedColumn<bool> get isPinned =>
       $composableBuilder(column: $table.isPinned, builder: (column) => column);
 
@@ -4900,6 +4962,7 @@ class $$NoteEntriesTableTableManager
                 Value<String> syncStatus = const Value.absent(),
                 Value<String?> backgroundImage = const Value.absent(),
                 Value<String?> themeId = const Value.absent(),
+                Value<String?> color = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -4915,6 +4978,7 @@ class $$NoteEntriesTableTableManager
                 syncStatus: syncStatus,
                 backgroundImage: backgroundImage,
                 themeId: themeId,
+                color: color,
                 isPinned: isPinned,
                 version: version,
                 deletedAt: deletedAt,
@@ -4932,6 +4996,7 @@ class $$NoteEntriesTableTableManager
                 Value<String> syncStatus = const Value.absent(),
                 Value<String?> backgroundImage = const Value.absent(),
                 Value<String?> themeId = const Value.absent(),
+                Value<String?> color = const Value.absent(),
                 Value<bool> isPinned = const Value.absent(),
                 Value<int> version = const Value.absent(),
                 Value<DateTime?> deletedAt = const Value.absent(),
@@ -4947,6 +5012,7 @@ class $$NoteEntriesTableTableManager
                 syncStatus: syncStatus,
                 backgroundImage: backgroundImage,
                 themeId: themeId,
+                color: color,
                 isPinned: isPinned,
                 version: version,
                 deletedAt: deletedAt,

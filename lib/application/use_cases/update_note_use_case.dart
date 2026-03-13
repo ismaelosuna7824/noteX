@@ -17,6 +17,7 @@ class UpdateNoteUseCase {
     String? content,
     String? backgroundImage,
     String? themeId,
+    Object? color = const _Unset(),
     bool? isPinned,
   }) async {
     final existing = await _repository.getById(noteId);
@@ -35,10 +36,16 @@ class UpdateNoteUseCase {
       syncStatus: newSyncStatus,
       backgroundImage: backgroundImage,
       themeId: themeId,
+      color: color is _Unset ? existing.color : color,
       isPinned: isPinned,
     );
 
     await _repository.save(updated);
     return updated;
   }
+}
+
+// Private sentinel for nullable color parameter.
+class _Unset {
+  const _Unset();
 }

@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import '../../domain/entities/note.dart';
 import '../../domain/entities/note_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
@@ -208,8 +210,9 @@ class _NotesListPageState extends State<NotesListPage> {
     }
 
     final showPinned = widget.appState.showPinnedTab;
-    final displayedNotes =
-        showPinned ? widget.appState.pinnedNotes : widget.appState.filteredNotes;
+    final displayedNotes = showPinned
+        ? widget.appState.pinnedNotes
+        : widget.appState.filteredNotes;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -278,8 +281,11 @@ class _NotesListPageState extends State<NotesListPage> {
                             color: accentColor,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          child: const Icon(Icons.add,
-                              color: Colors.white, size: 16),
+                          child: const Icon(
+                            Icons.add,
+                            color: Colors.white,
+                            size: 16,
+                          ),
                         ),
                       ),
                     ],
@@ -310,8 +316,8 @@ class _NotesListPageState extends State<NotesListPage> {
                                   showPinned
                                       ? 'No pinned notes'
                                       : (widget.appState.searchQuery.isEmpty
-                                          ? 'No notes yet'
-                                          : 'No notes found'),
+                                            ? 'No notes yet'
+                                            : 'No notes found'),
                                   style: TextStyle(
                                     color: theme.brightness == Brightness.dark
                                         ? Colors.white70
@@ -331,18 +337,19 @@ class _NotesListPageState extends State<NotesListPage> {
                                 index: index,
                                 child: NoteCard(
                                   note: note,
-                                  isSelected: note.id ==
+                                  isSelected:
+                                      note.id ==
                                       widget.appState.currentNote?.id,
                                   accentColor: accentColor,
-                                  editorBgColor: widget.themeState.editorBgColor,
+                                  editorBgColor:
+                                      widget.themeState.editorBgColor,
                                   onTap: () {
                                     widget.appState.previewNote(note);
                                     setState(() => _loadNote());
                                   },
                                   onCompactMode: () =>
                                       widget.appState.enterCompactMode(note),
-                                  onPin: () =>
-                                      widget.appState.togglePin(note),
+                                  onPin: () => widget.appState.togglePin(note),
                                   onDelete: () =>
                                       widget.appState.deleteNote(note.id),
                                 ),
@@ -358,9 +365,7 @@ class _NotesListPageState extends State<NotesListPage> {
           const SizedBox(width: 16),
 
           // Preview/edit panel
-          Expanded(
-            child: _buildEditorPanel(context, theme, accentColor),
-          ),
+          Expanded(child: _buildEditorPanel(context, theme, accentColor)),
         ],
       ),
     );
@@ -375,10 +380,7 @@ class _NotesListPageState extends State<NotesListPage> {
       height: 30,
       child: ScrollConfiguration(
         behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.mouse,
-          },
+          dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
         ),
         child: ListView(
           scrollDirection: Axis.horizontal,
@@ -429,8 +431,11 @@ class _NotesListPageState extends State<NotesListPage> {
                       : Colors.grey.shade100,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: Icon(Icons.add, size: 14,
-                    color: isDark ? Colors.white54 : Colors.grey.shade500),
+                child: Icon(
+                  Icons.add,
+                  size: 14,
+                  color: isDark ? Colors.white54 : Colors.grey.shade500,
+                ),
               ),
             ),
           ],
@@ -456,8 +461,8 @@ class _NotesListPageState extends State<NotesListPage> {
           color: isSelected
               ? color.withValues(alpha: 0.2)
               : (isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.grey.shade100),
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.grey.shade100),
           borderRadius: BorderRadius.circular(14),
           border: isSelected
               ? Border.all(color: color.withValues(alpha: 0.5), width: 1)
@@ -521,11 +526,12 @@ class _NotesListPageState extends State<NotesListPage> {
                         shape: BoxShape.circle,
                         border: selectedColor == c
                             ? Border.all(
-                                color: Theme.of(ctx).brightness ==
-                                        Brightness.dark
+                                color:
+                                    Theme.of(ctx).brightness == Brightness.dark
                                     ? Colors.white
                                     : Colors.black,
-                                width: 2)
+                                width: 2,
+                              )
                             : null,
                       ),
                     ),
@@ -558,12 +564,15 @@ class _NotesListPageState extends State<NotesListPage> {
     );
   }
 
-  void _showProjectContextMenu(
-      Offset position, NoteProject project) async {
+  void _showProjectContextMenu(Offset position, NoteProject project) async {
     final result = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
-          position.dx, position.dy, position.dx, position.dy),
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
       items: [
         const PopupMenuItem(
           value: 'delete',
@@ -571,8 +580,10 @@ class _NotesListPageState extends State<NotesListPage> {
             children: [
               Icon(Icons.delete_rounded, size: 16, color: Colors.red),
               SizedBox(width: 8),
-              Text('Delete project',
-                  style: TextStyle(color: Colors.red, fontSize: 13)),
+              Text(
+                'Delete project',
+                style: TextStyle(color: Colors.red, fontSize: 13),
+              ),
             ],
           ),
         ),
@@ -657,8 +668,7 @@ class _NotesListPageState extends State<NotesListPage> {
               label,
               style: TextStyle(
                 fontSize: 12,
-                fontWeight:
-                    isSelected ? FontWeight.w700 : FontWeight.w500,
+                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
                 color: isSelected
                     ? accentColor
                     : (isDark ? Colors.white54 : Colors.grey.shade500),
@@ -670,41 +680,29 @@ class _NotesListPageState extends State<NotesListPage> {
     );
   }
 
-  DefaultStyles _buildQuillStyles(ThemeData theme) {
+  DefaultStyles _buildQuillStyles(ThemeData theme, {Color? noteColor}) {
     final fontSize = widget.themeState.editorFontSize;
     final lh = widget.themeState.editorLineHeight;
-    final textColor = widget.themeState.editorTextColor;
-    final mutedColor = widget.themeState.editorMutedTextColor;
+    final textColor = noteColor != null ? Colors.white : widget.themeState.editorTextColor;
+    final mutedColor = noteColor != null ? Colors.white60 : widget.themeState.editorMutedTextColor;
 
     return DefaultStyles(
       placeHolder: DefaultTextBlockStyle(
-        TextStyle(
-          fontSize: fontSize,
-          height: lh,
-          color: mutedColor,
-        ),
+        TextStyle(fontSize: fontSize, height: lh, color: mutedColor),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
         const VerticalSpacing(0, 0),
         null,
       ),
       paragraph: DefaultTextBlockStyle(
-        TextStyle(
-          fontSize: fontSize,
-          height: lh,
-          color: textColor,
-        ),
+        TextStyle(fontSize: fontSize, height: lh, color: textColor),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
         const VerticalSpacing(0, 0),
         null,
       ),
       lists: DefaultListBlockStyle(
-        TextStyle(
-          fontSize: fontSize,
-          height: lh,
-          color: textColor,
-        ),
+        TextStyle(fontSize: fontSize, height: lh, color: textColor),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(4, 4),
         const VerticalSpacing(0, 0),
@@ -712,11 +710,7 @@ class _NotesListPageState extends State<NotesListPage> {
         null,
       ),
       leading: DefaultTextBlockStyle(
-        TextStyle(
-          fontSize: fontSize,
-          height: lh,
-          color: textColor,
-        ),
+        TextStyle(fontSize: fontSize, height: lh, color: textColor),
         const HorizontalSpacing(0, 0),
         const VerticalSpacing(0, 0),
         const VerticalSpacing(0, 0),
@@ -726,7 +720,10 @@ class _NotesListPageState extends State<NotesListPage> {
   }
 
   Widget _buildEditorPanel(
-      BuildContext context, ThemeData theme, Color accentColor) {
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+  ) {
     final note = widget.appState.currentNote;
 
     final isDark = theme.brightness == Brightness.dark;
@@ -741,9 +738,11 @@ class _NotesListPageState extends State<NotesListPage> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.edit_note_rounded,
-                  size: 56,
-                  color: isDark ? Colors.white30 : Colors.grey.shade300),
+              Icon(
+                Icons.edit_note_rounded,
+                size: 56,
+                color: isDark ? Colors.white30 : Colors.grey.shade300,
+              ),
               const SizedBox(height: 12),
               Text(
                 'Select a note to edit',
@@ -758,10 +757,13 @@ class _NotesListPageState extends State<NotesListPage> {
       );
     }
 
+    final noteColor = _parseNoteColor(note.color);
+    final inlineBg = noteColor ?? widget.themeState.editorBgColor;
+
     return GlassmorphicContainer(
       borderRadius: 20,
-      color: widget.themeState.editorBgColor,
-      opacity: isDark ? 0.90 : 0.95,
+      color: inlineBg,
+      opacity: noteColor != null ? 0.80 : (isDark ? 0.90 : 0.95),
       padding: EdgeInsets.zero,
       child: Column(
         children: [
@@ -782,21 +784,20 @@ class _NotesListPageState extends State<NotesListPage> {
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
-                        color: widget.themeState.editorTextColor,
+                        color: noteColor != null ? Colors.white : widget.themeState.editorTextColor,
                       ),
                       decoration: InputDecoration(
                         hintText: 'Note title...',
                         filled: true,
-                        fillColor: widget.themeState.editorBgColor
-                            .computeLuminance() > 0.5
+                        fillColor: noteColor != null
+                            ? Colors.white.withValues(alpha: 0.10)
+                            : (widget.themeState.editorBgColor.computeLuminance() >
+                                0.5
                             ? Colors.grey.shade50
-                            : Colors.white.withValues(alpha: 0.06),
+                            : Colors.white.withValues(alpha: 0.06)),
                         enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
-                          borderSide: BorderSide(
-                            color: chipBorder,
-                            width: 1,
-                          ),
+                          borderSide: BorderSide(color: chipBorder, width: 1),
                         ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(10),
@@ -810,7 +811,7 @@ class _NotesListPageState extends State<NotesListPage> {
                           vertical: 10,
                         ),
                         hintStyle: TextStyle(
-                          color: widget.themeState.editorMutedTextColor,
+                          color: noteColor != null ? Colors.white60 : widget.themeState.editorMutedTextColor,
                           fontWeight: FontWeight.w500,
                           fontSize: 16,
                         ),
@@ -830,8 +831,9 @@ class _NotesListPageState extends State<NotesListPage> {
                       child: status == 'saved'
                           ? Container(
                               height: 32,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 10),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                              ),
                               decoration: BoxDecoration(
                                 color: isDark
                                     ? Colors.green.withValues(alpha: 0.15)
@@ -872,29 +874,42 @@ class _NotesListPageState extends State<NotesListPage> {
                     );
                   },
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
+                // Note color picker
+                _buildInlineColorButton(note, accentColor, noteColor),
+                const SizedBox(width: 4),
                 // Sticky note mode — icon only to save space
                 IconButton(
                   onPressed: () => widget.appState.enterCompactMode(note),
-                  icon: Icon(Icons.sticky_note_2_outlined,
-                      size: 18, color: accentColor),
+                  icon: Icon(
+                    Icons.sticky_note_2_outlined,
+                    size: 18,
+                    color: noteColor != null ? Colors.white : accentColor,
+                  ),
                   tooltip: 'Sticky Note',
                   splashRadius: 16,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                 ),
                 const SizedBox(width: 2),
                 // Open in full editor — icon only to save space
                 IconButton(
                   onPressed: () => widget.appState.selectNote(note),
-                  icon: Icon(Icons.open_in_new_rounded,
-                      size: 18, color: accentColor),
+                  icon: Icon(
+                    Icons.open_in_new_rounded,
+                    size: 18,
+                    color: noteColor != null ? Colors.white : accentColor,
+                  ),
                   tooltip: 'Full Editor',
                   splashRadius: 16,
                   padding: EdgeInsets.zero,
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
                 ),
               ],
             ),
@@ -926,7 +941,7 @@ class _NotesListPageState extends State<NotesListPage> {
                       cursorColor: accentColor,
                       selectionColor: accentColor.withValues(alpha: 0.3),
                     ),
-                    customStyles: _buildQuillStyles(theme),
+                    customStyles: _buildQuillStyles(theme, noteColor: noteColor),
                   ),
                 ),
               ),
@@ -935,6 +950,233 @@ class _NotesListPageState extends State<NotesListPage> {
         ],
       ),
     );
+  }
+
+  // ── Inline note color picker ───────────────────────────────────────────
+
+  Widget _buildInlineColorButton(
+    Note note,
+    Color accentColor,
+    Color? noteColor,
+  ) {
+    final iconCol = noteColor != null ? Colors.white : accentColor;
+    return IconButton(
+      onPressed: () => _showInlineColorPicker(note, accentColor),
+      icon: noteColor != null
+          ? Container(
+              width: 18,
+              height: 18,
+              decoration: BoxDecoration(
+                color: noteColor,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white54, width: 1.5),
+              ),
+            )
+          : Icon(Icons.palette_outlined, size: 18, color: iconCol),
+      tooltip: 'Note Color',
+      splashRadius: 16,
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+    );
+  }
+
+  void _showInlineColorPicker(Note note, Color accentColor) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
+    final currentColor = _parseNoteColor(note.color);
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        return Dialog(
+          backgroundColor: bg,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Note Color',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: isDark ? Colors.white : Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    // Clear / no color
+                    _colorSwatch(ctx, note: note, color: null,
+                        isSelected: currentColor == null,
+                        accentColor: accentColor, isDark: isDark,
+                        icon: Icons.block_rounded),
+                    ...ThemeState.presetColors.map((c) => _colorSwatch(
+                          ctx, note: note, color: c,
+                          isSelected: currentColor != null &&
+                              currentColor.toARGB32() == c.toARGB32(),
+                          accentColor: accentColor, isDark: isDark)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _customColorSwatch(ctx, note: note,
+                    currentColor: currentColor ?? accentColor,
+                    accentColor: accentColor, isDark: isDark),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _colorSwatch(BuildContext ctx,
+      {required Note note, required Color? color, required bool isSelected,
+      required Color accentColor, required bool isDark, IconData? icon}) {
+    return InkWell(
+      onTap: () {
+        final hex = color != null
+            ? color.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase()
+            : null;
+        widget.appState.updateNoteColor(note, hex);
+        Navigator.of(ctx).pop();
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: color ?? (isDark ? Colors.grey.shade800 : Colors.grey.shade200),
+          border: isSelected
+              ? Border.all(color: isDark ? Colors.white : Colors.black87, width: 3)
+              : Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.20)
+                      : Colors.grey.shade400, width: 1),
+          boxShadow: isSelected
+              ? [BoxShadow(color: accentColor.withValues(alpha: 0.5),
+                    blurRadius: 12, spreadRadius: 2)]
+              : null,
+        ),
+        child: icon != null
+            ? Icon(icon, size: 16,
+                color: isDark ? Colors.grey.shade400 : Colors.grey.shade600)
+            : isSelected
+                ? Icon(Icons.check, size: 16,
+                    color: (color?.computeLuminance() ?? 0) > 0.5
+                        ? Colors.black87 : Colors.white)
+                : null,
+      ),
+    );
+  }
+
+  Widget _customColorSwatch(BuildContext ctx,
+      {required Note note, required Color currentColor,
+      required Color accentColor, required bool isDark}) {
+    final isCustom = !ThemeState.presetColors
+        .any((c) => c.toARGB32() == currentColor.toARGB32());
+    return InkWell(
+      onTap: () async {
+        Navigator.of(ctx).pop();
+        final result = await _showCustomColorPicker(currentColor, accentColor, isDark);
+        if (result != null) {
+          final hex = result.toARGB32().toRadixString(16).padLeft(8, '0').toUpperCase();
+          widget.appState.updateNoteColor(note, hex);
+        }
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: 36, height: 36,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: isCustom ? null : const SweepGradient(colors: [
+            Color(0xFFFF0000), Color(0xFFFFFF00), Color(0xFF00FF00),
+            Color(0xFF00FFFF), Color(0xFF0000FF), Color(0xFFFF00FF),
+            Color(0xFFFF0000),
+          ]),
+          color: isCustom ? currentColor : null,
+          border: isCustom
+              ? Border.all(color: isDark ? Colors.white : Colors.black87, width: 3)
+              : Border.all(
+                  color: isDark ? Colors.white.withValues(alpha: 0.20)
+                      : Colors.grey.shade400, width: 1.5),
+        ),
+        child: isCustom
+            ? Icon(Icons.check, size: 16,
+                color: currentColor.computeLuminance() > 0.5
+                    ? Colors.black87 : Colors.white)
+            : null,
+      ),
+    );
+  }
+
+  Future<Color?> _showCustomColorPicker(
+      Color initialColor, Color accentColor, bool isDark) async {
+    Color picked = initialColor;
+    final bg = isDark ? const Color(0xFF1A1A2E) : Colors.white;
+    return showDialog<Color>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => Dialog(
+          backgroundColor: bg,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('Custom Color', style: TextStyle(
+                  fontWeight: FontWeight.w700, fontSize: 16,
+                  color: isDark ? Colors.white : Colors.grey.shade800)),
+                const SizedBox(height: 20),
+                ColorPicker(
+                  pickerColor: picked,
+                  onColorChanged: (c) => setDialogState(() => picked = c),
+                  colorPickerWidth: 300, pickerAreaHeightPercent: 0.7,
+                  enableAlpha: false, displayThumbColor: true,
+                  hexInputBar: true, labelTypes: const [],
+                  pickerAreaBorderRadius:
+                      const BorderRadius.all(Radius.circular(12)),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(ctx).pop(null),
+                      child: Text('Cancel',
+                          style: TextStyle(color: Colors.grey.shade500)),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: accentColor,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => Navigator.of(ctx).pop(picked),
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color? _parseNoteColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final value = int.tryParse(hex, radix: 16);
+    return value != null ? Color(value) : null;
   }
 }
 

@@ -15,6 +15,7 @@ class Note {
   final SyncStatus syncStatus;
   final String? backgroundImage;
   final String? themeId;
+  final String? color; // Hex string e.g. "FF6C5CE7"
   final bool isPinned;
   final int version;
   final DateTime? deletedAt;
@@ -30,6 +31,7 @@ class Note {
     this.syncStatus = SyncStatus.localOnly,
     this.backgroundImage,
     this.themeId,
+    this.color,
     this.isPinned = false,
     this.version = 1,
     this.deletedAt,
@@ -108,6 +110,7 @@ class Note {
     SyncStatus? syncStatus,
     String? backgroundImage,
     String? themeId,
+    Object? color = const _Unset(),
     bool? isPinned,
     int? version,
     Object? deletedAt = const _Unset(),
@@ -123,6 +126,7 @@ class Note {
       syncStatus: syncStatus ?? this.syncStatus,
       backgroundImage: backgroundImage ?? this.backgroundImage,
       themeId: themeId ?? this.themeId,
+      color: color is _Unset ? this.color : color as String?,
       isPinned: isPinned ?? this.isPinned,
       version: version ?? this.version,
       deletedAt: deletedAt is _Unset ? this.deletedAt : deletedAt as DateTime?,

@@ -464,6 +464,7 @@ class SupabaseSyncAdapter implements SyncService {
         'content': note.content,
         'background_image': note.backgroundImage,
         'theme_id': note.themeId,
+        'color': note.color,
         'is_pinned': note.isPinned,
         'project_id': note.projectId,
         'created_at': note.createdAt.toUtc().toIso8601String(),
@@ -482,6 +483,7 @@ class SupabaseSyncAdapter implements SyncService {
         syncStatus: SyncStatus.synced,
         backgroundImage: m['background_image'] as String?,
         themeId: m['theme_id'] as String?,
+        color: m['color'] as String?,
         isPinned: m['is_pinned'] as bool? ?? false,
         version: m['version'] as int? ?? 1,
         deletedAt: m['deleted_at'] != null

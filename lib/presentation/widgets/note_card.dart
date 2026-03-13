@@ -38,6 +38,9 @@ class _NoteCardState extends State<NoteCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final noteColor = _parseNoteColor(widget.note.color);
+    final cardColor = noteColor ?? widget.editorBgColor;
+    final borderColor = noteColor ?? widget.accentColor;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
@@ -50,13 +53,15 @@ class _NoteCardState extends State<NoteCard> {
           margin: const EdgeInsets.only(bottom: 12),
           padding: const EdgeInsets.all(16),
           borderRadius: 16,
-          color: widget.editorBgColor,
-          opacity: widget.isSelected ? 0.25 : (_hovered ? 0.18 : 0.12),
+          color: cardColor,
+          opacity: noteColor != null
+              ? (widget.isSelected ? 0.35 : (_hovered ? 0.28 : 0.20))
+              : (widget.isSelected ? 0.25 : (_hovered ? 0.18 : 0.12)),
           blur: widget.isSelected ? 14 : (_hovered ? 10 : 8),
           border: widget.isSelected
-              ? Border.all(color: widget.accentColor.withValues(alpha: 0.5), width: 2)
+              ? Border.all(color: borderColor.withValues(alpha: 0.5), width: 2)
               : (_hovered
-                  ? Border.all(color: widget.accentColor.withValues(alpha: 0.25), width: 1)
+                  ? Border.all(color: borderColor.withValues(alpha: 0.25), width: 1)
                   : null),
           child: InkWell(
             onTap: widget.onTap,
@@ -68,9 +73,7 @@ class _NoteCardState extends State<NoteCard> {
                   width: 4,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: widget.isSelected
-                        ? widget.accentColor
-                        : Colors.grey.shade300,
+                    color: _indicatorColor(),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -87,6 +90,7 @@ class _NoteCardState extends State<NoteCard> {
                             : widget.note.title,
                         style: theme.textTheme.titleMedium?.copyWith(
                           fontWeight: FontWeight.w700,
+                          color: noteColor != null ? Colors.white : null,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -95,7 +99,9 @@ class _NoteCardState extends State<NoteCard> {
                       Text(
                         _formatDate(widget.note.updatedAt),
                         style: theme.textTheme.bodySmall?.copyWith(
-                          color: Colors.grey.shade500,
+                          color: noteColor != null
+                              ? Colors.white70
+                              : Colors.grey.shade500,
                         ),
                       ),
                     ],
@@ -109,7 +115,7 @@ class _NoteCardState extends State<NoteCard> {
                     icon: Icon(
                       Icons.sticky_note_2_outlined,
                       size: 18,
-                      color: Colors.grey.shade400,
+                      color: noteColor != null ? Colors.white70 : Colors.grey.shade400,
                     ),
                     tooltip: 'Sticky Note',
                     splashRadius: 18,
@@ -132,9 +138,11 @@ class _NoteCardState extends State<NoteCard> {
                           ? Icons.push_pin_rounded
                           : Icons.push_pin_outlined,
                       size: 18,
-                      color: widget.note.isPinned
-                          ? widget.accentColor
-                          : Colors.grey.shade400,
+                      color: noteColor != null
+                          ? Colors.white70
+                          : (widget.note.isPinned
+                              ? widget.accentColor
+                              : Colors.grey.shade400),
                     ),
                     splashRadius: 18,
                   ),
@@ -146,7 +154,7 @@ class _NoteCardState extends State<NoteCard> {
                     icon: Icon(
                       Icons.delete_outline_rounded,
                       size: 18,
-                      color: Colors.grey.shade400,
+                      color: noteColor != null ? Colors.white70 : Colors.grey.shade400,
                     ),
                     splashRadius: 18,
                   ),
@@ -158,22 +166,35 @@ class _NoteCardState extends State<NoteCard> {
     );
   }
 
+  Color? _parseNoteColor(String? hex) {
+    if (hex == null || hex.isEmpty) return null;
+    final value = int.tryParse(hex, radix: 16);
+    return value != null ? Color(value) : null;
+  }
+
+  Color _indicatorColor() {
+    final noteColor = _parseNoteColor(widget.note.color);
+    if (noteColor != null) return noteColor;
+    return widget.isSelected ? widget.accentColor : Colors.grey.shade300;
+  }
+
   Widget _buildSyncIcon() {
+    final nc = _parseNoteColor(widget.note.color);
     IconData icon;
     Color color;
 
     switch (widget.note.syncStatus.name) {
       case 'synced':
         icon = Icons.cloud_done_outlined;
-        color = Colors.green.shade400;
+        color = nc != null ? Colors.white70 : Colors.green.shade400;
         break;
       case 'pendingSync':
         icon = Icons.cloud_upload_outlined;
-        color = Colors.orange.shade400;
+        color = nc != null ? Colors.white70 : Colors.orange.shade400;
         break;
       default:
         icon = Icons.cloud_off_outlined;
-        color = Colors.grey.shade400;
+        color = nc != null ? Colors.white70 : Colors.grey.shade400;
     }
 
     return Padding(
