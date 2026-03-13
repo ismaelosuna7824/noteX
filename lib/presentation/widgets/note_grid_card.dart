@@ -76,12 +76,12 @@ class _NoteGridCardState extends State<NoteGridCard> {
               ? (_hovered ? 0.32 : 0.22)
               : (_hovered ? 0.18 : 0.12),
           blur: _hovered ? 12 : 8,
-          border: _hovered
-              ? Border.all(
-                  color: borderColor.withValues(alpha: 0.30),
-                  width: 1.5,
-                )
-              : null,
+          border: Border.all(
+            color: _hovered
+                ? borderColor.withValues(alpha: 0.30)
+                : Colors.transparent,
+            width: 1.5,
+          ),
           child: InkWell(
             onTap: widget.onTap,
             borderRadius: BorderRadius.circular(16),

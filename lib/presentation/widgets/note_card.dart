@@ -58,11 +58,14 @@ class _NoteCardState extends State<NoteCard> {
               ? (widget.isSelected ? 0.35 : (_hovered ? 0.28 : 0.20))
               : (widget.isSelected ? 0.25 : (_hovered ? 0.18 : 0.12)),
           blur: widget.isSelected ? 14 : (_hovered ? 10 : 8),
-          border: widget.isSelected
-              ? Border.all(color: borderColor.withValues(alpha: 0.5), width: 2)
-              : (_hovered
-                  ? Border.all(color: borderColor.withValues(alpha: 0.25), width: 1)
-                  : null),
+          border: Border.all(
+            color: widget.isSelected
+                ? borderColor.withValues(alpha: 0.5)
+                : (_hovered
+                    ? borderColor.withValues(alpha: 0.25)
+                    : Colors.transparent),
+            width: widget.isSelected ? 2 : 1,
+          ),
           child: InkWell(
             onTap: widget.onTap,
             borderRadius: BorderRadius.circular(16),
