@@ -230,7 +230,7 @@ jobs:
           storePassword=$STORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           keyAlias=$KEY_ALIAS
-          storeFile=../android/upload-keystore.jks
+          storeFile=upload-keystore.jks
           EOF
 
       - name: Build APK
