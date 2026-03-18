@@ -21,6 +21,20 @@
       "type": "dart",
       "program": "lib/main.dart",
       "args": ["--dart-define-from-file=dart_defines.json"]
+    },
+    {
+      "name": "NoteX (Android)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--dart-define-from-file=dart_defines.json"]
+    },
+    {
+      "name": "NoteX (iOS)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": ["--dart-define-from-file=dart_defines.json"]
     }
   ]
 }

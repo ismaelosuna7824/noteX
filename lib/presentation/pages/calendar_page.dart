@@ -153,15 +153,11 @@ class _CalendarPageState extends State<CalendarPage> {
     final emptyTextColor =
         isDark ? Colors.white.withValues(alpha: 0.40) : Colors.grey.shade400;
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Calendar card
-          Expanded(
-            flex: 3,
-            child: Container(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < 600;
+
+        final calendarCard = Container(
               decoration: BoxDecoration(
                 color: cardColor,
                 borderRadius: BorderRadius.circular(20),
@@ -174,7 +170,7 @@ class _CalendarPageState extends State<CalendarPage> {
                   ),
                 ],
               ),
-              padding: const EdgeInsets.all(24),
+              padding: EdgeInsets.all(isMobile ? 12 : 24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -266,11 +262,21 @@ class _CalendarPageState extends State<CalendarPage> {
                         border: Border.all(color: accentColor),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      formatButtonTextStyle: TextStyle(color: accentColor),
-                      titleCentered: true,
-                      titleTextStyle: theme.textTheme.titleLarge!.copyWith(
-                        fontWeight: FontWeight.w700,
+                      formatButtonTextStyle: TextStyle(
+                        color: accentColor,
+                        fontSize: isMobile ? 12 : 14,
                       ),
+                      formatButtonPadding: isMobile
+                          ? const EdgeInsets.symmetric(horizontal: 10, vertical: 4)
+                          : const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                      titleCentered: true,
+                      titleTextStyle: (isMobile
+                              ? theme.textTheme.titleMedium
+                              : theme.textTheme.titleLarge)!
+                          .copyWith(fontWeight: FontWeight.w700),
+                      headerPadding: isMobile
+                          ? const EdgeInsets.symmetric(vertical: 4)
+                          : const EdgeInsets.symmetric(vertical: 8),
                     ),
                     calendarBuilders: CalendarBuilders(
                       headerTitleBuilder: (context, day) {
@@ -280,17 +286,23 @@ class _CalendarPageState extends State<CalendarPage> {
                             mainAxisSize: MainAxisSize.min,
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Text(
-                                '${_monthNames[day.month - 1]} ${day.year}',
-                                style: theme.textTheme.titleLarge!.copyWith(
-                                  fontWeight: FontWeight.w700,
+                              Flexible(
+                                child: Text(
+                                  isMobile
+                                      ? '${_monthShort[day.month - 1]} ${day.year}'
+                                      : '${_monthNames[day.month - 1]} ${day.year}',
+                                  style: (isMobile
+                                          ? theme.textTheme.titleMedium
+                                          : theme.textTheme.titleLarge)!
+                                      .copyWith(fontWeight: FontWeight.w700),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                               const SizedBox(width: 4),
                               Icon(
                                 Icons.arrow_drop_down_rounded,
                                 color: accentColor,
-                                size: 22,
+                                size: isMobile ? 18 : 22,
                               ),
                             ],
                           ),
@@ -343,157 +355,212 @@ class _CalendarPageState extends State<CalendarPage> {
                   ),
                 ],
               ),
+            );
+
+          // Notes panel for selected day
+          final notesPanel = Container(
+            decoration: BoxDecoration(
+              color: cardColor,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: cardBorder, width: 1),
+              boxShadow: [
+                BoxShadow(
+                  color: cardShadow,
+                  blurRadius: 12,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
-          ),
-
-          const SizedBox(width: 16),
-
-          // Selected day notes panel
-          Expanded(
-            flex: 2,
-            child: Container(
-              decoration: BoxDecoration(
-                color: cardColor,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: cardBorder, width: 1),
-                boxShadow: [
-                  BoxShadow(
-                    color: cardShadow,
-                    blurRadius: 12,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today_rounded,
-                        size: 18,
-                        color: accentColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
+            padding: EdgeInsets.all(isMobile ? 16 : 24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.max,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today_rounded,
+                      size: isMobile ? 16 : 18,
+                      color: accentColor,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
                         _selectedDay != null
                             ? 'Notes for ${_selectedDay!.month}/${_selectedDay!.day}'
                             : 'Select a date',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
+                        style: (isMobile
+                                ? theme.textTheme.titleSmall
+                                : theme.textTheme.titleMedium)
+                            ?.copyWith(fontWeight: FontWeight.w700),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Divider(color: dividerColor),
+                const SizedBox(height: 8),
+                if (isMobile)
+                  Expanded(child: _buildNotesList(
+                    selectedNotes: selectedNotes,
+                    accentColor: accentColor,
+                    isDark: isDark,
+                    emptyIconColor: emptyIconColor,
+                    emptyTextColor: emptyTextColor,
+                    innerItemBg: innerItemBg,
+                    innerItemBorder: innerItemBorder,
+                    isMobile: true,
+                  ))
+                else
+                  Expanded(
+                    child: _buildNotesList(
+                      selectedNotes: selectedNotes,
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      emptyIconColor: emptyIconColor,
+                      emptyTextColor: emptyTextColor,
+                      innerItemBg: innerItemBg,
+                      innerItemBorder: innerItemBorder,
+                      isMobile: false,
+                    ),
+                  ),
+              ],
+            ),
+          );
+
+          if (isMobile) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+              child: Column(
+                children: [
+                  calendarCard,
+                  const SizedBox(height: 12),
+                  Expanded(child: notesPanel),
+                ],
+              ),
+            );
+          }
+
+          // Desktop: side by side
+          return Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: calendarCard),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: notesPanel),
+              ],
+            ),
+          );
+        },
+      );
+  }
+
+  Widget _buildNotesList({
+    required List<Note> selectedNotes,
+    required Color accentColor,
+    required bool isDark,
+    required Color emptyIconColor,
+    required Color emptyTextColor,
+    required Color innerItemBg,
+    required Color innerItemBorder,
+    required bool isMobile,
+  }) {
+    if (selectedNotes.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: EdgeInsets.symmetric(vertical: isMobile ? 24 : 0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: isMobile ? MainAxisSize.min : MainAxisSize.max,
+            children: [
+              Icon(
+                Icons.event_note_outlined,
+                size: isMobile ? 36 : 48,
+                color: emptyIconColor,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'No notes for this day',
+                style: TextStyle(color: emptyTextColor),
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                onPressed: () async {
+                  await widget.appState.createNewNote(date: _selectedDay);
+                  widget.appState.navigateToPage(2);
+                },
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Create Note'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: accentColor,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      shrinkWrap: isMobile,
+      physics: isMobile ? const NeverScrollableScrollPhysics() : null,
+      itemCount: selectedNotes.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, index) {
+        final note = selectedNotes[index];
+        return InkWell(
+          onTap: () {
+            widget.appState.selectNote(note);
+            widget.appState.navigateToPage(2);
+          },
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            padding: EdgeInsets.all(isMobile ? 12 : 16),
+            decoration: BoxDecoration(
+              color: innerItemBg,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: innerItemBorder, width: 1),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        note.title.isEmpty ? 'Untitled' : note.title,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: isMobile ? 14 : 15,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Updated: ${note.updatedAt.hour}:${note.updatedAt.minute.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                          color: isDark ? Colors.white38 : Colors.grey.shade500,
+                          fontSize: 12,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Divider(color: dividerColor),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: selectedNotes.isEmpty
-                        ? Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.event_note_outlined,
-                                  size: 48,
-                                  color: emptyIconColor,
-                                ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  'No notes for this day',
-                                  style: TextStyle(color: emptyTextColor),
-                                ),
-                                const SizedBox(height: 16),
-                                FilledButton.icon(
-                                  onPressed: () async {
-                                    await widget.appState.createNewNote(
-                                      date: _selectedDay,
-                                    );
-                                    widget.appState.navigateToPage(2);
-                                  },
-                                  icon: const Icon(Icons.add, size: 18),
-                                  label: const Text('Create Note'),
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: accentColor,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : ListView.separated(
-                            itemCount: selectedNotes.length,
-                            separatorBuilder: (context, index) =>
-                                const SizedBox(height: 8),
-                            itemBuilder: (context, index) {
-                              final note = selectedNotes[index];
-                              return InkWell(
-                                onTap: () {
-                                  widget.appState.selectNote(note);
-                                  widget.appState.navigateToPage(2);
-                                },
-                                borderRadius: BorderRadius.circular(14),
-                                child: Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: innerItemBg,
-                                    borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(
-                                      color: innerItemBorder,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              note.title.isEmpty
-                                                  ? 'Untitled'
-                                                  : note.title,
-                                              style: const TextStyle(
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 15,
-                                              ),
-                                            ),
-                                            const SizedBox(height: 4),
-                                            Text(
-                                              'Updated: ${note.updatedAt.hour}:${note.updatedAt.minute.toString().padLeft(2, '0')}',
-                                              style: TextStyle(
-                                                color: isDark
-                                                    ? Colors.white38
-                                                    : Colors.grey.shade500,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      Icon(
-                                        Icons.arrow_forward_ios_rounded,
-                                        size: 14,
-                                        color: accentColor,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
+                ),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 14,
+                  color: accentColor,
+                ),
+              ],
             ),
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math' show min;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:screen_retriever/screen_retriever.dart';
@@ -18,6 +19,7 @@ import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
 import 'presentation/state/reminder_state.dart';
+import 'presentation/utils/platform_utils.dart';
 import 'application/services/sync_engine.dart';
 import 'domain/repositories/auth_repository.dart';
 
@@ -30,20 +32,40 @@ void main() async {
 
   MediaKit.ensureInitialized();
 
-  // 1. Initialize acrylic (transparent window effect) and window manager.
-  // Retry once on failure — some Windows machines need a short delay on first
-  // launch for the DWM / display subsystem to be ready.
-  try {
-    await Window.initialize();
-  } catch (_) {
-    await Future<void>.delayed(const Duration(milliseconds: 500));
+  // ── Desktop-only: window manager + acrylic ──────────────────────────────
+  if (kIsDesktop) {
+    // Initialize acrylic (transparent window effect) and window manager.
+    // Retry once on failure — some Windows machines need a short delay on first
+    // launch for the DWM / display subsystem to be ready.
     try {
       await Window.initialize();
     } catch (_) {
-      // Continue without acrylic — the app will still work.
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+      try {
+        await Window.initialize();
+      } catch (_) {
+        // Continue without acrylic — the app will still work.
+      }
     }
+    await windowManager.ensureInitialized();
   }
-  await windowManager.ensureInitialized();
+
+  // ── Mobile-only: system UI configuration ────────────────────────────────
+  if (kIsMobile) {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+      systemNavigationBarColor: Colors.transparent,
+      systemNavigationBarIconBrightness: Brightness.light,
+    ));
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
 
   // 2. Initialize Supabase (auto-restores persisted session)
   final config = AppConfig.fromEnvironment();
@@ -87,7 +109,16 @@ void main() async {
     syncEngine.sync();
   }
 
-  // 8. Configure: transparent + frameless + centered
+  // ── Desktop-only: window sizing + frameless setup ─────────────────────
+  if (kIsDesktop) {
+    await _initDesktopWindow(appState);
+  }
+
+  runApp(NoteXApp(appState: appState, themeState: themeState));
+}
+
+/// Desktop-specific window configuration: size, frameless, acrylic, compact mode.
+Future<void> _initDesktopWindow(AppState appState) async {
   // Clamp window size to fit the screen (accounts for display scaling).
   // Guard against ScreenRetriever failures on unusual Windows display configs
   // (multi-monitor, RDP, non-standard DPI, missing drivers).
@@ -187,8 +218,6 @@ void main() async {
     await windowManager.show();
     await windowManager.focus();
   });
-
-  runApp(NoteXApp(appState: appState, themeState: themeState));
 }
 
 /// Persists and restores window size across sessions.

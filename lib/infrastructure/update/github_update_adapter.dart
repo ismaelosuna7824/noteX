@@ -60,6 +60,8 @@ class GitHubUpdateAdapter implements UpdateService {
       await _applyWindows(update, onProgress);
     } else if (Platform.isMacOS) {
       await _applyMacOS(update, onProgress);
+    } else if (Platform.isAndroid) {
+      await _applyAndroid(update, onProgress);
     } else {
       // Linux / other: fall back to opening the browser
       final uri = Uri.parse(update.downloadUrl);
@@ -174,6 +176,20 @@ rm -f "$scriptPath"
     exit(0);
   }
 
+  // ── Android: download APK and open with system installer ─────────────
+
+  Future<void> _applyAndroid(
+    UpdateInfo update,
+    void Function(double)? onProgress,
+  ) async {
+    // On Android we can't silently install — open the download URL in the
+    // browser so the user downloads the APK and the system installer handles it.
+    final uri = Uri.parse(update.downloadUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
   // ── Shared: streaming download with progress ──────────────────────────
 
   Future<void> _downloadFile(
@@ -232,8 +248,9 @@ rm -f "$scriptPath"
   ///
   /// Convention:
   /// - Windows: asset name contains "windows" (e.g. NoteX-windows-setup.exe)
-  /// - macOS:   asset name contains "macos"   (e.g. NoteX-macos.dmg)
+  /// - macOS:   asset name contains "macos"   (e.g. NoteX-macos.zip)
   /// - Linux:   asset name contains "linux"   (e.g. NoteX-linux.deb)
+  /// - Android: asset name contains "android" (e.g. NoteX-android.apk)
   static String? _platformDownloadUrl(Map<String, dynamic> release) {
     final assets = release['assets'] as List<dynamic>? ?? [];
 
@@ -244,6 +261,8 @@ rm -f "$scriptPath"
       keyword = 'macos';
     } else if (Platform.isLinux) {
       keyword = 'linux';
+    } else if (Platform.isAndroid) {
+      keyword = 'android';
     } else {
       return null;
     }

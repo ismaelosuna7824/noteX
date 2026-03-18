@@ -9,6 +9,7 @@ import '../../domain/entities/note.dart';
 import '../../domain/entities/note_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../utils/platform_utils.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_card.dart';
@@ -383,64 +384,74 @@ class _NotesListPageState extends State<NotesListPage> {
     bool showPinned,
     List<Note> displayedNotes,
   ) {
+    final listPanel = GlassmorphicContainer(
+      borderRadius: 20,
+      color: widget.themeState.editorBgColor,
+      opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildHeader(theme, accentColor, showPinned),
+          const SizedBox(height: 8),
+          _buildProjectChips(theme, accentColor),
+          const SizedBox(height: 8),
+          Expanded(
+            child: displayedNotes.isEmpty
+                ? _buildEmptyState(theme, showPinned)
+                : ListView.builder(
+                    key: ValueKey(showPinned ? 'pinned' : 'all'),
+                    itemCount: displayedNotes.length,
+                    itemBuilder: (context, index) {
+                      final note = displayedNotes[index];
+                      return _StaggeredEntry(
+                        index: index,
+                        child: NoteCard(
+                          note: note,
+                          isSelected:
+                              note.id ==
+                              widget.appState.currentNote?.id,
+                          accentColor: accentColor,
+                          editorBgColor:
+                              widget.themeState.editorBgColor,
+                          onTap: () {
+                            widget.appState.previewNote(note);
+                            if (kIsMobile) {
+                              // Navigate to full-screen editor on mobile
+                              widget.appState.navigateToPage(2);
+                            } else {
+                              setState(() => _loadNote());
+                            }
+                          },
+                          onCompactMode: kIsMobile
+                              ? null
+                              : () => widget.appState.enterCompactMode(note),
+                          onPin: () => widget.appState.togglePin(note),
+                          onDelete: () =>
+                              widget.appState.deleteNote(note.id),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+
+    // On mobile: full-width list only (no side-by-side editor)
+    if (kIsMobile) {
+      return Padding(
+        padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        child: listPanel,
+      );
+    }
+
+    // Desktop: side-by-side list + editor
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
         children: [
-          // Notes list panel
-          SizedBox(
-            width: 320,
-            child: GlassmorphicContainer(
-              borderRadius: 20,
-              color: widget.themeState.editorBgColor,
-              opacity: theme.brightness == Brightness.dark ? 0.90 : 0.92,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildHeader(theme, accentColor, showPinned),
-                  const SizedBox(height: 8),
-                  _buildProjectChips(theme, accentColor),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: displayedNotes.isEmpty
-                        ? _buildEmptyState(theme, showPinned)
-                        : ListView.builder(
-                            key: ValueKey(showPinned ? 'pinned' : 'all'),
-                            itemCount: displayedNotes.length,
-                            itemBuilder: (context, index) {
-                              final note = displayedNotes[index];
-                              return _StaggeredEntry(
-                                index: index,
-                                child: NoteCard(
-                                  note: note,
-                                  isSelected:
-                                      note.id ==
-                                      widget.appState.currentNote?.id,
-                                  accentColor: accentColor,
-                                  editorBgColor:
-                                      widget.themeState.editorBgColor,
-                                  onTap: () {
-                                    widget.appState.previewNote(note);
-                                    setState(() => _loadNote());
-                                  },
-                                  onCompactMode: () =>
-                                      widget.appState.enterCompactMode(note),
-                                  onPin: () => widget.appState.togglePin(note),
-                                  onDelete: () =>
-                                      widget.appState.deleteNote(note.id),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
+          SizedBox(width: 320, child: listPanel),
           const SizedBox(width: 16),
-
-          // Preview/edit panel
           Expanded(child: _buildEditorPanel(context, theme, accentColor)),
         ],
       ),
@@ -456,8 +467,11 @@ class _NotesListPageState extends State<NotesListPage> {
     bool showPinned,
     List<Note> displayedNotes,
   ) {
+    final padding = kIsMobile
+        ? const EdgeInsets.fromLTRB(12, 0, 12, 12)
+        : const EdgeInsets.fromLTRB(16, 0, 16, 16);
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: padding,
       child: GlassmorphicContainer(
         borderRadius: 20,
         color: widget.themeState.editorBgColor,
@@ -499,9 +513,13 @@ class _NotesListPageState extends State<NotesListPage> {
                                     widget.themeState.editorBgColor,
                                 onTap: () {
                                   widget.appState.selectNote(note);
+                                  if (kIsMobile) {
+                                    widget.appState.navigateToPage(2);
+                                  }
                                 },
-                                onCompactMode: () =>
-                                    widget.appState.enterCompactMode(note),
+                                onCompactMode: kIsMobile
+                                    ? null
+                                    : () => widget.appState.enterCompactMode(note),
                                 onPin: () =>
                                     widget.appState.togglePin(note),
                                 onDelete: () =>

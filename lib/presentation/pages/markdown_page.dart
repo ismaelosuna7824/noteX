@@ -9,6 +9,7 @@ import '../../domain/entities/markdown_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/markdown_state.dart';
+import '../utils/platform_utils.dart';
 import '../widgets/editor_text_controls.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/animated_dialog.dart';
@@ -52,6 +53,9 @@ class _MarkdownPageState extends State<MarkdownPage> {
   TextEditingController? _titleController;
   TextEditingController? _contentController;
   String? _loadedFileId;
+
+  /// On mobile, tracks whether we show the editor (true) or file list (false).
+  bool _mobileShowEditor = false;
 
   // ── Save indicator & debounce ──────────────────────────────────────
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
@@ -159,37 +163,96 @@ class _MarkdownPageState extends State<MarkdownPage> {
       _loadFile();
     }
 
+    final fileListPanel = GlassmorphicContainer(
+      borderRadius: 20,
+      color: widget.themeState.editorBgColor,
+      opacity: isDark ? 0.90 : 0.92,
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        children: [
+          _buildListHeader(theme, accentColor, isDark),
+          const SizedBox(height: 8),
+          _buildProjectFilter(theme, accentColor, isDark),
+          const SizedBox(height: 8),
+          _buildSearchBar(accentColor, isDark),
+          const SizedBox(height: 8),
+          Expanded(
+            child: _buildFileList(theme, accentColor, isDark),
+          ),
+        ],
+      ),
+    );
+
+    // On mobile: show file list or editor (not both side-by-side)
+    if (kIsMobile) {
+      final showEditor = _mdState.currentFile != null && _mobileShowEditor;
+      final padding = const EdgeInsets.fromLTRB(12, 0, 12, 12);
+
+      if (showEditor) {
+        return Padding(
+          padding: padding,
+          child: Column(
+            children: [
+              // Back button to return to file list
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    InkWell(
+                      onTap: () => setState(() => _mobileShowEditor = false),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.1)
+                              : Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_back_rounded,
+                                size: 16,
+                                color: isDark
+                                    ? Colors.white70
+                                    : Colors.grey.shade600),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Files',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: isDark
+                                    ? Colors.white70
+                                    : Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: _buildEditorPanel(context, theme, accentColor, isDark),
+              ),
+            ],
+          ),
+        );
+      }
+
+      return Padding(padding: padding, child: fileListPanel);
+    }
+
+    // Desktop: side-by-side file list + editor
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Row(
         children: [
-          // Left: file list panel
-          SizedBox(
-            width: 320,
-            child: GlassmorphicContainer(
-              borderRadius: 20,
-              color: widget.themeState.editorBgColor,
-              opacity: isDark ? 0.90 : 0.92,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  _buildListHeader(theme, accentColor, isDark),
-                  const SizedBox(height: 8),
-                  _buildProjectFilter(theme, accentColor, isDark),
-                  const SizedBox(height: 8),
-                  _buildSearchBar(accentColor, isDark),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: _buildFileList(theme, accentColor, isDark),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
+          SizedBox(width: 320, child: fileListPanel),
           const SizedBox(width: 16),
-
-          // Right: editor / preview
           Expanded(
             child: _buildEditorPanel(context, theme, accentColor, isDark),
           ),
@@ -389,6 +452,9 @@ class _MarkdownPageState extends State<MarkdownPage> {
             onTap: () {
               _mdState.selectFile(file);
               _loadFile();
+              if (kIsMobile) {
+                setState(() => _mobileShowEditor = true);
+              }
             },
             borderRadius: BorderRadius.circular(12),
             child: Container(
@@ -535,30 +601,12 @@ class _MarkdownPageState extends State<MarkdownPage> {
           // Header: title + toggle
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 16, 0),
-            child: Row(
-              children: [
-                // Editable title
-                Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    onChanged: (_) => _onUserEdit(),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18,
-                    ),
-                    decoration: InputDecoration(
-                      hintText: 'File title...',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(
-                        color: isDark ? Colors.white54 : Colors.grey.shade400,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Save indicator
-                ValueListenableBuilder<String>(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final isMobile = constraints.maxWidth < 560;
+
+                // ── Save indicator (shared) ──
+                final saveIndicator = ValueListenableBuilder<String>(
                   valueListenable: _saveStatus,
                   builder: (context, status, _) {
                     return AnimatedSize(
@@ -609,10 +657,10 @@ class _MarkdownPageState extends State<MarkdownPage> {
                           : const SizedBox.shrink(),
                     );
                   },
-                ),
-                const SizedBox(width: 8),
-                // Date chip
-                Container(
+                );
+
+                // ── Date chip (shared) ──
+                final dateChip = Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
@@ -639,13 +687,10 @@ class _MarkdownPageState extends State<MarkdownPage> {
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 6),
-                EditorTextControls(
-                    themeState: widget.themeState, isMarkdown: true),
-                const SizedBox(width: 6),
-                // Editor / Preview toggle
-                Container(
+                );
+
+                // ── Editor / Preview toggle (shared) ──
+                final editorToggle = Container(
                   decoration: BoxDecoration(
                     color: isDark
                         ? Colors.white.withValues(alpha: 0.1)
@@ -658,7 +703,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                     children: [
                       _buildToggleBtn(
                         icon: Icons.edit_rounded,
-                        label: 'Edit',
+                        label: isMobile ? null : 'Edit',
                         isSelected: !isPreview,
                         accentColor: accentColor,
                         isDark: isDark,
@@ -666,20 +711,111 @@ class _MarkdownPageState extends State<MarkdownPage> {
                       ),
                       _buildToggleBtn(
                         icon: Icons.visibility_rounded,
-                        label: 'Preview',
+                        label: isMobile ? null : 'Preview',
                         isSelected: isPreview,
                         accentColor: accentColor,
                         isDark: isDark,
                         onTap: () {
-                          // Force save before preview so it shows latest content
                           _forceSave();
                           _mdState.setPreviewMode(true);
                         },
                       ),
                     ],
                   ),
-                ),
-              ],
+                );
+
+                if (isMobile) {
+                  // Mobile: two rows
+                  return Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Row 1: title + save indicator + toggle
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: _titleController,
+                              onChanged: (_) => _onUserEdit(),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
+                              ),
+                              decoration: InputDecoration(
+                                hintText: 'File title...',
+                                border: InputBorder.none,
+                                isDense: true,
+                                contentPadding:
+                                    const EdgeInsets.symmetric(vertical: 8),
+                                hintStyle: TextStyle(
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.grey.shade400,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          saveIndicator,
+                          const SizedBox(width: 6),
+                          editorToggle,
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      // Row 2: date + text controls
+                      Row(
+                        children: [
+                          dateChip,
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: EditorTextControls(
+                                  themeState: widget.themeState,
+                                  isMarkdown: true),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                }
+
+                // Desktop: single row (original)
+                return Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _titleController,
+                        onChanged: (_) => _onUserEdit(),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 18,
+                        ),
+                        decoration: InputDecoration(
+                          hintText: 'File title...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(
+                            color: isDark
+                                ? Colors.white54
+                                : Colors.grey.shade400,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    saveIndicator,
+                    const SizedBox(width: 8),
+                    dateChip,
+                    const SizedBox(width: 6),
+                    EditorTextControls(
+                        themeState: widget.themeState, isMarkdown: true),
+                    const SizedBox(width: 6),
+                    editorToggle,
+                  ],
+                );
+              },
             ),
           ),
 
@@ -696,7 +832,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
   Widget _buildToggleBtn({
     required IconData icon,
-    required String label,
+    String? label,
     required bool isSelected,
     required Color accentColor,
     required bool isDark,
@@ -731,17 +867,19 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   ? accentColor
                   : (isDark ? Colors.white54 : Colors.grey.shade400),
             ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? accentColor
-                    : (isDark ? Colors.white54 : Colors.grey.shade500),
+            if (label != null) ...[
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected
+                      ? accentColor
+                      : (isDark ? Colors.white54 : Colors.grey.shade500),
+                ),
               ),
-            ),
+            ],
           ],
         ),
       ),

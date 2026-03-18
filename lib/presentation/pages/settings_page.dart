@@ -10,6 +10,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../utils/platform_utils.dart';
 import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
 import 'auth_dialog.dart';
@@ -62,8 +63,12 @@ class _SettingsPageState extends State<SettingsPage> {
         : Colors.grey.shade200;
     final mutedText = isDark ? Colors.white38 : Colors.grey.shade500;
 
+    final settingsPadding = kIsMobile
+        ? const EdgeInsets.fromLTRB(12, 0, 12, 12)
+        : const EdgeInsets.fromLTRB(16, 0, 16, 16);
+
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: settingsPadding,
       child: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -77,14 +82,28 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 16),
 
-            // Two-column layout: Left = [AccentColor + BgImage + Account + About], Right = [Font + Editors]
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Left column ──────────────────────────────────────
-                Expanded(
-                  child: Column(
-                    children: [
+            // Two-column layout on desktop, single-column on mobile
+            ..._buildSettingsColumns(
+              context, isDark, accentColor, innerBg, innerBorder, mutedText,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  List<Widget> _buildSettingsColumns(
+    BuildContext context,
+    bool isDark,
+    Color accentColor,
+    Color innerBg,
+    Color innerBorder,
+    Color mutedText,
+  ) {
+    final theme = Theme.of(context);
+
+    final leftColumn = Column(
+      children: [
                       // Accent Color
                       _buildSection(
                         context,
@@ -675,16 +694,11 @@ class _SettingsPageState extends State<SettingsPage> {
                           mutedText,
                         ),
                       ),
-                    ],
-                  ),
-                ),
+      ],
+    );
 
-                const SizedBox(width: 16),
-
-                // ── Right column ─────────────────────────────────────
-                Expanded(
-                  child: Column(
-                    children: [
+    final rightColumn = Column(
+      children: [
                       // Font Family
                       _buildSection(
                         context,
@@ -808,15 +822,25 @@ class _SettingsPageState extends State<SettingsPage> {
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      ],
     );
+
+    // On mobile: stack all sections in a single column
+    if (kIsMobile) {
+      return [leftColumn, const SizedBox(height: 16), rightColumn];
+    }
+
+    // Desktop: side-by-side two-column layout
+    return [
+      Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: leftColumn),
+          const SizedBox(width: 16),
+          Expanded(child: rightColumn),
+        ],
+      ),
+    ];
   }
 
   // ── About section ──────────────────────────────────────────────────────────

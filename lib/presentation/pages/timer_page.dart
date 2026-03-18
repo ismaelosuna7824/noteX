@@ -624,39 +624,45 @@ class _WeekNavBar extends StatelessWidget {
                   color: themeState.editorTextColor),
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
 
           // Week label → opens calendar picker
-          GestureDetector(
-            onTap: () => _showWeekPicker(context),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.calendar_today_rounded,
-                  size: 13,
-                  color: themeState.editorMutedTextColor,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  label,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: themeState.editorTextColor,
+          Flexible(
+            child: GestureDetector(
+              onTap: () => _showWeekPicker(context),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.calendar_today_rounded,
+                    size: 13,
+                    color: themeState.editorMutedTextColor,
                   ),
-                ),
-                const SizedBox(width: 3),
-                Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 16,
-                  color: themeState.editorMutedTextColor,
-                ),
-              ],
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: themeState.editorTextColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                      maxLines: 1,
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 16,
+                    color: themeState.editorMutedTextColor,
+                  ),
+                ],
+              ),
             ),
           ),
 
-          const SizedBox(width: 8),
+          const SizedBox(width: 4),
           // Next week
           InkWell(
             onTap: timerState.goToNextWeek,
@@ -668,23 +674,23 @@ class _WeekNavBar extends StatelessWidget {
             ),
           ),
 
-          const Spacer(),
+          const SizedBox(width: 8),
 
           // Week total
           Text(
             'WEEK TOTAL',
             style: TextStyle(
-              fontSize: 11,
+              fontSize: 10,
               fontWeight: FontWeight.w600,
               color: themeState.editorMutedTextColor,
-              letterSpacing: 0.8,
+              letterSpacing: 0.5,
             ),
           ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 6),
           Text(
             _formatDuration(timerState.weekTotal),
             style: TextStyle(
-              fontSize: 15,
+              fontSize: 14,
               fontWeight: FontWeight.w800,
               color: accent,
               letterSpacing: 0.5,

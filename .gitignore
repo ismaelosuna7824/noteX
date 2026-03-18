@@ -53,6 +53,12 @@ dart_defines.json
 *.cer
 *.msix
 
+# Android signing — never commit
+*.jks
+*.keystore
+android/key.properties
+android/keystore-base64.txt
+
 # Video backgrounds — hosted on GitHub Releases, not bundled in the app
 assets/images/*.mp4
 assets/images/*.webm

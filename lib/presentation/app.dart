@@ -3,8 +3,10 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 
 import 'pages/app_shell.dart';
+import 'pages/mobile_app_shell.dart';
 import 'state/app_state.dart';
 import 'state/theme_state.dart';
+import 'utils/platform_utils.dart';
 
 /// Root MaterialApp with dynamic theming.
 class NoteXApp extends StatelessWidget {
@@ -37,10 +39,15 @@ class NoteXApp extends StatelessWidget {
             Locale('en'),
             Locale('es'),
           ],
-          home: AppShell(
-            appState: appState,
-            themeState: themeState,
-          ),
+          home: kIsDesktop
+              ? AppShell(
+                  appState: appState,
+                  themeState: themeState,
+                )
+              : MobileAppShell(
+                  appState: appState,
+                  themeState: themeState,
+                ),
         );
       },
     );

@@ -293,69 +293,68 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       child: Column(
         children: [
           // Top controls row: title + toolbar
-          Row(
-            children: [
-              // Title input
-              Expanded(
-                flex: 3,
-                child: SizedBox(
-                  height: 44,
-                  child: TextField(
-                    controller: _titleController,
-                    onChanged: (_) {
-                      _prevTitle = _titleController.text;
-                      _onUserEdit();
-                    },
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 15,
-                      color: hasNoteColor
-                          ? iconColor
-                          : widget.themeState.editorTextColor,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isMobile = constraints.maxWidth < 560;
+
+              // ── Shared widgets ──
+
+              final titleField = SizedBox(
+                height: isMobile ? 40 : 44,
+                child: TextField(
+                  controller: _titleController,
+                  onChanged: (_) {
+                    _prevTitle = _titleController.text;
+                    _onUserEdit();
+                  },
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: isMobile ? 14 : 15,
+                    color: hasNoteColor
+                        ? iconColor
+                        : widget.themeState.editorTextColor,
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Note title...',
+                    filled: true,
+                    fillColor: chipBg,
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(isMobile ? 12 : 14),
+                      borderSide: BorderSide(color: chipBorder, width: 1),
                     ),
-                    decoration: InputDecoration(
-                      hintText: 'Note title...',
-                      filled: true,
-                      fillColor: chipBg,
-                      enabledBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(color: chipBorder, width: 1),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(isMobile ? 12 : 14),
+                      borderSide: BorderSide(
+                        color: accentColor.withValues(alpha: 0.4),
+                        width: 1.5,
                       ),
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                        borderSide: BorderSide(
-                          color: accentColor.withValues(alpha: 0.4),
-                          width: 1.5,
-                        ),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
-                      ),
-                      prefixIcon: Icon(
-                        Icons.edit_note_rounded,
-                        color: iconColor.withValues(alpha: 0.6),
-                        size: 20,
-                      ),
-                      hintStyle: TextStyle(
-                        color: widget.themeState.editorMutedTextColor,
-                        fontWeight: FontWeight.w500,
-                        fontSize: 15,
-                      ),
+                    ),
+                    contentPadding: EdgeInsets.symmetric(
+                      horizontal: isMobile ? 12 : 16,
+                      vertical: isMobile ? 10 : 12,
+                    ),
+                    prefixIcon: Icon(
+                      Icons.edit_note_rounded,
+                      color: iconColor.withValues(alpha: 0.6),
+                      size: isMobile ? 18 : 20,
+                    ),
+                    hintStyle: TextStyle(
+                      color: widget.themeState.editorMutedTextColor,
+                      fontWeight: FontWeight.w500,
+                      fontSize: isMobile ? 14 : 15,
                     ),
                   ),
                 ),
-              ),
+              );
 
-              const SizedBox(width: 12),
-
-              // Date chip
-              Container(
-                height: 44,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
+              final dateChip = Container(
+                height: isMobile ? 36 : 44,
+                padding: EdgeInsets.symmetric(
+                    horizontal: isMobile ? 10 : 14),
                 decoration: BoxDecoration(
                   color: chipBg,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius:
+                      BorderRadius.circular(isMobile ? 12 : 14),
                   border: Border.all(color: chipBorder, width: 1),
                 ),
                 child: Row(
@@ -363,79 +362,72 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   children: [
                     Icon(
                       Icons.calendar_today_rounded,
-                      size: 14,
+                      size: isMobile ? 12 : 14,
                       color: iconColor,
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 4),
                     Text(
-                      '${note.updatedAt.month}/${note.updatedAt.day}/${note.updatedAt.year}',
+                      isMobile
+                          ? '${note.updatedAt.month}/${note.updatedAt.day}'
+                          : '${note.updatedAt.month}/${note.updatedAt.day}/${note.updatedAt.year}',
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: isMobile ? 11 : 13,
                         fontWeight: FontWeight.w500,
                         color: chipText,
                       ),
                     ),
                   ],
                 ),
-              ),
+              );
 
-              const SizedBox(width: 12),
+              final btnSize = isMobile ? 36.0 : 44.0;
+              final btnRadius = isMobile ? 12.0 : 14.0;
+              final btnIconSize = isMobile ? 16.0 : 18.0;
 
-              // Sync status indicator
-              Container(
-                height: 44,
-                width: 44,
+              final syncIndicator = Container(
+                height: btnSize,
+                width: btnSize,
                 decoration: BoxDecoration(
                   color: chipBg,
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(btnRadius),
                   border: Border.all(color: chipBorder, width: 1),
                 ),
                 child: Icon(
                   _getSyncIcon(note.syncStatus.name),
-                  size: 18,
+                  size: btnIconSize,
                   color: iconColor,
                 ),
-              ),
+              );
 
-              const SizedBox(width: 8),
+              final colorButton = _buildColorButton(
+                note, accentColor, iconColor, chipBg, chipBorder,
+                size: btnSize, radius: btnRadius,
+              );
 
-              // Note color picker
-              _buildColorButton(
-                note,
-                accentColor,
-                iconColor,
-                chipBg,
-                chipBorder,
-              ),
-
-              const SizedBox(width: 8),
-
-              // Compact ↔ full toggle
-              InkWell(
+              final compactToggle = InkWell(
                 onTap: () => isCompact
                     ? widget.appState.exitCompactMode()
                     : widget.appState.enterCompactMode(note),
-                borderRadius: BorderRadius.circular(14),
+                borderRadius: BorderRadius.circular(btnRadius),
                 child: Container(
-                  height: 44,
-                  width: 44,
+                  height: btnSize,
+                  width: btnSize,
                   decoration: BoxDecoration(
                     color: chipBg,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(btnRadius),
                     border: Border.all(color: chipBorder, width: 1),
                   ),
                   child: Icon(
                     isCompact
                         ? Icons.fullscreen_rounded
                         : Icons.picture_in_picture_alt_outlined,
-                    size: 18,
+                    size: btnIconSize,
                     color: iconColor,
                   ),
                 ),
-              ),
+              );
 
-              // Save indicator — only shows "Saved", collapses when hidden
-              ValueListenableBuilder<String>(
+              final saveIndicator = ValueListenableBuilder<String>(
                 valueListenable: _saveStatus,
                 builder: (context, status, _) {
                   return AnimatedSize(
@@ -444,14 +436,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     alignment: Alignment.centerLeft,
                     child: status == 'saved'
                         ? Container(
-                            height: 44,
-                            margin: const EdgeInsets.only(left: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            height: btnSize,
+                            margin: EdgeInsets.only(
+                                left: isMobile ? 6 : 8),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: isMobile ? 8 : 12),
                             decoration: BoxDecoration(
                               color: isDark
                                   ? Colors.green.withValues(alpha: 0.15)
                                   : Colors.green.shade50,
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius:
+                                  BorderRadius.circular(btnRadius),
                               border: Border.all(
                                 color: isDark
                                     ? Colors.green.withValues(alpha: 0.30)
@@ -464,7 +459,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               children: [
                                 Icon(
                                   Icons.check_circle_outline_rounded,
-                                  size: 14,
+                                  size: isMobile ? 12 : 14,
                                   color: isDark
                                       ? Colors.green.shade300
                                       : Colors.green.shade600,
@@ -473,7 +468,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                 Text(
                                   'Saved',
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: isMobile ? 10 : 12,
                                     fontWeight: FontWeight.w500,
                                     color: isDark
                                         ? Colors.green.shade300
@@ -486,8 +481,36 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         : const SizedBox.shrink(),
                   );
                 },
-              ),
-            ],
+              );
+
+              if (isMobile) {
+                // Mobile: single row — title + color + save only
+                return Row(
+                  children: [
+                    Expanded(child: titleField),
+                    const SizedBox(width: 8),
+                    colorButton,
+                    saveIndicator,
+                  ],
+                );
+              }
+
+              // Desktop: single row (original)
+              return Row(
+                children: [
+                  Expanded(flex: 3, child: titleField),
+                  const SizedBox(width: 12),
+                  dateChip,
+                  const SizedBox(width: 12),
+                  syncIndicator,
+                  const SizedBox(width: 8),
+                  colorButton,
+                  const SizedBox(width: 8),
+                  compactToggle,
+                  saveIndicator,
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 12),
@@ -706,25 +729,27 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     Color accentColor,
     Color iconColor,
     Color chipBg,
-    Color chipBorder,
-  ) {
+    Color chipBorder, {
+    double size = 44,
+    double radius = 14,
+  }) {
     final noteColor = _parseNoteColor(note.color);
     return InkWell(
       onTap: () => _showNoteColorPicker(note, accentColor),
-      borderRadius: BorderRadius.circular(14),
+      borderRadius: BorderRadius.circular(radius),
       child: Container(
-        height: 44,
-        width: 44,
+        height: size,
+        width: size,
         decoration: BoxDecoration(
           color: chipBg,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(color: chipBorder, width: 1),
         ),
         child: noteColor != null
             ? Center(
                 child: Container(
-                  width: 20,
-                  height: 20,
+                  width: size * 0.45,
+                  height: size * 0.45,
                   decoration: BoxDecoration(
                     color: noteColor,
                     shape: BoxShape.circle,
@@ -735,7 +760,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   ),
                 ),
               )
-            : Icon(Icons.palette_outlined, size: 18, color: iconColor),
+            : Icon(Icons.palette_outlined,
+                size: size * 0.41, color: iconColor),
       ),
     );
   }

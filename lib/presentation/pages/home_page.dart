@@ -104,12 +104,15 @@ class _HomePageState extends State<HomePage>
 
     return LayoutBuilder(
       builder: (context, constraints) {
+        final isMobile = constraints.maxWidth < _mobileBreakpoint;
+
         return Stack(
           children: [
             // Hero typography in top-left
             Positioned(
-              left: 32,
-              top: 32,
+              left: isMobile ? 20 : 32,
+              top: isMobile ? 20 : 32,
+              right: isMobile ? 60 : null, // leave room for reminder
               child: FadeTransition(
                 opacity: _fadeAnims[0],
                 child: SlideTransition(
@@ -119,6 +122,7 @@ class _HomePageState extends State<HomePage>
                     accentColor: accentColor,
                     theme: theme,
                     shadows: heroShadows,
+                    compact: isMobile,
                   ),
                 ),
               ),
@@ -126,7 +130,7 @@ class _HomePageState extends State<HomePage>
 
             // Pending reminders card (top-right)
             Positioned(
-              right: 24,
+              right: isMobile ? 16 : 24,
               top: 16,
               child: FadeTransition(
                 opacity: _fadeAnims[1],
@@ -141,10 +145,8 @@ class _HomePageState extends State<HomePage>
               ),
             ),
 
-            // Recent activity card (center-right, above stats row).
-            // Use max() to guarantee it never overlaps the bottom cards
-            // (~200px stats row + 24px padding + 16px gap).
-            if (recentNote != null)
+            // Recent activity card — hidden on mobile to save space
+            if (recentNote != null && !isMobile)
               Positioned(
                 right: 32,
                 bottom: (constraints.maxHeight * 0.38)
@@ -166,9 +168,9 @@ class _HomePageState extends State<HomePage>
 
             // Stats & Actions at bottom
             Positioned(
-              left: 24,
-              right: 24,
-              bottom: 24,
+              left: isMobile ? 16 : 24,
+              right: isMobile ? 16 : 24,
+              bottom: isMobile ? 16 : 24,
               child: _buildStatsRow(context, theme, accentColor),
             ),
           ],
@@ -177,12 +179,33 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  /// Breakpoint below which we switch to mobile card layout.
+  static const double _mobileBreakpoint = 600;
+
   Widget _buildStatsRow(
     BuildContext context,
     ThemeData theme,
     Color accentColor,
   ) {
     final isDark = theme.brightness == Brightness.dark;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth < _mobileBreakpoint) {
+          return _buildMobileStats(context, theme, accentColor, isDark);
+        }
+        return _buildDesktopStats(context, theme, accentColor, isDark);
+      },
+    );
+  }
+
+  /// Desktop layout — original 3-column row.
+  Widget _buildDesktopStats(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+    bool isDark,
+  ) {
     return IntrinsicHeight(
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -241,6 +264,307 @@ class _HomePageState extends State<HomePage>
           ),
         ],
       ),
+    );
+  }
+
+  /// Mobile layout — compact enjoy banner + 2×2 stat grid.
+  Widget _buildMobileStats(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+    bool isDark,
+  ) {
+    final totalNotes = appState.notes.length;
+    final hasTodayNote = appState.currentNote != null;
+    final pinnedCount = appState.pinnedNotes.length;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // ── Compact enjoy banner ──
+        FadeTransition(
+          opacity: _fadeAnims[2],
+          child: SlideTransition(
+            position: _slideAnims[2],
+            child: _buildEnjoyCardMobile(
+              context, theme, accentColor, isDark,
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // ── 2×2 stat grid ──
+        FadeTransition(
+          opacity: _fadeAnims[3],
+          child: SlideTransition(
+            position: _slideAnims[3],
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildMiniStatCard(
+                    theme: theme,
+                    value: '$totalNotes',
+                    label: 'Total Notes',
+                    icon: Icons.note_alt_rounded,
+                    accentColor: accentColor,
+                    isDark: isDark,
+                    primaryText: primaryText,
+                    secondaryText: secondaryText,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildMiniStatCardWithTimer(
+                    context, theme, accentColor, isDark,
+                    primaryText, secondaryText,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        FadeTransition(
+          opacity: _fadeAnims[4],
+          child: SlideTransition(
+            position: _slideAnims[4],
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildMiniStatCard(
+                    theme: theme,
+                    value: hasTodayNote ? '1' : '0',
+                    label: "Today's Note",
+                    icon: hasTodayNote
+                        ? Icons.north_east_rounded
+                        : Icons.today_rounded,
+                    accentColor: accentColor,
+                    isDark: isDark,
+                    primaryText: primaryText,
+                    secondaryText: secondaryText,
+                    onTap: hasTodayNote
+                        ? () => appState.navigateToPage(2)
+                        : null,
+                    iconActive: hasTodayNote,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: _buildMiniStatCard(
+                    theme: theme,
+                    value: '$pinnedCount',
+                    label: 'Pinned Notes',
+                    icon: Icons.push_pin_rounded,
+                    accentColor: accentColor,
+                    isDark: isDark,
+                    primaryText: primaryText,
+                    secondaryText: secondaryText,
+                    onTap: () => appState.navigateToPinnedNotes(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Compact horizontal enjoy card for mobile.
+  Widget _buildEnjoyCardMobile(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+    bool isDark,
+  ) {
+    final shape = RectangleShapeBorder(
+      borderRadius: DynamicBorderRadius.only(
+        topLeft: DynamicRadius.circular(Length(24)),
+        topRight: DynamicRadius.circular(Length(48)),
+        bottomLeft: DynamicRadius.circular(Length(48)),
+        bottomRight: DynamicRadius.circular(Length(24)),
+      ),
+    );
+
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: ShapeDecoration(
+        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
+        shape: shape,
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  'Explore, Write, and',
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                ),
+                Text(
+                  'ENJOY',
+                  style: theme.textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 3,
+                    color: isDark ? Colors.white : Colors.black87,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          _buildActionButton(
+            context: context,
+            label: 'New Note',
+            accentColor: accentColor,
+            isDark: isDark,
+            onTap: () async {
+              await appState.createNewNote();
+              appState.navigateToPage(2);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Mini stat card used in the mobile 2×2 grid.
+  Widget _buildMiniStatCard({
+    required ThemeData theme,
+    required String value,
+    required String label,
+    required IconData icon,
+    required Color accentColor,
+    required bool isDark,
+    required Color primaryText,
+    required Color secondaryText,
+    VoidCallback? onTap,
+    bool iconActive = true,
+  }) {
+    final shape = RectangleShapeBorder(
+      borderRadius: DynamicBorderRadius.all(
+        DynamicRadius.circular(Length(22)),
+      ),
+    );
+
+    final card = Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: ShapeDecoration(
+        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
+        shape: shape,
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  value,
+                  style: theme.textTheme.headlineSmall?.copyWith(
+                    fontWeight: FontWeight.w900,
+                    color: primaryText,
+                  ),
+                ),
+                Text(
+                  label,
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: secondaryText,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: iconActive
+                  ? accentColor.withValues(alpha: 0.15)
+                  : (isDark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.grey.shade100),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              icon,
+              color: iconActive
+                  ? accentColor
+                  : (isDark ? Colors.white38 : Colors.grey.shade400),
+              size: 18,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (onTap != null) {
+      return _PressButton(onTap: onTap, pressScale: 0.95, child: card);
+    }
+    return card;
+  }
+
+  /// Mini Tasks card for mobile — wraps timer state listener.
+  Widget _buildMiniStatCardWithTimer(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+    bool isDark,
+    Color primaryText,
+    Color secondaryText,
+  ) {
+    return ListenableBuilder(
+      listenable: GetIt.instance<TimerState>(),
+      builder: (context, _) {
+        final timerState = GetIt.instance<TimerState>();
+        final today = DateTime.now();
+        final todayDate = DateTime(today.year, today.month, today.day);
+        final taskCount = (timerState.entriesByDay[todayDate] ?? []).length;
+
+        return _PressButton(
+          onTap: () => appState.navigateToPage(4),
+          pressScale: 0.95,
+          child: _buildMiniStatCard(
+            theme: theme,
+            value: '$taskCount',
+            label: 'Tasks today',
+            icon: Icons.timer_rounded,
+            accentColor: accentColor,
+            isDark: isDark,
+            primaryText: primaryText,
+            secondaryText: secondaryText,
+          ),
+        );
+      },
     );
   }
 
@@ -705,12 +1029,14 @@ class _HeroText extends StatefulWidget {
   final Color accentColor;
   final ThemeData theme;
   final List<Shadow> shadows;
+  final bool compact;
 
   const _HeroText({
     required this.heroColor,
     required this.accentColor,
     required this.theme,
     required this.shadows,
+    this.compact = false,
   });
 
   @override
@@ -789,13 +1115,19 @@ class _HeroTextState extends State<_HeroText>
   Widget build(BuildContext context) {
     final theme = widget.theme;
 
-    final smallStyle = theme.textTheme.displaySmall?.copyWith(
+    final smallStyle = (widget.compact
+            ? theme.textTheme.headlineMedium
+            : theme.textTheme.displaySmall)
+        ?.copyWith(
       fontWeight: FontWeight.w900,
       letterSpacing: 2,
     );
-    final mediumStyle = theme.textTheme.displayMedium?.copyWith(
+    final mediumStyle = (widget.compact
+            ? theme.textTheme.headlineLarge
+            : theme.textTheme.displayMedium)
+        ?.copyWith(
       fontWeight: FontWeight.w900,
-      letterSpacing: 4,
+      letterSpacing: widget.compact ? 2 : 4,
     );
 
     // Shared text column builder to avoid duplication.
