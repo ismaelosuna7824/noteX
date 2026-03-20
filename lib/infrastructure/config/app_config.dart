@@ -80,7 +80,7 @@ class AppConfig {
   // ── GitHub Release auto-update ──────────────────────────────────────────
 
   /// Current app version — keep in sync with pubspec.yaml `version:` field.
-  static const String currentVersion = '1.39.0';
+  static const String currentVersion = '1.40.0';
 
   static const String githubOwner = 'ismaelosuna7824';
   static const String githubRepo = 'noteX';

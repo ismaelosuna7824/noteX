@@ -609,8 +609,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       ),
 
                       // Editor content
+                      // Listener ensures keyboard focus transfers on any
+                      // pointer interaction so Ctrl+C / Ctrl+V works on the
+                      // first try (desktop platforms may lose editor focus
+                      // after toolbar clicks or other UI interactions).
                       Expanded(
-                        child: Container(
+                        child: Listener(
+                          onPointerDown: (_) {
+                            if (!_editorFocusNode.hasFocus) {
+                              _editorFocusNode.requestFocus();
+                            }
+                          },
+                          child: Container(
                           decoration: BoxDecoration(
                             color: editorBg.withValues(alpha: bgAlpha),
                             borderRadius: const BorderRadius.only(
@@ -649,6 +659,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               ),
                             ),
                           ),
+                        ),
                         ),
                       ),
                     ],
