@@ -1103,6 +1103,7 @@ class _NotesListPageState extends State<NotesListPage> {
                     placeholder: 'Start writing...',
                     padding: const EdgeInsets.all(8),
                     expands: true,
+                    enableAlwaysIndentOnTab: true,
                     textSelectionThemeData: TextSelectionThemeData(
                       cursorColor: accentColor,
                       selectionColor: accentColor.withValues(alpha: 0.3),

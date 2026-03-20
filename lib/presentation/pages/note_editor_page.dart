@@ -650,6 +650,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               placeholder: 'Start writing your thoughts...',
                               padding: EdgeInsets.all(isCompact ? 4 : 8),
                               expands: true,
+                              enableAlwaysIndentOnTab: true,
                               textSelectionThemeData: TextSelectionThemeData(
                                 cursorColor: accentColor,
                               ),
