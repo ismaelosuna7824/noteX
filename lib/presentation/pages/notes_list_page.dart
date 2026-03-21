@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_quill/flutter_quill.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
@@ -1096,19 +1097,61 @@ class _NotesListPageState extends State<NotesListPage> {
               },
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: QuillEditor.basic(
-                  controller: _quillController!,
-                  focusNode: _editorFocusNode,
-                  config: QuillEditorConfig(
-                    placeholder: 'Start writing...',
-                    padding: const EdgeInsets.all(8),
-                    expands: true,
-                    enableAlwaysIndentOnTab: true,
-                    textSelectionThemeData: TextSelectionThemeData(
-                      cursorColor: accentColor,
-                      selectionColor: accentColor.withValues(alpha: 0.3),
+                child: Focus(
+                  onKeyEvent: (node, event) {
+                    if (event is! KeyDownEvent &&
+                        event is! KeyRepeatEvent) {
+                      return KeyEventResult.ignored;
+                    }
+                    if (event.logicalKey !=
+                        LogicalKeyboardKey.backspace) {
+                      return KeyEventResult.ignored;
+                    }
+                    final ctrl = _quillController!;
+                    final sel = ctrl.selection;
+                    if (!sel.isCollapsed) {
+                      return KeyEventResult.ignored;
+                    }
+                    final offset = sel.baseOffset;
+                    final style = ctrl.getSelectionStyle();
+                    final indentAttr =
+                        style.attributes[Attribute.indent.key];
+                    if (indentAttr == null) {
+                      return KeyEventResult.ignored;
+                    }
+                    final text = ctrl.document.toPlainText();
+                    int lineStart = offset;
+                    while (lineStart > 0 &&
+                        text[lineStart - 1] != '\n') {
+                      lineStart--;
+                    }
+                    if (offset != lineStart) {
+                      return KeyEventResult.ignored;
+                    }
+                    final currentLevel = indentAttr.value as int;
+                    if (currentLevel <= 1) {
+                      ctrl.formatSelection(
+                          Attribute.clone(Attribute.indentL1, null));
+                    } else {
+                      ctrl.formatSelection(
+                          Attribute.getIndentLevel(currentLevel - 1));
+                    }
+                    return KeyEventResult.handled;
+                  },
+                  child: QuillEditor.basic(
+                    controller: _quillController!,
+                    focusNode: _editorFocusNode,
+                    config: QuillEditorConfig(
+                      placeholder: 'Start writing...',
+                      padding: const EdgeInsets.all(8),
+                      expands: true,
+                      enableAlwaysIndentOnTab: true,
+                      textSelectionThemeData: TextSelectionThemeData(
+                        cursorColor: accentColor,
+                        selectionColor: accentColor.withValues(alpha: 0.3),
+                      ),
+                      customStyles: _buildQuillStyles(theme, noteColor: noteColor),
                     ),
-                    customStyles: _buildQuillStyles(theme, noteColor: noteColor),
                   ),
                 ),
               ),
