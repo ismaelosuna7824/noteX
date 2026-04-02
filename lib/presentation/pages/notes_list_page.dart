@@ -873,6 +873,16 @@ class _NotesListPageState extends State<NotesListPage> {
         position.dy,
       ),
       items: [
+        PopupMenuItem(
+          value: 'rename',
+          child: Row(
+            children: [
+              Icon(Icons.edit_rounded, size: 16, color: Colors.grey.shade400),
+              const SizedBox(width: 8),
+              const Text('Rename project', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
         const PopupMenuItem(
           value: 'delete',
           child: Row(
@@ -888,7 +898,9 @@ class _NotesListPageState extends State<NotesListPage> {
         ),
       ],
     );
-    if (result == 'delete') {
+    if (result == 'rename') {
+      _showRenameProjectDialog(project);
+    } else if (result == 'delete') {
       _showDeleteProjectDialog(project);
     }
   }
@@ -919,6 +931,49 @@ class _NotesListPageState extends State<NotesListPage> {
             },
             style: TextButton.styleFrom(foregroundColor: Colors.red),
             child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRenameProjectDialog(NoteProject project) {
+    final controller = TextEditingController(text: project.name);
+
+    showAnimatedDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Rename project'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'Project name',
+          ),
+          onSubmitted: (value) async {
+            final name = value.trim();
+            if (name.isNotEmpty && name != project.name) {
+              await widget.appState.renameNoteProject(project.id, name);
+              setState(() {});
+            }
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isNotEmpty && name != project.name) {
+                await widget.appState.renameNoteProject(project.id, name);
+                setState(() {});
+              }
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Rename'),
           ),
         ],
       ),
