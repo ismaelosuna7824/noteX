@@ -192,7 +192,7 @@ Future<void> _initDesktopWindow(AppState appState) async {
   final windowOptions = WindowOptions(
     size: Size(windowW, windowH),
     center: true,
-    backgroundColor: Colors.transparent,
+    backgroundColor: const Color(0xFF0F1120),
     skipTaskbar: false,
     titleBarStyle: TitleBarStyle.hidden,
   );
@@ -202,11 +202,11 @@ Future<void> _initDesktopWindow(AppState appState) async {
   windowManager.waitUntilReadyToShow(windowOptions, () async {
     try {
       await Window.setEffect(
-        effect: WindowEffect.transparent,
-        color: Colors.transparent,
+        effect: WindowEffect.solid,
+        color: const Color(0xFF0F1120),
       );
     } catch (_) {
-      // Transparent effect unsupported — continue without it.
+      // Window effect unsupported — continue without it.
     }
     await windowManager.setAsFrameless();
     // Allow resizing and enforce a minimum window size on all platforms.

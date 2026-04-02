@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/note.dart';
+import '../../domain/entities/note_project.dart';
 import 'glassmorphic_container.dart';
 
 /// A card representing a note preview in the notes list.
@@ -13,6 +14,9 @@ class NoteCard extends StatefulWidget {
   final VoidCallback? onDelete;
   final VoidCallback? onPin;
   final VoidCallback? onCompactMode;
+  final void Function(String? projectId)? onChangeProject;
+  final VoidCallback? onDuplicate;
+  final List<NoteProject> noteProjects;
   final Color accentColor;
   final Color? editorBgColor;
 
@@ -24,6 +28,9 @@ class NoteCard extends StatefulWidget {
     this.onDelete,
     this.onPin,
     this.onCompactMode,
+    this.onChangeProject,
+    this.onDuplicate,
+    this.noteProjects = const [],
     required this.accentColor,
     this.editorBgColor,
   });
@@ -42,7 +49,11 @@ class _NoteCardState extends State<NoteCard> {
     final cardColor = noteColor ?? widget.editorBgColor;
     final borderColor = noteColor ?? widget.accentColor;
 
-    return MouseRegion(
+    return GestureDetector(
+      onSecondaryTapUp: widget.onChangeProject != null
+          ? (details) => _showCategoryMenu(details.globalPosition)
+          : null,
+      child: MouseRegion(
       onEnter: (_) => setState(() => _hovered = true),
       onExit: (_) => setState(() => _hovered = false),
       child: AnimatedContainer(
@@ -129,6 +140,22 @@ class _NoteCardState extends State<NoteCard> {
                     ),
                   ),
 
+                // Ephemeral badge
+                if (widget.note.isEphemeral)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: Tooltip(
+                      message: 'Quick Note — auto-deletes in 24h',
+                      child: Icon(
+                        Icons.bolt_rounded,
+                        size: 16,
+                        color: noteColor != null
+                            ? Colors.white70
+                            : Colors.amber.shade600,
+                      ),
+                    ),
+                  ),
+
                 // Sync indicator
                 _buildSyncIcon(),
 
@@ -166,7 +193,86 @@ class _NoteCardState extends State<NoteCard> {
           ),
         ),
       ),
+      ),
     );
+  }
+
+  void _showCategoryMenu(Offset position) async {
+    final projects = widget.noteProjects;
+    final currentProjectId = widget.note.projectId;
+
+    final result = await showMenu<String?>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx, position.dy, position.dx, position.dy,
+      ),
+      items: [
+        if (widget.onDuplicate != null)
+          PopupMenuItem<String?>(
+            value: '__duplicate__',
+            child: Row(
+              children: [
+                Icon(Icons.copy_rounded, size: 16, color: Colors.grey.shade400),
+                const SizedBox(width: 8),
+                const Text('Duplicate', style: TextStyle(fontSize: 13)),
+              ],
+            ),
+          ),
+        if (widget.onDuplicate != null)
+          const PopupMenuDivider(),
+        PopupMenuItem<String?>(
+          value: '__none__',
+          child: Row(
+            children: [
+              Icon(Icons.label_off_outlined, size: 16,
+                  color: currentProjectId == null
+                      ? Theme.of(context).colorScheme.primary
+                      : Colors.grey.shade400),
+              const SizedBox(width: 8),
+              Text('No category',
+                  style: TextStyle(fontSize: 13,
+                      fontWeight: currentProjectId == null
+                          ? FontWeight.bold : FontWeight.normal)),
+            ],
+          ),
+        ),
+        ...projects.map((p) => PopupMenuItem<String?>(
+              value: p.id,
+              child: Row(
+                children: [
+                  Container(
+                    width: 12, height: 12,
+                    decoration: BoxDecoration(
+                      color: p.color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(p.name,
+                        style: TextStyle(fontSize: 13,
+                            fontWeight: currentProjectId == p.id
+                                ? FontWeight.bold : FontWeight.normal),
+                        overflow: TextOverflow.ellipsis),
+                  ),
+                  if (currentProjectId == p.id)
+                    Icon(Icons.check, size: 16,
+                        color: Theme.of(context).colorScheme.primary),
+                ],
+              ),
+            )),
+      ],
+    );
+
+    if (result == null) return; // menu dismissed
+    if (result == '__duplicate__') {
+      widget.onDuplicate?.call();
+      return;
+    }
+    final newProjectId = result == '__none__' ? null : result;
+    if (newProjectId != currentProjectId) {
+      widget.onChangeProject?.call(newProjectId);
+    }
   }
 
   Color? _parseNoteColor(String? hex) {

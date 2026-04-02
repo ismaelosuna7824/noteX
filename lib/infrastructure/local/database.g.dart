@@ -163,6 +163,43 @@ class $NoteEntriesTable extends NoteEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _shareTokenMeta = const VerificationMeta(
+    'shareToken',
+  );
+  @override
+  late final GeneratedColumn<String> shareToken = GeneratedColumn<String>(
+    'share_token',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sharedAtMeta = const VerificationMeta(
+    'sharedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> sharedAt = GeneratedColumn<DateTime>(
+    'shared_at',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _isEphemeralMeta = const VerificationMeta(
+    'isEphemeral',
+  );
+  @override
+  late final GeneratedColumn<bool> isEphemeral = GeneratedColumn<bool>(
+    'is_ephemeral',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_ephemeral" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -179,6 +216,9 @@ class $NoteEntriesTable extends NoteEntries
     deletedAt,
     userId,
     projectId,
+    shareToken,
+    sharedAt,
+    isEphemeral,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -282,6 +322,27 @@ class $NoteEntriesTable extends NoteEntries
         projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
       );
     }
+    if (data.containsKey('share_token')) {
+      context.handle(
+        _shareTokenMeta,
+        shareToken.isAcceptableOrUnknown(data['share_token']!, _shareTokenMeta),
+      );
+    }
+    if (data.containsKey('shared_at')) {
+      context.handle(
+        _sharedAtMeta,
+        sharedAt.isAcceptableOrUnknown(data['shared_at']!, _sharedAtMeta),
+      );
+    }
+    if (data.containsKey('is_ephemeral')) {
+      context.handle(
+        _isEphemeralMeta,
+        isEphemeral.isAcceptableOrUnknown(
+          data['is_ephemeral']!,
+          _isEphemeralMeta,
+        ),
+      );
+    }
     return context;
   }
 
@@ -347,6 +408,18 @@ class $NoteEntriesTable extends NoteEntries
         DriftSqlType.string,
         data['${effectivePrefix}project_id'],
       ),
+      shareToken: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}share_token'],
+      ),
+      sharedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}shared_at'],
+      ),
+      isEphemeral: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_ephemeral'],
+      )!,
     );
   }
 
@@ -371,6 +444,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
   final DateTime? deletedAt;
   final String? userId;
   final String? projectId;
+  final String? shareToken;
+  final DateTime? sharedAt;
+  final bool isEphemeral;
   const NoteEntry({
     required this.id,
     required this.title,
@@ -386,6 +462,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     this.deletedAt,
     this.userId,
     this.projectId,
+    this.shareToken,
+    this.sharedAt,
+    required this.isEphemeral,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -416,6 +495,13 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     if (!nullToAbsent || projectId != null) {
       map['project_id'] = Variable<String>(projectId);
     }
+    if (!nullToAbsent || shareToken != null) {
+      map['share_token'] = Variable<String>(shareToken);
+    }
+    if (!nullToAbsent || sharedAt != null) {
+      map['shared_at'] = Variable<DateTime>(sharedAt);
+    }
+    map['is_ephemeral'] = Variable<bool>(isEphemeral);
     return map;
   }
 
@@ -447,6 +533,13 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       projectId: projectId == null && nullToAbsent
           ? const Value.absent()
           : Value(projectId),
+      shareToken: shareToken == null && nullToAbsent
+          ? const Value.absent()
+          : Value(shareToken),
+      sharedAt: sharedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sharedAt),
+      isEphemeral: Value(isEphemeral),
     );
   }
 
@@ -470,6 +563,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       userId: serializer.fromJson<String?>(json['userId']),
       projectId: serializer.fromJson<String?>(json['projectId']),
+      shareToken: serializer.fromJson<String?>(json['shareToken']),
+      sharedAt: serializer.fromJson<DateTime?>(json['sharedAt']),
+      isEphemeral: serializer.fromJson<bool>(json['isEphemeral']),
     );
   }
   @override
@@ -490,6 +586,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'userId': serializer.toJson<String?>(userId),
       'projectId': serializer.toJson<String?>(projectId),
+      'shareToken': serializer.toJson<String?>(shareToken),
+      'sharedAt': serializer.toJson<DateTime?>(sharedAt),
+      'isEphemeral': serializer.toJson<bool>(isEphemeral),
     };
   }
 
@@ -508,6 +607,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     Value<DateTime?> deletedAt = const Value.absent(),
     Value<String?> userId = const Value.absent(),
     Value<String?> projectId = const Value.absent(),
+    Value<String?> shareToken = const Value.absent(),
+    Value<DateTime?> sharedAt = const Value.absent(),
+    bool? isEphemeral,
   }) => NoteEntry(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -525,6 +627,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     userId: userId.present ? userId.value : this.userId,
     projectId: projectId.present ? projectId.value : this.projectId,
+    shareToken: shareToken.present ? shareToken.value : this.shareToken,
+    sharedAt: sharedAt.present ? sharedAt.value : this.sharedAt,
+    isEphemeral: isEphemeral ?? this.isEphemeral,
   );
   NoteEntry copyWithCompanion(NoteEntriesCompanion data) {
     return NoteEntry(
@@ -546,6 +651,13 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       deletedAt: data.deletedAt.present ? data.deletedAt.value : this.deletedAt,
       userId: data.userId.present ? data.userId.value : this.userId,
       projectId: data.projectId.present ? data.projectId.value : this.projectId,
+      shareToken: data.shareToken.present
+          ? data.shareToken.value
+          : this.shareToken,
+      sharedAt: data.sharedAt.present ? data.sharedAt.value : this.sharedAt,
+      isEphemeral: data.isEphemeral.present
+          ? data.isEphemeral.value
+          : this.isEphemeral,
     );
   }
 
@@ -565,7 +677,10 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('userId: $userId, ')
-          ..write('projectId: $projectId')
+          ..write('projectId: $projectId, ')
+          ..write('shareToken: $shareToken, ')
+          ..write('sharedAt: $sharedAt, ')
+          ..write('isEphemeral: $isEphemeral')
           ..write(')'))
         .toString();
   }
@@ -586,6 +701,9 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     deletedAt,
     userId,
     projectId,
+    shareToken,
+    sharedAt,
+    isEphemeral,
   );
   @override
   bool operator ==(Object other) =>
@@ -604,7 +722,10 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           other.version == this.version &&
           other.deletedAt == this.deletedAt &&
           other.userId == this.userId &&
-          other.projectId == this.projectId);
+          other.projectId == this.projectId &&
+          other.shareToken == this.shareToken &&
+          other.sharedAt == this.sharedAt &&
+          other.isEphemeral == this.isEphemeral);
 }
 
 class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
@@ -622,6 +743,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
   final Value<DateTime?> deletedAt;
   final Value<String?> userId;
   final Value<String?> projectId;
+  final Value<String?> shareToken;
+  final Value<DateTime?> sharedAt;
+  final Value<bool> isEphemeral;
   final Value<int> rowid;
   const NoteEntriesCompanion({
     this.id = const Value.absent(),
@@ -638,6 +762,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.deletedAt = const Value.absent(),
     this.userId = const Value.absent(),
     this.projectId = const Value.absent(),
+    this.shareToken = const Value.absent(),
+    this.sharedAt = const Value.absent(),
+    this.isEphemeral = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NoteEntriesCompanion.insert({
@@ -655,6 +782,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.deletedAt = const Value.absent(),
     this.userId = const Value.absent(),
     this.projectId = const Value.absent(),
+    this.shareToken = const Value.absent(),
+    this.sharedAt = const Value.absent(),
+    this.isEphemeral = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        createdAt = Value(createdAt),
@@ -674,6 +804,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Expression<DateTime>? deletedAt,
     Expression<String>? userId,
     Expression<String>? projectId,
+    Expression<String>? shareToken,
+    Expression<DateTime>? sharedAt,
+    Expression<bool>? isEphemeral,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -691,6 +824,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (userId != null) 'user_id': userId,
       if (projectId != null) 'project_id': projectId,
+      if (shareToken != null) 'share_token': shareToken,
+      if (sharedAt != null) 'shared_at': sharedAt,
+      if (isEphemeral != null) 'is_ephemeral': isEphemeral,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -710,6 +846,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Value<DateTime?>? deletedAt,
     Value<String?>? userId,
     Value<String?>? projectId,
+    Value<String?>? shareToken,
+    Value<DateTime?>? sharedAt,
+    Value<bool>? isEphemeral,
     Value<int>? rowid,
   }) {
     return NoteEntriesCompanion(
@@ -727,6 +866,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       deletedAt: deletedAt ?? this.deletedAt,
       userId: userId ?? this.userId,
       projectId: projectId ?? this.projectId,
+      shareToken: shareToken ?? this.shareToken,
+      sharedAt: sharedAt ?? this.sharedAt,
+      isEphemeral: isEphemeral ?? this.isEphemeral,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -776,6 +918,15 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     if (projectId.present) {
       map['project_id'] = Variable<String>(projectId.value);
     }
+    if (shareToken.present) {
+      map['share_token'] = Variable<String>(shareToken.value);
+    }
+    if (sharedAt.present) {
+      map['shared_at'] = Variable<DateTime>(sharedAt.value);
+    }
+    if (isEphemeral.present) {
+      map['is_ephemeral'] = Variable<bool>(isEphemeral.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -799,6 +950,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
           ..write('deletedAt: $deletedAt, ')
           ..write('userId: $userId, ')
           ..write('projectId: $projectId, ')
+          ..write('shareToken: $shareToken, ')
+          ..write('sharedAt: $sharedAt, ')
+          ..write('isEphemeral: $isEphemeral, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4686,6 +4840,9 @@ typedef $$NoteEntriesTableCreateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String?> userId,
       Value<String?> projectId,
+      Value<String?> shareToken,
+      Value<DateTime?> sharedAt,
+      Value<bool> isEphemeral,
       Value<int> rowid,
     });
 typedef $$NoteEntriesTableUpdateCompanionBuilder =
@@ -4704,6 +4861,9 @@ typedef $$NoteEntriesTableUpdateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String?> userId,
       Value<String?> projectId,
+      Value<String?> shareToken,
+      Value<DateTime?> sharedAt,
+      Value<bool> isEphemeral,
       Value<int> rowid,
     });
 
@@ -4783,6 +4943,21 @@ class $$NoteEntriesTableFilterComposer
 
   ColumnFilters<String> get projectId => $composableBuilder(
     column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get shareToken => $composableBuilder(
+    column: $table.shareToken,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get sharedAt => $composableBuilder(
+    column: $table.sharedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isEphemeral => $composableBuilder(
+    column: $table.isEphemeral,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -4865,6 +5040,21 @@ class $$NoteEntriesTableOrderingComposer
     column: $table.projectId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get shareToken => $composableBuilder(
+    column: $table.shareToken,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get sharedAt => $composableBuilder(
+    column: $table.sharedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get isEphemeral => $composableBuilder(
+    column: $table.isEphemeral,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NoteEntriesTableAnnotationComposer
@@ -4921,6 +5111,19 @@ class $$NoteEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get projectId =>
       $composableBuilder(column: $table.projectId, builder: (column) => column);
+
+  GeneratedColumn<String> get shareToken => $composableBuilder(
+    column: $table.shareToken,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get sharedAt =>
+      $composableBuilder(column: $table.sharedAt, builder: (column) => column);
+
+  GeneratedColumn<bool> get isEphemeral => $composableBuilder(
+    column: $table.isEphemeral,
+    builder: (column) => column,
+  );
 }
 
 class $$NoteEntriesTableTableManager
@@ -4968,6 +5171,9 @@ class $$NoteEntriesTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
+                Value<String?> shareToken = const Value.absent(),
+                Value<DateTime?> sharedAt = const Value.absent(),
+                Value<bool> isEphemeral = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteEntriesCompanion(
                 id: id,
@@ -4984,6 +5190,9 @@ class $$NoteEntriesTableTableManager
                 deletedAt: deletedAt,
                 userId: userId,
                 projectId: projectId,
+                shareToken: shareToken,
+                sharedAt: sharedAt,
+                isEphemeral: isEphemeral,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5002,6 +5211,9 @@ class $$NoteEntriesTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
                 Value<String?> projectId = const Value.absent(),
+                Value<String?> shareToken = const Value.absent(),
+                Value<DateTime?> sharedAt = const Value.absent(),
+                Value<bool> isEphemeral = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteEntriesCompanion.insert(
                 id: id,
@@ -5018,6 +5230,9 @@ class $$NoteEntriesTableTableManager
                 deletedAt: deletedAt,
                 userId: userId,
                 projectId: projectId,
+                shareToken: shareToken,
+                sharedAt: sharedAt,
+                isEphemeral: isEphemeral,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

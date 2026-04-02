@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
@@ -19,6 +20,8 @@ import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
 import 'reminder_page.dart';
+import 'trash_page.dart';
+import 'goodbye_screen.dart';
 import '../../injection.dart';
 import '../../infrastructure/network/connectivity_adapter.dart';
 import '../../domain/services/connectivity_service.dart';
@@ -40,6 +43,8 @@ class AppShell extends StatefulWidget {
   @override
   State<AppShell> createState() => _AppShellState();
 }
+
+void _noop() {}
 
 class _AppShellState extends State<AppShell> with WindowListener {
   bool _isMaximized = false;
@@ -97,6 +102,10 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   @override
   void onWindowClose() async {
+    // Show goodbye screen — cleanup runs in parallel with the animation.
+    widget.appState.startClosing();
+
+    // Run cleanup tasks while goodbye animates.
     // Persist window size before closing.
     if (!await windowManager.isMaximized()) {
       final size = await windowManager.getSize();
@@ -119,7 +128,6 @@ class _AppShellState extends State<AppShell> with WindowListener {
     await widget.appState.cleanupEmptyNotes();
 
     // Push any pending local changes to Supabase before closing.
-    // Remote sync only runs on app open/close to avoid excessive API calls.
     await getIt<SyncEngine>().syncIfAuthenticated();
 
     // Release connectivity listener.
@@ -134,8 +142,8 @@ class _AppShellState extends State<AppShell> with WindowListener {
     _bgVideoController = null;
     _currentVideoPath = null;
 
-    // Brief pause so the native backend finishes its teardown.
-    await Future.delayed(const Duration(milliseconds: 150));
+    // Wait for goodbye animation to finish (at least 1.7s total).
+    await Future.delayed(const Duration(milliseconds: 1700));
 
     await windowManager.destroy();
   }
@@ -315,11 +323,30 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return DragToResizeArea(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (node, event) {
+        if (event is! KeyDownEvent) return KeyEventResult.ignored;
+        // F11 toggles zen mode
+        if (event.logicalKey == LogicalKeyboardKey.f11) {
+          widget.appState.toggleZenMode();
+          return KeyEventResult.handled;
+        }
+        // Escape exits zen mode
+        if (event.logicalKey == LogicalKeyboardKey.escape &&
+            widget.appState.isZenMode) {
+          widget.appState.exitZenMode();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: DragToResizeArea(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(_kWindowRadius),
-        child: Scaffold(
-        backgroundColor: Colors.transparent,
+        child: widget.appState.isClosing
+          ? const GoodbyeScreen(onComplete: _noop)
+          : Scaffold(
+        backgroundColor: const Color(0xFF0F1120),
         body: Stack(
           children: [
             // ── Full-screen background ──────────────────────────────
@@ -341,7 +368,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                 opacity: widget.themeState.isPaletteLoading ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 350),
                 child: LinearProgressIndicator(
-                  backgroundColor: Colors.transparent,
+                  backgroundColor: const Color(0xFF0F1120),
                   valueColor: AlwaysStoppedAnimation<Color>(
                     widget.themeState.accentColor.withValues(alpha: 0.85),
                   ),
@@ -350,14 +377,45 @@ class _AppShellState extends State<AppShell> with WindowListener {
               ),
             ),
 
+            // ── Dim overlay for zen mode ───────────────────────────
+            if (widget.appState.isZenMode)
+              Positioned.fill(
+                child: AnimatedOpacity(
+                  opacity: widget.appState.isZenMode ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 400),
+                  child: Container(color: Colors.black.withValues(alpha: 0.35)),
+                ),
+              ),
+
             // ── Main layout ─────────────────────────────────────────
-            widget.appState.isCompactMode
-                ? _buildCompactLayout()
-                : _buildFullLayout(),
+            widget.appState.isZenMode
+                ? _buildZenLayout()
+                : widget.appState.isCompactMode
+                    ? _buildCompactLayout()
+                    : _buildFullLayout(),
           ],
         ),
         ),
       ),
+    ),
+    );
+  }
+
+  // ── Zen layout (focus mode) ────────────────────────────────────────────
+
+  Widget _buildZenLayout() {
+    return Column(
+      children: [
+        _buildTitleBar(),
+        Expanded(
+          child: NoteEditorPage(
+            key: const ValueKey('zen-editor'),
+            appState: widget.appState,
+            themeState: widget.themeState,
+            isZenMode: true,
+          ),
+        ),
+      ],
     );
   }
 
@@ -606,6 +664,12 @@ class _AppShellState extends State<AppShell> with WindowListener {
       case 7:
         return ReminderPage(
           key: const ValueKey('reminders'),
+          appState: widget.appState,
+          themeState: widget.themeState,
+        );
+      case 8:
+        return TrashPage(
+          key: const ValueKey('trash'),
           appState: widget.appState,
           themeState: widget.themeState,
         );

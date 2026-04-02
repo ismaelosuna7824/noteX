@@ -6,21 +6,21 @@ import '../../domain/repositories/note_repository.dart';
 /// A note is considered empty when its Quill Delta body has no meaningful
 /// text — the title is irrelevant.
 ///
-/// Uses soft-delete (`markDeleted`) so the sync engine propagates the
-/// deletion to Supabase on the next sync cycle.
+/// Uses hard-delete so empty notes are removed completely and don't
+/// clutter the Trash page.
 class CleanupEmptyNotesUseCase {
   final NoteRepository _repository;
 
   const CleanupEmptyNotesUseCase(this._repository);
 
-  /// Soft-deletes **all** empty notes and marks them for sync.
+  /// Hard-deletes **all** empty notes.
   /// Returns the number of notes removed.
   Future<int> execute() async {
     final allNotes = await _repository.getAll();
     int removed = 0;
     for (final note in allNotes) {
       if (note.isEmpty) {
-        await _repository.save(note.markDeleted());
+        await _repository.delete(note.id);
         removed++;
       }
     }

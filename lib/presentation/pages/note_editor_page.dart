@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/editor_text_controls.dart';
+import '../widgets/editor_tab_bar.dart';
+import '../widgets/mention_overlay.dart';
 
 /// Rich text note editor with auto-save.
 ///
@@ -24,11 +27,13 @@ import '../widgets/editor_text_controls.dart';
 class NoteEditorPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
+  final bool isZenMode;
 
   const NoteEditorPage({
     super.key,
     required this.appState,
     required this.themeState,
+    this.isZenMode = false,
   });
 
   @override
@@ -61,6 +66,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   String _prevContent = '';
   String _prevTitle = '';
   int _prevDocLength = 0;
+
+  // ── @mention overlay ───────────────────────────────────────────────
+  OverlayEntry? _mentionOverlay;
+  final GlobalKey _mentionKey = GlobalKey();
+  String _mentionQuery = '';
+  int _mentionStartOffset = -1;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -98,6 +109,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
     widget.appState.autoSaveService.unwatch();
 
+    _dismissMention();
     _quillController.dispose();
     _titleController.dispose();
     _editorFocusNode.dispose();
@@ -130,6 +142,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     } catch (_) {
       _quillController = QuillController.basic(config: _controllerConfig);
     }
+
+    // Listen for selection changes to detect @mention trigger.
+    _quillController.addListener(_checkForMention);
 
     // Initialize snapshots.
     _prevContent = _serializeContent();
@@ -215,6 +230,170 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
+  // ── @mention helpers ──────────────────────────────────────────────────
+
+  /// Called on every selection/content change to detect `@` mention trigger.
+  void _checkForMention() {
+    final sel = _quillController.selection;
+    if (!sel.isCollapsed) {
+      _dismissMention();
+      return;
+    }
+
+    final offset = sel.baseOffset;
+    if (offset <= 0) {
+      _dismissMention();
+      return;
+    }
+
+    // Check if cursor is inside an existing link — if so, skip
+    final style = _quillController.getSelectionStyle();
+    if (style.attributes.containsKey(Attribute.link.key)) {
+      _dismissMention();
+      return;
+    }
+
+    final text = _quillController.document.toPlainText();
+
+    // Search backwards from cursor for `@`
+    int atPos = -1;
+    for (int i = offset - 1; i >= 0; i--) {
+      final ch = text[i];
+      if (ch == '@') {
+        atPos = i;
+        break;
+      }
+      if (ch == '\n' || ch == ' ') {
+        break;
+      }
+    }
+
+    if (atPos < 0) {
+      _dismissMention();
+      return;
+    }
+
+    // Check if the `@` itself is part of an existing link
+    final atStyle = _quillController.document.collectStyle(atPos, 0);
+    if (atStyle.attributes.containsKey(Attribute.link.key)) {
+      _dismissMention();
+      return;
+    }
+
+    // Must be at start of line or preceded by whitespace
+    if (atPos > 0 && text[atPos - 1] != '\n' && text[atPos - 1] != ' ') {
+      _dismissMention();
+      return;
+    }
+
+    final query = text.substring(atPos + 1, offset);
+    _mentionStartOffset = atPos;
+    _mentionQuery = query;
+    _showMentionOverlay();
+  }
+
+  void _showMentionOverlay() {
+    _mentionOverlay?.remove();
+
+    final overlay = Overlay.of(context);
+    final editorBox = context.findRenderObject() as RenderBox?;
+    if (editorBox == null) return;
+
+    // Position overlay near the top of the editor area
+    final editorPos = editorBox.localToGlobal(Offset.zero);
+
+    _mentionOverlay = OverlayEntry(
+      builder: (_) => Positioned(
+        left: editorPos.dx + 40,
+        top: editorPos.dy + 80,
+        child: MentionOverlay(
+          key: _mentionKey,
+          notes: widget.appState.notes
+              .where((n) => n.id != widget.appState.currentNote?.id)
+              .toList(),
+          query: _mentionQuery,
+          onSelect: _onMentionSelected,
+          onDismiss: _dismissMention,
+          accentColor: widget.themeState.accentColor,
+          bgColor: widget.themeState.editorBgColor,
+          borderColor: widget.themeState.editorBorderColor,
+          textColor: widget.themeState.editorTextColor,
+          mutedColor: widget.themeState.editorMutedTextColor,
+        ),
+      ),
+    );
+
+    overlay.insert(_mentionOverlay!);
+  }
+
+  void _onMentionSelected(Note note) {
+    final title = note.title.isEmpty ? 'Untitled' : note.title;
+    final ctrl = _quillController;
+    final linkText = '@$title';
+    final startOffset = _mentionStartOffset;
+    final cursorOffset = ctrl.selection.baseOffset;
+
+    // Dismiss overlay first (but we already saved the offsets above)
+    _mentionOverlay?.remove();
+    _mentionOverlay = null;
+    _mentionStartOffset = -1;
+    _mentionQuery = '';
+
+    if (startOffset < 0 || cursorOffset < startOffset) return;
+
+    // Remove listener temporarily to avoid re-triggering mention detection
+    ctrl.removeListener(_checkForMention);
+
+    try {
+      // Delete the `@query` text
+      final deleteLength = cursorOffset - startOffset;
+      if (deleteLength > 0) {
+        ctrl.replaceText(startOffset, deleteLength, '', null);
+      }
+
+      // Insert the linked text
+      ctrl.document.insert(startOffset, linkText);
+      ctrl.document.format(
+        startOffset,
+        linkText.length,
+        LinkAttribute('notex://${note.id}'),
+      );
+
+      // Insert a trailing space (unlinked)
+      ctrl.document.insert(startOffset + linkText.length, ' ');
+
+      // Move cursor after the space
+      ctrl.updateSelection(
+        TextSelection.collapsed(offset: startOffset + linkText.length + 1),
+        ChangeSource.local,
+      );
+    } finally {
+      ctrl.addListener(_checkForMention);
+    }
+  }
+
+  void _dismissMention() {
+    _mentionOverlay?.remove();
+    _mentionOverlay = null;
+    _mentionStartOffset = -1;
+    _mentionQuery = '';
+  }
+
+  /// Handle `notex://` link taps — navigate to the linked note.
+  void _handleLinkTap(String url) {
+    if (url.startsWith('notex://')) {
+      final noteId = url.substring('notex://'.length);
+      final note = widget.appState.notes.cast<Note?>().firstWhere(
+            (n) => n?.id == noteId,
+            orElse: () => null,
+          );
+      if (note != null) {
+        widget.appState.selectNote(note);
+      }
+    }
+    // Normal URLs are handled by Quill's default launcher
+  }
+
   // ── Build ─────────────────────────────────────────────────────────────
 
   @override
@@ -286,15 +465,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
 
     final isCompact = widget.appState.isCompactMode;
+    final isZen = widget.isZenMode;
 
     return Padding(
-      padding: isCompact
-          ? const EdgeInsets.fromLTRB(4, 0, 4, 4)
-          : const EdgeInsets.fromLTRB(16, 0, 16, 16),
+      padding: isZen
+          ? const EdgeInsets.all(24)
+          : isCompact
+              ? const EdgeInsets.fromLTRB(4, 0, 4, 4)
+              : const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         children: [
-          // Top controls row: title + toolbar
-          LayoutBuilder(
+          // Top controls row: title + toolbar (hidden in zen mode)
+          if (!isZen) LayoutBuilder(
             builder: (context, constraints) {
               final isMobile = constraints.maxWidth < 560;
 
@@ -496,6 +678,100 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 );
               }
 
+              final ephemeralToggle = Tooltip(
+                message: note.isEphemeral
+                    ? 'Quick Note (auto-deletes in 24h)'
+                    : 'Make Quick Note',
+                child: InkWell(
+                  onTap: () => widget.appState.toggleEphemeral(note.id),
+                  borderRadius: BorderRadius.circular(btnRadius),
+                  child: Container(
+                    height: btnSize,
+                    width: btnSize,
+                    decoration: BoxDecoration(
+                      color: note.isEphemeral
+                          ? Colors.amber.withValues(alpha: 0.15)
+                          : chipBg,
+                      borderRadius: BorderRadius.circular(btnRadius),
+                      border: Border.all(
+                        color: note.isEphemeral
+                            ? Colors.amber.withValues(alpha: 0.4)
+                            : chipBorder,
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      note.isEphemeral
+                          ? Icons.bolt_rounded
+                          : Icons.bolt_outlined,
+                      size: btnIconSize,
+                      color: note.isEphemeral
+                          ? Colors.amber.shade600
+                          : iconColor,
+                    ),
+                  ),
+                ),
+              );
+
+              final zenToggle = InkWell(
+                onTap: () => widget.appState.enterZenMode(),
+                borderRadius: BorderRadius.circular(btnRadius),
+                child: Container(
+                  height: btnSize,
+                  width: btnSize,
+                  decoration: BoxDecoration(
+                    color: chipBg,
+                    borderRadius: BorderRadius.circular(btnRadius),
+                    border: Border.all(color: chipBorder, width: 1),
+                  ),
+                  child: Tooltip(
+                    message: 'Focus Mode (F11)',
+                    child: Icon(
+                      Icons.spa_outlined,
+                      size: btnIconSize,
+                      color: iconColor,
+                    ),
+                  ),
+                ),
+              );
+
+              final shareButton = InkWell(
+                onTap: () async {
+                  final url = await widget.appState.shareNote(note);
+                  if (url != null && context.mounted) {
+                    await Clipboard.setData(ClipboardData(text: url));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Share link copied! Expires in 5 minutes.'),
+                          backgroundColor: accentColor,
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 3),
+                        ),
+                      );
+                    }
+                  }
+                },
+                borderRadius: BorderRadius.circular(btnRadius),
+                child: Container(
+                  height: btnSize,
+                  width: btnSize,
+                  decoration: BoxDecoration(
+                    color: chipBg,
+                    borderRadius: BorderRadius.circular(btnRadius),
+                    border: Border.all(color: chipBorder, width: 1),
+                  ),
+                  child: Tooltip(
+                    message: 'Share note',
+                    child: Icon(
+                      Icons.share_outlined,
+                      size: btnIconSize,
+                      color: iconColor,
+                    ),
+                  ),
+                ),
+              );
+
               // Desktop: single row (original)
               return Row(
                 children: [
@@ -507,6 +783,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   const SizedBox(width: 8),
                   colorButton,
                   const SizedBox(width: 8),
+                  shareButton,
+                  const SizedBox(width: 8),
+                  ephemeralToggle,
+                  const SizedBox(width: 8),
+                  zenToggle,
+                  const SizedBox(width: 8),
                   compactToggle,
                   saveIndicator,
                 ],
@@ -514,11 +796,46 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             },
           ),
 
-          const SizedBox(height: 12),
+          // Editor tab bar — only shown when multiple tabs are open
+          if (!isZen && widget.appState.openTabs.length > 1) ...[
+            const SizedBox(height: 8),
+            EditorTabBar(
+              tabs: widget.appState.openTabs,
+              activeNoteId: note.id,
+              accentColor: accentColor,
+              bgColor: editorBg,
+              borderColor: chipBorder,
+              textColor: hasNoteColor ? Colors.white : widget.themeState.editorTextColor,
+              mutedColor: hasNoteColor ? Colors.white60 : widget.themeState.editorMutedTextColor,
+              onSwitch: (id) {
+                // Force-save current note before switching
+                widget.appState.autoSaveService.forceSave(
+                  noteId: note.id,
+                  title: _titleController.text,
+                  content: _serializeContent(),
+                );
+                widget.appState.switchTab(id);
+              },
+              onClose: (id) {
+                // Force-save if closing the active tab
+                if (id == note.id) {
+                  widget.appState.autoSaveService.forceSave(
+                    noteId: note.id,
+                    title: _titleController.text,
+                    content: _serializeContent(),
+                  );
+                }
+                widget.appState.closeTab(id);
+              },
+            ),
+          ],
+          if (!isZen) const SizedBox(height: 12),
 
           // Main editor area
           Expanded(
-            child: Row(
+            child: Stack(
+              children: [
+                Row(
               children: [
                 Expanded(
                   child: Column(
@@ -643,9 +960,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                               ),
                             ],
                           ),
-                          padding: EdgeInsets.all(isCompact ? 8 : 24),
+                          padding: EdgeInsets.all(isZen ? 32 : (isCompact ? 8 : 24)),
                           child: Focus(
                             onKeyEvent: (node, event) {
+                              // Let mention overlay handle keys first
+                              if (_mentionOverlay != null) {
+                                final mentionState = _mentionKey.currentState
+                                    as MentionOverlayState?;
+                                if (mentionState != null &&
+                                    mentionState.handleKey(event)) {
+                                  return KeyEventResult.handled;
+                                }
+                              }
+
                               if (event is! KeyDownEvent &&
                                   event is! KeyRepeatEvent) {
                                 return KeyEventResult.ignored;
@@ -702,6 +1029,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                                   isDark,
                                   noteColor: noteColor,
                                 ),
+                                customLinkPrefixes: const ['notex://'],
+                                onLaunchUrl: (url) {
+                                  if (url.startsWith('notex://')) {
+                                    _handleLinkTap(url);
+                                    return;
+                                  }
+                                  launchUrl(Uri.parse(url));
+                                },
+                                linkActionPickerDelegate: (context, link, node) async {
+                                  if (link.startsWith('notex://')) {
+                                    _handleLinkTap(link);
+                                    return LinkMenuAction.none;
+                                  }
+                                  return defaultLinkActionPickerDelegate(context, link, node);
+                                },
                               ),
                             ),
                           ),
@@ -711,6 +1053,40 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     ],
                   ),
                 ),
+              ],
+            ),
+
+                // Zen mode: floating exit button (top-right)
+                if (isZen)
+                  Positioned(
+                    top: 8,
+                    right: 8,
+                    child: Material(
+                      color: editorBg.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(12),
+                      child: InkWell(
+                        onTap: () => widget.appState.exitZenMode(),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 8),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.close_fullscreen_rounded,
+                                  size: 16, color: iconColor),
+                              const SizedBox(width: 6),
+                              Text('Exit Zen',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w500,
+                                      color: chipText)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),
@@ -762,6 +1138,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         const VerticalSpacing(0, 0),
         const VerticalSpacing(0, 0),
         null,
+      ),
+      link: TextStyle(
+        color: widget.themeState.accentColor,
+        decoration: TextDecoration.underline,
+        decorationColor: widget.themeState.accentColor.withValues(alpha: 0.4),
+        decorationStyle: TextDecorationStyle.solid,
       ),
     );
   }

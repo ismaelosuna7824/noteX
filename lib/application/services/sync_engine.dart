@@ -64,8 +64,16 @@ class SyncEngine {
     // Check who last synced on this device
     final storedUserId = await _syncService.getStoredUserId();
 
-    if (storedUserId == null || storedUserId == currentUserId) {
-      // No previous sync data or same user — no switch
+    if (storedUserId == null) {
+      // First login on this device — run initial sync (push local + full pull)
+      if (_connectivity.isOnline) {
+        await initialSync();
+      }
+      return true;
+    }
+
+    if (storedUserId == currentUserId) {
+      // Same user — no switch needed, just sync pending changes
       return false;
     }
 

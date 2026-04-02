@@ -18,6 +18,7 @@ import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
 import 'reminder_page.dart';
+import 'trash_page.dart';
 
 /// Mobile application shell — bottom navigation + content area.
 ///
@@ -230,8 +231,11 @@ class _MobileAppShellState extends State<MobileAppShell>
                 bottom: false,
                 child: Padding(
                   // Leave space for the floating nav bar + safe area
+                  // In zen mode: no bottom padding (nav bar is hidden)
                   padding: EdgeInsets.only(
-                    bottom: 70 + MediaQuery.of(context).padding.bottom,
+                    bottom: widget.appState.isZenMode
+                        ? 0
+                        : 70 + MediaQuery.of(context).padding.bottom,
                   ),
                   child: AnimatedSwitcher(
                     duration: const Duration(milliseconds: 300),
@@ -262,8 +266,8 @@ class _MobileAppShellState extends State<MobileAppShell>
                 ),
               ),
 
-              // ── Floating glassmorphic nav bar ──────────────────────
-              Positioned(
+              // ── Floating glassmorphic nav bar (hidden in zen mode) ──
+              if (!widget.appState.isZenMode) Positioned(
                 left: 16,
                 right: 16,
                 bottom: MediaQuery.of(context).padding.bottom + 12,
@@ -400,6 +404,7 @@ class _MobileAppShellState extends State<MobileAppShell>
           key: const ValueKey('editor'),
           appState: widget.appState,
           themeState: widget.themeState,
+          isZenMode: widget.appState.isZenMode,
         );
       case 3:
         return CalendarPage(
@@ -428,6 +433,12 @@ class _MobileAppShellState extends State<MobileAppShell>
       case 7:
         return ReminderPage(
           key: const ValueKey('reminders'),
+          appState: widget.appState,
+          themeState: widget.themeState,
+        );
+      case 8:
+        return TrashPage(
+          key: const ValueKey('trash'),
           appState: widget.appState,
           themeState: widget.themeState,
         );

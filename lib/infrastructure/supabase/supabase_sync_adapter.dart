@@ -93,8 +93,9 @@ class SupabaseSyncAdapter implements SyncService {
         ...await _noteRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
       for (final note in pendingNotes) {
-        // Skip syncing empty notes — they will be cleaned up locally
+        // Skip syncing empty or ephemeral notes — they are local-only
         if (note.isEmpty) continue;
+        if (note.isEphemeral) continue;
 
         final owned = note.copyWith(userId: userId);
         try {
@@ -472,6 +473,8 @@ class SupabaseSyncAdapter implements SyncService {
         'deleted_at': note.deletedAt?.toUtc().toIso8601String(),
         'version': note.version,
         'sync_status': 'synced',
+        'share_token': note.shareToken,
+        'shared_at': note.sharedAt?.toUtc().toIso8601String(),
       };
 
   Note _mapToNote(Map<String, dynamic> m) => Note(
@@ -491,6 +494,10 @@ class SupabaseSyncAdapter implements SyncService {
             : null,
         userId: m['user_id'] as String?,
         projectId: m['project_id'] as String?,
+        shareToken: m['share_token'] as String?,
+        sharedAt: m['shared_at'] != null
+            ? DateTime.parse(m['shared_at'] as String)
+            : null,
       );
 
   Map<String, dynamic> _projectToMap(Project p) => {

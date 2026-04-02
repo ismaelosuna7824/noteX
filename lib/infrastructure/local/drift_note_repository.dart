@@ -81,6 +81,15 @@ class DriftNoteRepository implements NoteRepository {
   }
 
   @override
+  Future<List<domain.Note>> getDeleted() async {
+    final rows = await (_db.select(_db.noteEntries)
+          ..where((t) => t.deletedAt.isNotNull())
+          ..orderBy([(t) => OrderingTerm.desc(t.deletedAt)]))
+        .get();
+    return rows.map((row) => AppDatabase.toDomain(row)).toList();
+  }
+
+  @override
   Future<List<domain.Note>> search(String query) async {
     final pattern = '%$query%';
     final rows = await (_db.select(_db.noteEntries)
@@ -88,6 +97,17 @@ class DriftNoteRepository implements NoteRepository {
               t.deletedAt.isNull() &
               (t.title.like(pattern) | t.content.like(pattern)))
           ..orderBy([(t) => OrderingTerm.desc(t.updatedAt)]))
+        .get();
+    return rows.map((row) => AppDatabase.toDomain(row)).toList();
+  }
+
+  @override
+  Future<List<domain.Note>> getExpiredEphemeral() async {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    final rows = await (_db.select(_db.noteEntries)
+          ..where((t) =>
+              t.isEphemeral.equals(true) &
+              t.createdAt.isSmallerThanValue(cutoff)))
         .get();
     return rows.map((row) => AppDatabase.toDomain(row)).toList();
   }

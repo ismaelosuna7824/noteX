@@ -38,6 +38,9 @@ class NoteEntries extends Table {
   DateTimeColumn get deletedAt => dateTime().nullable()();
   TextColumn get userId => text().nullable()();
   TextColumn get projectId => text().nullable()();
+  TextColumn get shareToken => text().nullable()();
+  DateTimeColumn get sharedAt => dateTime().nullable()();
+  BoolColumn get isEphemeral => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -209,7 +212,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 10;
+  int get schemaVersion => 12;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -297,6 +300,29 @@ class AppDatabase extends _$AppDatabase {
         }
         await safeAddColumn(noteEntries, noteEntries.color);
       }
+      if (from < 11) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+        await safeAddColumn(noteEntries, noteEntries.shareToken);
+        await safeAddColumn(noteEntries, noteEntries.sharedAt);
+      }
+      if (from < 12) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+        await safeAddColumn(noteEntries, noteEntries.isEphemeral);
+      }
     },
   );
 
@@ -335,6 +361,9 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: row.deletedAt,
       userId: row.userId,
       projectId: row.projectId,
+      shareToken: row.shareToken,
+      sharedAt: row.sharedAt,
+      isEphemeral: row.isEphemeral,
     );
   }
 
@@ -354,6 +383,9 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: Value(note.deletedAt),
       userId: Value(note.userId),
       projectId: Value(note.projectId),
+      shareToken: Value(note.shareToken),
+      sharedAt: Value(note.sharedAt),
+      isEphemeral: Value(note.isEphemeral),
     );
   }
 

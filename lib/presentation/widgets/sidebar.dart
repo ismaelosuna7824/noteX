@@ -44,6 +44,7 @@ class Sidebar extends StatelessWidget {
     (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
     (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
     (7, _SidebarItem(Icons.notifications_rounded, 'Reminders')),
+    (8, _SidebarItem(Icons.delete_outline_rounded, 'Trash')),
   ];
   static const _settingsItem =
       (6, _SidebarItem(Icons.settings_rounded, 'Settings'));
@@ -83,17 +84,24 @@ class Sidebar extends StatelessWidget {
                   const EdgeInsets.only(top: _kTopPadding, bottom: _kBottomPadding),
               child: Column(
                 children: [
-                  for (final (pageIndex, item) in _navItems)
-                    _NavButton(
-                      pageIndex: pageIndex,
-                      item: item,
-                      isSelected: selectedIndex == pageIndex,
-                      accentColor: accentColor,
-                      editorBgColor: editorBgColor,
-                      sidebarIconColor: sidebarIconColor,
-                      onTap: () => onItemSelected(pageIndex),
+                  Expanded(
+                    child: SingleChildScrollView(
+                      child: Column(
+                        children: [
+                          for (final (pageIndex, item) in _navItems)
+                            _NavButton(
+                              pageIndex: pageIndex,
+                              item: item,
+                              isSelected: selectedIndex == pageIndex,
+                              accentColor: accentColor,
+                              editorBgColor: editorBgColor,
+                              sidebarIconColor: sidebarIconColor,
+                              onTap: () => onItemSelected(pageIndex),
+                            ),
+                        ],
+                      ),
                     ),
-                  const Spacer(),
+                  ),
                   _NavButton(
                     pageIndex: _settingsItem.$1,
                     item: _settingsItem.$2,

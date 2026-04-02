@@ -21,6 +21,9 @@ class Note {
   final DateTime? deletedAt;
   final String? userId;
   final String? projectId;
+  final String? shareToken;
+  final DateTime? sharedAt;
+  final bool isEphemeral;
 
   const Note({
     required this.id,
@@ -37,6 +40,9 @@ class Note {
     this.deletedAt,
     this.userId,
     this.projectId,
+    this.shareToken,
+    this.sharedAt,
+    this.isEphemeral = false,
   });
 
   /// Creates a new empty note for a given [date] (defaults to today).
@@ -52,6 +58,7 @@ class Note {
     String? userId,
     String? projectId,
     DateTime? date,
+    bool isEphemeral = false,
   }) {
     final DateTime targetDate;
     if (date != null) {
@@ -73,11 +80,16 @@ class Note {
       version: 1,
       userId: userId,
       projectId: projectId,
+      isEphemeral: isEphemeral,
     );
   }
 
   /// Whether this note has been soft-deleted.
   bool get isDeleted => deletedAt != null;
+
+  /// Whether this ephemeral note has expired (older than 24 hours).
+  bool get isExpired =>
+      isEphemeral && DateTime.now().difference(createdAt).inHours >= 24;
 
   /// Whether this note has no meaningful content in the editor.
   ///
@@ -136,6 +148,9 @@ class Note {
     Object? deletedAt = const _Unset(),
     Object? userId = const _Unset(),
     Object? projectId = const _Unset(),
+    Object? shareToken = const _Unset(),
+    Object? sharedAt = const _Unset(),
+    bool? isEphemeral,
   }) {
     return Note(
       id: id,
@@ -153,11 +168,20 @@ class Note {
       userId: userId is _Unset ? this.userId : userId as String?,
       projectId:
           projectId is _Unset ? this.projectId : projectId as String?,
+      shareToken:
+          shareToken is _Unset ? this.shareToken : shareToken as String?,
+      sharedAt:
+          sharedAt is _Unset ? this.sharedAt : sharedAt as DateTime?,
+      isEphemeral: isEphemeral ?? this.isEphemeral,
     );
   }
 
   /// Marks the note as pending sync after an update.
+  /// Ephemeral notes always stay localOnly.
   Note markPendingSync() {
+    if (isEphemeral) {
+      return copyWith(updatedAt: DateTime.now());
+    }
     return copyWith(
       updatedAt: DateTime.now(),
       syncStatus: SyncStatus.pendingSync,
@@ -170,11 +194,12 @@ class Note {
   }
 
   /// Soft-delete this note and mark pending sync.
+  /// Ephemeral notes stay localOnly.
   Note markDeleted() {
     return copyWith(
       deletedAt: DateTime.now(),
       updatedAt: DateTime.now(),
-      syncStatus: SyncStatus.pendingSync,
+      syncStatus: isEphemeral ? SyncStatus.localOnly : SyncStatus.pendingSync,
     );
   }
 

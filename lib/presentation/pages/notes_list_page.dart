@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_quill/flutter_quill.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../domain/entities/note.dart';
 import '../../domain/entities/note_project.dart';
@@ -324,20 +325,67 @@ class _NotesListPageState extends State<NotesListPage> {
             ],
             const SizedBox(width: 6),
         InkWell(
-          onTap: () async {
-            await widget.appState.createNewNote();
-          },
+          onTap: () => _showImportDialog(context, accentColor),
           borderRadius: BorderRadius.circular(8),
           child: Container(
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
-              color: accentColor,
+              color: theme.brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.1)
+                  : Colors.grey.shade100,
               borderRadius: BorderRadius.circular(8),
             ),
-            child: const Icon(
-              Icons.add,
-              color: Colors.white,
-              size: 16,
+            child: Tooltip(
+              message: 'Import from share link',
+              child: Icon(
+                Icons.download_rounded,
+                color: accentColor,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: 'Quick Note',
+          child: InkWell(
+            onTap: () async {
+              await widget.appState.createQuickNote();
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.amber.shade700,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.bolt_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Tooltip(
+          message: 'New Note',
+          child: InkWell(
+            onTap: () async {
+              await widget.appState.createNewNote();
+            },
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.add,
+                color: Colors.white,
+                size: 16,
+              ),
             ),
           ),
         ),
@@ -727,6 +775,78 @@ class _NotesListPageState extends State<NotesListPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showImportDialog(BuildContext context, Color accentColor) {
+    final controller = TextEditingController();
+    showAnimatedDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import shared note'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Paste share link',
+            hintText: 'https://...',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) async {
+            final url = value.trim();
+            if (url.isEmpty) return;
+            final title = await widget.appState.importFromShareLink(url);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (mounted && title != null) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Imported "$title"'),
+                  backgroundColor: accentColor,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            } else if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Failed to import. Link may be expired.'),
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final url = controller.text.trim();
+              if (url.isEmpty) return;
+              final title = await widget.appState.importFromShareLink(url);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted && title != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Imported "$title"'),
+                    backgroundColor: accentColor,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              } else if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Failed to import. Link may be expired.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: const Text('Import'),
+          ),
+        ],
       ),
     );
   }
@@ -1151,6 +1271,35 @@ class _NotesListPageState extends State<NotesListPage> {
                         selectionColor: accentColor.withValues(alpha: 0.3),
                       ),
                       customStyles: _buildQuillStyles(theme, noteColor: noteColor),
+                      customLinkPrefixes: const ['notex://'],
+                      onLaunchUrl: (url) {
+                        if (url.startsWith('notex://')) {
+                          final noteId = url.substring('notex://'.length);
+                          final target = widget.appState.notes.cast<Note?>().firstWhere(
+                                (n) => n?.id == noteId,
+                                orElse: () => null,
+                              );
+                          if (target != null) {
+                            widget.appState.selectNote(target);
+                          }
+                          return;
+                        }
+                        launchUrl(Uri.parse(url));
+                      },
+                      linkActionPickerDelegate: (context, link, node) async {
+                        if (link.startsWith('notex://')) {
+                          final noteId = link.substring('notex://'.length);
+                          final target = widget.appState.notes.cast<Note?>().firstWhere(
+                                (n) => n?.id == noteId,
+                                orElse: () => null,
+                              );
+                          if (target != null) {
+                            widget.appState.selectNote(target);
+                          }
+                          return LinkMenuAction.none;
+                        }
+                        return defaultLinkActionPickerDelegate(context, link, node);
+                      },
                     ),
                   ),
                 ),

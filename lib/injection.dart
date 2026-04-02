@@ -52,12 +52,17 @@ import 'application/use_cases/markdown/delete_markdown_project_use_case.dart';
 import 'application/use_cases/note/create_note_project_use_case.dart';
 import 'application/use_cases/note/get_note_projects_use_case.dart';
 import 'application/use_cases/note/delete_note_project_use_case.dart';
+import 'application/use_cases/note/rename_note_project_use_case.dart';
+import 'application/use_cases/note/get_deleted_notes_use_case.dart';
+import 'application/use_cases/note/restore_note_use_case.dart';
+import 'application/use_cases/note/permanent_delete_note_use_case.dart';
 import 'application/use_cases/reminder/create_reminder_use_case.dart';
 import 'application/use_cases/reminder/get_reminders_use_case.dart';
 import 'application/use_cases/reminder/complete_reminder_use_case.dart';
 import 'application/use_cases/reminder/delete_reminder_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/use_cases/cleanup_empty_notes_use_case.dart';
+import 'application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
 import 'application/services/auto_save_service.dart';
 import 'application/services/markdown_auto_save_service.dart';
 import 'application/services/sync_engine.dart';
@@ -163,6 +168,9 @@ Future<void> setupDependencies() async {
   getIt.registerFactory<CleanupEmptyNotesUseCase>(
     () => CleanupEmptyNotesUseCase(getIt<NoteRepository>()),
   );
+  getIt.registerFactory<CleanupExpiredEphemeralNotesUseCase>(
+    () => CleanupExpiredEphemeralNotesUseCase(getIt<NoteRepository>()),
+  );
   getIt.registerFactory<GenerateTitleUseCase>(
     () => GenerateTitleUseCase(
       getIt<NoteRepository>(),
@@ -246,6 +254,19 @@ Future<void> setupDependencies() async {
     ),
   );
 
+  getIt.registerFactory<RenameNoteProjectUseCase>(
+    () => RenameNoteProjectUseCase(getIt<NoteProjectRepository>()),
+  );
+  getIt.registerFactory<GetDeletedNotesUseCase>(
+    () => GetDeletedNotesUseCase(getIt<NoteRepository>()),
+  );
+  getIt.registerFactory<RestoreNoteUseCase>(
+    () => RestoreNoteUseCase(getIt<NoteRepository>()),
+  );
+  getIt.registerFactory<PermanentDeleteNoteUseCase>(
+    () => PermanentDeleteNoteUseCase(getIt<NoteRepository>()),
+  );
+
   // Application - Reminder Use Cases
   getIt.registerFactory<CreateReminderUseCase>(
     () => CreateReminderUseCase(getIt<ReminderRepository>()),
@@ -297,7 +318,12 @@ Future<void> setupDependencies() async {
     createNoteProject: getIt<CreateNoteProjectUseCase>(),
     getNoteProjects: getIt<GetNoteProjectsUseCase>(),
     deleteNoteProject: getIt<DeleteNoteProjectUseCase>(),
+    renameNoteProject: getIt<RenameNoteProjectUseCase>(),
+    getDeletedNotes: getIt<GetDeletedNotesUseCase>(),
+    restoreNote: getIt<RestoreNoteUseCase>(),
+    permanentDeleteNote: getIt<PermanentDeleteNoteUseCase>(),
     cleanupEmptyNotes: getIt<CleanupEmptyNotesUseCase>(),
+    cleanupExpiredEphemeral: getIt<CleanupExpiredEphemeralNotesUseCase>(),
     autoSaveService: getIt<AutoSaveService>(),
     authRepository: getIt<AuthRepository>(),
     checkForUpdate: getIt<CheckForUpdateUseCase>(),

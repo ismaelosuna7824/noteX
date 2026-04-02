@@ -21,6 +21,7 @@ class CreateNoteUseCase {
     String? projectId,
     DateTime? date,
     bool ensureDaily = false,
+    bool isEphemeral = false,
   }) async {
     if (ensureDaily) {
       final existing = await _repository.getByDate(DateTime.now());
@@ -33,6 +34,7 @@ class CreateNoteUseCase {
       themeId: themeId,
       projectId: projectId,
       date: date,
+      isEphemeral: isEphemeral,
     ).copyWith(
       title: title,
     );

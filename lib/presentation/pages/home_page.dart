@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
 import '../../domain/entities/note.dart';
@@ -149,8 +150,10 @@ class _HomePageState extends State<HomePage>
             if (recentNote != null && !isMobile)
               Positioned(
                 right: 32,
-                bottom: (constraints.maxHeight * 0.38)
-                    .clamp(240.0, constraints.maxHeight - 120),
+                bottom: (constraints.maxHeight * 0.38).clamp(
+                  240.0,
+                  constraints.maxHeight - 120,
+                ),
                 child: FadeTransition(
                   opacity: _fadeAnims[5],
                   child: SlideTransition(
@@ -288,9 +291,7 @@ class _HomePageState extends State<HomePage>
           opacity: _fadeAnims[2],
           child: SlideTransition(
             position: _slideAnims[2],
-            child: _buildEnjoyCardMobile(
-              context, theme, accentColor, isDark,
-            ),
+            child: _buildEnjoyCardMobile(context, theme, accentColor, isDark),
           ),
         ),
 
@@ -318,8 +319,12 @@ class _HomePageState extends State<HomePage>
                 const SizedBox(width: 10),
                 Expanded(
                   child: _buildMiniStatCardWithTimer(
-                    context, theme, accentColor, isDark,
-                    primaryText, secondaryText,
+                    context,
+                    theme,
+                    accentColor,
+                    isDark,
+                    primaryText,
+                    secondaryText,
                   ),
                 ),
               ],
@@ -405,40 +410,54 @@ class _HomePageState extends State<HomePage>
         ],
       ),
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisSize: MainAxisSize.max,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Explore, Write, and',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w500,
-                    color: isDark ? Colors.white54 : Colors.black54,
-                  ),
-                ),
-                Text(
-                  'ENJOY',
-                  style: theme.textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 3,
-                    color: isDark ? Colors.white : Colors.black87,
-                  ),
-                ),
-              ],
+          Text(
+            'Explore, Write, and',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.w500,
+              color: isDark ? Colors.white54 : Colors.black54,
             ),
           ),
-          _buildActionButton(
-            context: context,
-            label: 'New Note',
-            accentColor: accentColor,
-            isDark: isDark,
-            onTap: () async {
-              await appState.createNewNote();
-              appState.navigateToPage(2);
-            },
+          Text(
+            'ENJOY',
+            style: theme.textTheme.titleLarge?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: 3,
+              color: isDark ? Colors.white : Colors.black87,
+            ),
+          ),
+          const SizedBox(height: 400),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildActionButton(
+                context: context,
+                label: 'Quick Note',
+                accentColor: Colors.amber.shade700,
+                isDark: isDark,
+                onTap: () async {
+                  await appState.createQuickNote();
+                  appState.navigateToPage(2);
+                },
+              ),
+              _buildActionButton(
+                context: context,
+                label: 'New Note',
+                accentColor: accentColor,
+                isDark: isDark,
+                onTap: () async {
+                  await appState.createNewNote();
+                  appState.navigateToPage(2);
+                },
+              ),
+              _buildImportButton(context, accentColor, isDark),
+            ],
           ),
         ],
       ),
@@ -459,9 +478,7 @@ class _HomePageState extends State<HomePage>
     bool iconActive = true,
   }) {
     final shape = RectangleShapeBorder(
-      borderRadius: DynamicBorderRadius.all(
-        DynamicRadius.circular(Length(22)),
-      ),
+      borderRadius: DynamicBorderRadius.all(DynamicRadius.circular(Length(22))),
     );
 
     final card = Container(
@@ -511,8 +528,8 @@ class _HomePageState extends State<HomePage>
               color: iconActive
                   ? accentColor.withValues(alpha: 0.15)
                   : (isDark
-                      ? Colors.white.withValues(alpha: 0.10)
-                      : Colors.grey.shade100),
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : Colors.grey.shade100),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
@@ -618,16 +635,34 @@ class _HomePageState extends State<HomePage>
               color: isDark ? Colors.white : Colors.black87,
             ),
           ),
-          const SizedBox(height: 20),
-          _buildActionButton(
-            context: context,
-            label: 'New Note',
-            accentColor: accentColor,
-            isDark: isDark,
-            onTap: () async {
-              await appState.createNewNote();
-              appState.navigateToPage(2);
-            },
+          const SizedBox(height: 33),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _buildActionButton(
+                context: context,
+                label: 'Quick Note',
+                accentColor: Colors.amber.shade700,
+                isDark: isDark,
+                onTap: () async {
+                  await appState.createQuickNote();
+                  appState.navigateToPage(2);
+                },
+              ),
+              _buildActionButton(
+                context: context,
+                label: 'New Note',
+                accentColor: accentColor,
+                isDark: isDark,
+                onTap: () async {
+                  await appState.createNewNote();
+                  appState.navigateToPage(2);
+                },
+              ),
+              _buildImportButton(context, accentColor, isDark),
+            ],
           ),
         ],
       ),
@@ -676,7 +711,7 @@ class _HomePageState extends State<HomePage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           // ── Total Notes ──────────────────────────────────────────
           Row(
@@ -811,7 +846,9 @@ class _HomePageState extends State<HomePage>
           child: Container(
             clipBehavior: Clip.antiAlias,
             decoration: ShapeDecoration(
-              color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
+              color: themeState.editorBgColor.withValues(
+                alpha: isDark ? 0.90 : 0.94,
+              ),
               shape: shape,
               shadows: [
                 BoxShadow(
@@ -902,7 +939,9 @@ class _HomePageState extends State<HomePage>
       child: Container(
         clipBehavior: Clip.antiAlias,
         decoration: ShapeDecoration(
-          color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
+          color: themeState.editorBgColor.withValues(
+            alpha: isDark ? 0.90 : 0.94,
+          ),
           shape: shape,
           shadows: [
             BoxShadow(
@@ -1015,6 +1054,104 @@ class _HomePageState extends State<HomePage>
       ),
     );
   }
+
+  Widget _buildImportButton(
+    BuildContext context,
+    Color accentColor,
+    bool isDark,
+  ) {
+    return _PressButton(
+      onTap: () => _showImportDialog(context, accentColor, isDark),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isDark ? Colors.white.withValues(alpha: 0.12) : Colors.white,
+          shape: BoxShape.circle,
+          boxShadow: isDark
+              ? null
+              : [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Tooltip(
+          message: 'Import shared note',
+          child: Icon(Icons.download_rounded, color: accentColor, size: 18),
+        ),
+      ),
+    );
+  }
+
+  void _showImportDialog(BuildContext context, Color accentColor, bool isDark) {
+    final controller = TextEditingController();
+    final appState = widget.appState;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import shared note'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Paste share link',
+            hintText: 'https://...',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (value) async {
+            final url = value.trim();
+            if (url.isEmpty) return;
+            final title = await appState.importFromShareLink(url);
+            if (ctx.mounted) Navigator.pop(ctx);
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    title != null
+                        ? 'Imported "$title"'
+                        : 'Failed to import. Link may be expired.',
+                  ),
+                  backgroundColor: title != null ? accentColor : null,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+            }
+          },
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final url = controller.text.trim();
+              if (url.isEmpty) return;
+              final title = await appState.importFromShareLink(url);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      title != null
+                          ? 'Imported "$title"'
+                          : 'Failed to import. Link may be expired.',
+                    ),
+                    backgroundColor: title != null ? accentColor : null,
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
+            },
+            child: const Text('Import'),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1115,20 +1252,19 @@ class _HeroTextState extends State<_HeroText>
   Widget build(BuildContext context) {
     final theme = widget.theme;
 
-    final smallStyle = (widget.compact
-            ? theme.textTheme.headlineMedium
-            : theme.textTheme.displaySmall)
-        ?.copyWith(
-      fontWeight: FontWeight.w900,
-      letterSpacing: 2,
-    );
-    final mediumStyle = (widget.compact
-            ? theme.textTheme.headlineLarge
-            : theme.textTheme.displayMedium)
-        ?.copyWith(
-      fontWeight: FontWeight.w900,
-      letterSpacing: widget.compact ? 2 : 4,
-    );
+    final smallStyle =
+        (widget.compact
+                ? theme.textTheme.headlineMedium
+                : theme.textTheme.displaySmall)
+            ?.copyWith(fontWeight: FontWeight.w900, letterSpacing: 2);
+    final mediumStyle =
+        (widget.compact
+                ? theme.textTheme.headlineLarge
+                : theme.textTheme.displayMedium)
+            ?.copyWith(
+              fontWeight: FontWeight.w900,
+              letterSpacing: widget.compact ? 2 : 4,
+            );
 
     // Shared text column builder to avoid duplication.
     Widget textColumn({Color? color, List<Shadow>? shadows}) {

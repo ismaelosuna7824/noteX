@@ -3,6 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../domain/entities/note.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../../infrastructure/config/app_config.dart';
 import '../../domain/entities/note_project.dart';
 import '../../domain/value_objects/view_mode.dart';
 import '../../application/use_cases/create_note_use_case.dart';
@@ -12,8 +15,13 @@ import '../../application/use_cases/update_note_use_case.dart';
 import '../../application/use_cases/note/create_note_project_use_case.dart';
 import '../../application/use_cases/note/get_note_projects_use_case.dart';
 import '../../application/use_cases/note/delete_note_project_use_case.dart';
+import '../../application/use_cases/note/rename_note_project_use_case.dart';
+import '../../application/use_cases/note/get_deleted_notes_use_case.dart';
+import '../../application/use_cases/note/restore_note_use_case.dart';
+import '../../application/use_cases/note/permanent_delete_note_use_case.dart';
 import '../../application/use_cases/check_for_update_use_case.dart';
 import '../../application/use_cases/cleanup_empty_notes_use_case.dart';
+import '../../application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
 import '../../domain/repositories/auth_repository.dart'
@@ -32,14 +40,20 @@ class AppState extends ChangeNotifier {
   final CreateNoteProjectUseCase _createNoteProject;
   final GetNoteProjectsUseCase _getNoteProjects;
   final DeleteNoteProjectUseCase _deleteNoteProject;
+  final RenameNoteProjectUseCase _renameNoteProject;
+  final GetDeletedNotesUseCase _getDeletedNotes;
+  final RestoreNoteUseCase _restoreNote;
+  final PermanentDeleteNoteUseCase _permanentDeleteNote;
   final CheckForUpdateUseCase _checkForUpdate;
   final CleanupEmptyNotesUseCase _cleanupEmptyNotes;
+  final CleanupExpiredEphemeralNotesUseCase _cleanupExpiredEphemeral;
   final UpdateService _updateService;
   final AutoSaveService autoSaveService;
   final AuthRepository _authRepository;
   SyncEngine? _syncEngine;
 
   List<Note> _notes = [];
+  List<Note> _trashedNotes = [];
   List<NoteProject> _noteProjects = [];
   Note? _currentNote;
   ViewMode _viewMode = ViewMode.list;
@@ -51,8 +65,17 @@ class AppState extends ChangeNotifier {
   String? _authErrorMessage;
   StreamSubscription<bool>? _authSub;
 
+  // Editor tabs
+  List<String> _openTabIds = [];
+
   // Compact / sticky note mode
   bool _isCompactMode = false;
+
+  // Focus / zen mode
+  bool _isZenMode = false;
+
+  // Goodbye screen on close
+  bool _isClosing = false;
 
   // Auto-update state
   UpdateInfo? _availableUpdate;
@@ -69,8 +92,13 @@ class AppState extends ChangeNotifier {
     required CreateNoteProjectUseCase createNoteProject,
     required GetNoteProjectsUseCase getNoteProjects,
     required DeleteNoteProjectUseCase deleteNoteProject,
+    required RenameNoteProjectUseCase renameNoteProject,
+    required GetDeletedNotesUseCase getDeletedNotes,
+    required RestoreNoteUseCase restoreNote,
+    required PermanentDeleteNoteUseCase permanentDeleteNote,
     required CheckForUpdateUseCase checkForUpdate,
     required CleanupEmptyNotesUseCase cleanupEmptyNotes,
+    required CleanupExpiredEphemeralNotesUseCase cleanupExpiredEphemeral,
     required UpdateService updateService,
     required this.autoSaveService,
     required AuthRepository authRepository,
@@ -81,8 +109,13 @@ class AppState extends ChangeNotifier {
         _createNoteProject = createNoteProject,
         _getNoteProjects = getNoteProjects,
         _deleteNoteProject = deleteNoteProject,
+        _renameNoteProject = renameNoteProject,
+        _getDeletedNotes = getDeletedNotes,
+        _restoreNote = restoreNote,
+        _permanentDeleteNote = permanentDeleteNote,
         _checkForUpdate = checkForUpdate,
         _cleanupEmptyNotes = cleanupEmptyNotes,
+        _cleanupExpiredEphemeral = cleanupExpiredEphemeral,
         _updateService = updateService,
         _authRepository = authRepository {
     // Wire up auto-save callback to refresh the list after saves
@@ -105,6 +138,7 @@ class AppState extends ChangeNotifier {
 
   // Getters
   List<Note> get notes => _notes;
+  List<Note> get trashedNotes => _trashedNotes;
   List<NoteProject> get noteProjects => _noteProjects;
   Note? get currentNote => _currentNote;
   ViewMode get viewMode => _viewMode;
@@ -121,6 +155,23 @@ class AppState extends ChangeNotifier {
   bool get hasUpdate => _availableUpdate != null;
   bool get showUpdateBanner => _availableUpdate != null && !_updateBannerDismissed;
   bool get isCompactMode => _isCompactMode;
+  bool get isZenMode => _isZenMode;
+  bool get isClosing => _isClosing;
+
+  /// Notes currently open as editor tabs.
+  List<Note> get openTabs =>
+      _openTabIds
+          .map((id) => _notes.cast<Note?>().firstWhere(
+                (n) => n?.id == id,
+                orElse: () => null,
+              ))
+          .whereType<Note>()
+          .toList();
+
+  void startClosing() {
+    _isClosing = true;
+    notifyListeners();
+  }
   bool get isUpdating => _isUpdating;
   double get updateProgress => _updateProgress;
   String? get updateError => _updateError;
@@ -170,9 +221,10 @@ class AppState extends ChangeNotifier {
       _notes = await _getNotes.getAll();
       _noteProjects = await _getNoteProjects.getAll();
 
-      // Safety net: clean up orphaned empty notes from previous sessions
+      // Safety net: clean up orphaned empty notes and expired ephemeral notes
       final removed = await _cleanupEmptyNotes.execute();
-      if (removed > 0) {
+      final expiredRemoved = await _cleanupExpiredEphemeral.execute();
+      if (removed > 0 || expiredRemoved > 0) {
         _notes = await _getNotes.getAll();
       }
 
@@ -204,10 +256,11 @@ class AppState extends ChangeNotifier {
     checkForUpdate();
   }
 
-  /// Delete all notes with empty content from the database.
+  /// Delete all notes with empty content and expired ephemeral notes.
   /// Called on app startup (initialize) and app close (onWindowClose).
   Future<void> cleanupEmptyNotes() async {
     await _cleanupEmptyNotes.execute();
+    await _cleanupExpiredEphemeral.execute();
   }
 
   /// Called by AutoSaveService after a successful save.
@@ -228,6 +281,9 @@ class AppState extends ChangeNotifier {
 
   /// Set the current note being viewed/edited.
   void selectNote(Note note) {
+    if (!_openTabIds.contains(note.id)) {
+      _openTabIds.add(note.id);
+    }
     _currentNote = note;
     _selectedPageIndex = 2; // Navigate to editor
     notifyListeners();
@@ -235,6 +291,9 @@ class AppState extends ChangeNotifier {
 
   /// Preview a note without navigating to the editor.
   void previewNote(Note note) {
+    if (!_openTabIds.contains(note.id)) {
+      _openTabIds.add(note.id);
+    }
     _currentNote = note;
     notifyListeners();
   }
@@ -283,6 +342,75 @@ class AppState extends ChangeNotifier {
     return false;
   }
 
+  // ── Zen / Focus mode ─────────────────────────────────────────────────
+
+  void enterZenMode() {
+    if (_currentNote == null) return;
+    _isZenMode = true;
+    notifyListeners();
+  }
+
+  void exitZenMode() {
+    _isZenMode = false;
+    notifyListeners();
+  }
+
+  void toggleZenMode() {
+    if (_isZenMode) {
+      exitZenMode();
+    } else {
+      enterZenMode();
+    }
+  }
+
+  // ── Editor tabs ──────────────────────────────────────────────────────
+
+  /// Open a note as a tab and switch to it.
+  void openTab(Note note) {
+    if (!_openTabIds.contains(note.id)) {
+      _openTabIds.add(note.id);
+    }
+    _currentNote = note;
+    _selectedPageIndex = 2;
+    notifyListeners();
+  }
+
+  /// Close a tab. Switches to adjacent tab or clears editor.
+  void closeTab(String noteId) {
+    final idx = _openTabIds.indexOf(noteId);
+    if (idx < 0) return;
+    _openTabIds.removeAt(idx);
+
+    if (_currentNote?.id == noteId) {
+      if (_openTabIds.isNotEmpty) {
+        // Switch to the tab that's now at the same index (or the last one)
+        final newIdx = idx.clamp(0, _openTabIds.length - 1);
+        final newId = _openTabIds[newIdx];
+        _currentNote = _notes.cast<Note?>().firstWhere(
+              (n) => n?.id == newId,
+              orElse: () => null,
+            );
+      } else {
+        _currentNote = null;
+        _selectedPageIndex = 1; // back to notes list
+      }
+    }
+    notifyListeners();
+  }
+
+  /// Switch to an already-open tab.
+  void switchTab(String noteId) {
+    if (!_openTabIds.contains(noteId)) return;
+    final note = _notes.cast<Note?>().firstWhere(
+          (n) => n?.id == noteId,
+          orElse: () => null,
+        );
+    if (note != null) {
+      _currentNote = note;
+      notifyListeners();
+    }
+  }
+
   /// Update the search query and filter notes in-memory.
   void search(String query) {
     _searchQuery = query;
@@ -291,7 +419,7 @@ class AppState extends ChangeNotifier {
 
   /// Create a new note, inheriting the current project filter.
   /// If [date] is provided, the note is created for that date instead of today.
-  Future<Note> createNewNote({String? projectId, DateTime? date}) async {
+  Future<Note> createNewNote({String? projectId, DateTime? date, bool isEphemeral = false}) async {
     // Use passed projectId, or inherit from filter (unless 'all' or '__root__')
     final effectiveProjectId = projectId ??
         (_selectedNoteProjectId != null &&
@@ -302,12 +430,109 @@ class AppState extends ChangeNotifier {
       id: const Uuid().v4(),
       projectId: effectiveProjectId,
       date: date,
+      isEphemeral: isEphemeral,
     );
     await refreshNotes();
     _currentNote = note;
     _selectedPageIndex = 2; // Navigate to editor
     notifyListeners();
     return note;
+  }
+
+  /// Create a quick (ephemeral) note — local-only, auto-deletes after 24h.
+  Future<Note> createQuickNote({String? projectId}) async {
+    return createNewNote(projectId: projectId, isEphemeral: true);
+  }
+
+  /// Toggle the ephemeral state of a note.
+  Future<void> toggleEphemeral(String noteId) async {
+    final existing = _notes.cast<Note?>().firstWhere(
+          (n) => n?.id == noteId,
+          orElse: () => null,
+        );
+    if (existing == null) return;
+    final updated = await _updateNote.execute(
+      noteId: noteId,
+      isEphemeral: !existing.isEphemeral,
+    );
+    if (updated != null) {
+      updateNoteInList(updated);
+    }
+  }
+
+  /// Duplicate an existing note.
+  Future<void> duplicateNote(Note note) async {
+    final newNote = await _createNote.execute(
+      id: const Uuid().v4(),
+      title: '${note.title} (copy)',
+      backgroundImage: note.backgroundImage,
+      themeId: note.themeId,
+      projectId: note.projectId,
+    );
+    await _updateNote.execute(
+      noteId: newNote.id,
+      content: note.content,
+      color: note.color,
+    );
+    await refreshNotes();
+    notifyListeners();
+  }
+
+  /// Share a note via a temporary public link. Returns the share URL.
+  Future<String?> shareNote(Note note) async {
+    if (!_authRepository.isAuthenticated) return null;
+    final token = const Uuid().v4().replaceAll('-', '').substring(0, 16);
+
+    final updated = await _updateNote.execute(
+      noteId: note.id,
+      shareToken: token,
+      sharedAt: DateTime.now(),
+    );
+    if (updated == null) return null;
+    updateNoteInList(updated);
+
+    // Push immediately so the token is available on Supabase
+    if (_syncEngine != null) {
+      await _syncEngine!.syncIfAuthenticated();
+    }
+
+    // Construct the public Supabase REST URL
+    final config = AppConfig.fromEnvironment();
+    return '${config.supabaseUrl}/rest/v1/notes'
+        '?share_token=eq.$token'
+        '&select=title,content'
+        '&apikey=${config.supabaseAnonKey}';
+  }
+
+  /// Import a note from a share link URL.
+  /// Fetches the note data from Supabase and creates a local copy.
+  /// Returns the created note title, or null on failure.
+  Future<String?> importFromShareLink(String url) async {
+    try {
+      final response = await http.get(Uri.parse(url));
+      if (response.statusCode != 200) return null;
+
+      final data = jsonDecode(response.body);
+      if (data is! List || data.isEmpty) return null;
+
+      final noteData = data[0] as Map<String, dynamic>;
+      final title = noteData['title'] as String? ?? 'Imported Note';
+      final content = noteData['content'] as String? ?? '[]';
+
+      final newNote = await _createNote.execute(
+        id: const Uuid().v4(),
+        title: title,
+      );
+      await _updateNote.execute(
+        noteId: newNote.id,
+        content: content,
+      );
+      await refreshNotes();
+      notifyListeners();
+      return title;
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Toggle the pin state of a note.
@@ -352,14 +577,56 @@ class AppState extends ChangeNotifier {
   /// Delete a note.
   Future<void> deleteNote(String noteId) async {
     await _deleteNote.execute(noteId);
+    _openTabIds.remove(noteId);
     await refreshNotes();
     // If the deleted note was in compact mode, exit compact mode.
     if (_isCompactMode && _currentNote?.id == noteId) {
       _isCompactMode = false;
     }
     if (_currentNote?.id == noteId) {
-      _currentNote = _notes.isNotEmpty ? _notes.first : null;
+      // Switch to another open tab, or fall back to first note
+      if (_openTabIds.isNotEmpty) {
+        _currentNote = _notes.cast<Note?>().firstWhere(
+              (n) => n?.id == _openTabIds.last,
+              orElse: () => _notes.isNotEmpty ? _notes.first : null,
+            );
+      } else {
+        _currentNote = _notes.isNotEmpty ? _notes.first : null;
+      }
     }
+    notifyListeners();
+  }
+
+  // ── Trash operations ─────────────────────────────────────────────────
+
+  /// Load all soft-deleted notes into the trash list.
+  Future<void> loadTrash() async {
+    _trashedNotes = await _getDeletedNotes.execute();
+    notifyListeners();
+  }
+
+  /// Restore a note from the trash back to the notes list.
+  Future<void> restoreNote(String noteId) async {
+    await _restoreNote.execute(noteId);
+    _trashedNotes = await _getDeletedNotes.execute();
+    _notes = await _getNotes.getAll();
+    notifyListeners();
+  }
+
+  /// Permanently delete a note (hard delete from DB).
+  Future<void> permanentDeleteNote(String noteId) async {
+    await _permanentDeleteNote.execute(noteId);
+    _trashedNotes = await _getDeletedNotes.execute();
+    notifyListeners();
+  }
+
+  /// Empty the entire trash (permanently delete all trashed notes).
+  Future<void> emptyTrash() async {
+    final ids = _trashedNotes.map((n) => n.id).toList();
+    for (final id in ids) {
+      await _permanentDeleteNote.execute(id);
+    }
+    _trashedNotes = [];
     notifyListeners();
   }
 
@@ -396,6 +663,24 @@ class AppState extends ChangeNotifier {
       _currentNote = _notes.isNotEmpty ? _notes.first : null;
     }
     notifyListeners();
+  }
+
+  /// Rename an existing note project.
+  Future<void> renameNoteProject(String projectId, String newName) async {
+    await _renameNoteProject.execute(projectId: projectId, newName: newName);
+    _noteProjects = await _getNoteProjects.getAll();
+    notifyListeners();
+  }
+
+  /// Change the category (NoteProject) of an existing note.
+  Future<void> updateNoteProject(String noteId, String? projectId) async {
+    final updated = await _updateNote.execute(
+      noteId: noteId,
+      projectId: projectId,
+    );
+    if (updated != null) {
+      updateNoteInList(updated);
+    }
   }
 
   /// Find a note project by id.
@@ -482,7 +767,11 @@ class AppState extends ChangeNotifier {
     if (_syncEngine != null) {
       final switched = await _syncEngine!.handleUserSwitch();
       if (switched) {
-        // Data was cleared and re-pulled — reload everything
+        // First login or user switch — data was synced, reload everything
+        await refreshNotes();
+      } else {
+        // Same user returning — sync pending changes
+        await _syncEngine!.sync();
         await refreshNotes();
       }
     }

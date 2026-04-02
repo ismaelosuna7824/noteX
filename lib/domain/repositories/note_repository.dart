@@ -20,8 +20,11 @@ abstract class NoteRepository {
   /// Save a note (insert or update).
   Future<void> save(Note note);
 
-  /// Delete a note by its [id].
+  /// Delete a note by its [id] (hard delete — removes from DB).
   Future<void> delete(String id);
+
+  /// Retrieve all soft-deleted notes (trash), ordered by deletion date desc.
+  Future<List<Note>> getDeleted();
 
   /// Search notes by [query] in title or content.
   Future<List<Note>> search(String query);
@@ -34,4 +37,7 @@ abstract class NoteRepository {
 
   /// Retrieve notes modified since [since].
   Future<List<Note>> getModifiedSince(DateTime since);
+
+  /// Retrieve expired ephemeral notes (older than 24 hours).
+  Future<List<Note>> getExpiredEphemeral();
 }
