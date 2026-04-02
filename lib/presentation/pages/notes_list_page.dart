@@ -477,6 +477,12 @@ class _NotesListPageState extends State<NotesListPage> {
                           onPin: () => widget.appState.togglePin(note),
                           onDelete: () =>
                               widget.appState.deleteNote(note.id),
+                          onDuplicate: () =>
+                              widget.appState.duplicateNote(note),
+                          noteProjects: widget.appState.noteProjects,
+                          onChangeProject: (projectId) =>
+                              widget.appState.updateNoteProject(
+                                  note.id, projectId),
                         ),
                       );
                     },
@@ -573,6 +579,12 @@ class _NotesListPageState extends State<NotesListPage> {
                                     widget.appState.togglePin(note),
                                 onDelete: () =>
                                     widget.appState.deleteNote(note.id),
+                                onDuplicate: () =>
+                                    widget.appState.duplicateNote(note),
+                                noteProjects: widget.appState.noteProjects,
+                                onChangeProject: (projectId) =>
+                                    widget.appState.updateNoteProject(
+                                        note.id, projectId),
                               ),
                             );
                           },
