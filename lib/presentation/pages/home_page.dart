@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
+import '../state/writing_stats_state.dart';
 
 /// Home/Dashboard page.
 ///
@@ -146,35 +147,35 @@ class _HomePageState extends State<HomePage>
               ),
             ),
 
-            // Recent activity card — hidden on mobile to save space
-            if (recentNote != null && !isMobile)
-              Positioned(
-                right: 32,
-                bottom: (constraints.maxHeight * 0.38).clamp(
-                  240.0,
-                  constraints.maxHeight - 120,
-                ),
-                child: FadeTransition(
-                  opacity: _fadeAnims[5],
-                  child: SlideTransition(
-                    position: _slideAnims[5],
-                    child: _RecentActivityCard(
-                      note: recentNote,
-                      heroColor: heroColor,
-                      accentColor: accentColor,
-                      shadows: heroShadows,
-                      onTap: () => appState.selectNote(recentNote),
-                    ),
-                  ),
-                ),
-              ),
-
-            // Stats & Actions at bottom
+            // Stats & Actions at bottom (with Continue Writing above)
             Positioned(
               left: isMobile ? 16 : 24,
               right: isMobile ? 16 : 24,
               bottom: isMobile ? 16 : 24,
-              child: _buildStatsRow(context, theme, accentColor),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (recentNote != null && !isMobile)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12, right: 8),
+                      child: FadeTransition(
+                        opacity: _fadeAnims[5],
+                        child: SlideTransition(
+                          position: _slideAnims[5],
+                          child: _RecentActivityCard(
+                            note: recentNote,
+                            heroColor: heroColor,
+                            accentColor: accentColor,
+                            shadows: heroShadows,
+                            onTap: () => appState.selectNote(recentNote),
+                          ),
+                        ),
+                      ),
+                    ),
+                  _buildStatsRow(context, theme, accentColor),
+                ],
+              ),
             ),
           ],
         );
@@ -246,7 +247,7 @@ class _HomePageState extends State<HomePage>
 
           const SizedBox(width: 16),
 
-          // Right column: Daily Tasks card stacked above Pinned Notes card
+          // Right column: Writing Stats card stacked above Pinned Notes card
           Expanded(
             flex: 2,
             child: FadeTransition(
@@ -257,7 +258,7 @@ class _HomePageState extends State<HomePage>
                   mainAxisSize: MainAxisSize.max,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _buildDailyTasksCard(context, theme, accentColor),
+                    _buildWritingStatsCard(context, theme, accentColor),
                     const SizedBox(height: 12),
                     _buildPinnedNotesCard(context, theme, accentColor),
                   ],
@@ -635,7 +636,7 @@ class _HomePageState extends State<HomePage>
               color: isDark ? Colors.white : Colors.black87,
             ),
           ),
-          const SizedBox(height: 33),
+          const SizedBox(height: 70),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -753,7 +754,7 @@ class _HomePageState extends State<HomePage>
           ),
 
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(vertical: 30),
             child: Divider(color: dividerColor, thickness: 1),
           ),
 
@@ -914,6 +915,175 @@ class _HomePageState extends State<HomePage>
   }
 
   // ─── Pinned Notes card ──────────────────────────────────────────────────────
+  Widget _buildWritingStatsCard(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+  ) {
+    final shape = RectangleShapeBorder(
+      borderRadius: DynamicBorderRadius.only(
+        topLeft: DynamicRadius.circular(Length(56)),
+        topRight: DynamicRadius.circular(Length(24)),
+        bottomLeft: DynamicRadius.circular(Length(24)),
+        bottomRight: DynamicRadius.circular(Length(56)),
+      ),
+    );
+
+    return ListenableBuilder(
+      listenable: GetIt.instance<WritingStatsState>(),
+      builder: (context, _) {
+        final isDark = Theme.of(context).brightness == Brightness.dark;
+        final stats = GetIt.instance<WritingStatsState>();
+        final streak = stats.currentStreak;
+        final todayWords = stats.todayWordCount;
+        final yesterdayWords = stats.yesterdayWordCount;
+        final yesterdayNotes = stats.yesterdayNoteCount;
+        final weekly = stats.weeklyWordCounts;
+        final labels = stats.weeklyLabels;
+        final maxWords = weekly.fold<int>(0, (a, b) => a > b ? a : b);
+
+        final primaryText = isDark ? Colors.white : Colors.black87;
+        final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+
+        return _PressButton(
+          onTap: () => appState.navigateToPage(1),
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: ShapeDecoration(
+              color: themeState.editorBgColor.withValues(
+                alpha: isDark ? 0.90 : 0.94,
+              ),
+              shape: shape,
+              shadows: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.fromLTRB(24, 16, 22, 16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Streak row
+                Row(
+                  children: [
+                    Text(
+                      streak > 0 ? '🔥' : '✍️',
+                      style: const TextStyle(fontSize: 20),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        streak > 0 ? '$streak day streak' : 'Start writing!',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                          color: primaryText,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        '$todayWords words',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: accentColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 6),
+
+                // Yesterday summary
+                Text(
+                  yesterdayNotes > 0
+                      ? 'Yesterday: $yesterdayNotes note${yesterdayNotes == 1 ? '' : 's'}, $yesterdayWords words'
+                      : 'No activity yesterday',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: secondaryText,
+                    fontSize: 12,
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // Mini 7-day bar chart
+                SizedBox(
+                  height: 32,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: List.generate(7, (i) {
+                      final ratio = maxWords > 0 ? weekly[i] / maxWords : 0.0;
+                      final isToday = i == 6;
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                          child: Tooltip(
+                            message: '${labels[i]}: ${weekly[i]} words',
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                Flexible(
+                                  child: FractionallySizedBox(
+                                    heightFactor: ratio < 0.05 && weekly[i] > 0
+                                        ? 0.05
+                                        : ratio,
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        color: isToday
+                                            ? accentColor
+                                            : accentColor.withValues(
+                                                alpha: 0.4,
+                                              ),
+                                        borderRadius: BorderRadius.circular(3),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  labels[i],
+                                  style: TextStyle(
+                                    fontSize: 8,
+                                    color: isToday
+                                        ? primaryText
+                                        : secondaryText,
+                                    fontWeight: isToday
+                                        ? FontWeight.w700
+                                        : FontWeight.w400,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildPinnedNotesCard(
     BuildContext context,
     ThemeData theme,
@@ -1515,12 +1685,6 @@ class _RecentActivityCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Icon(
-                  Icons.north_east_rounded,
-                  size: 14,
-                  color: accentColor,
-                  shadows: shadows,
-                ),
               ],
             ),
             const SizedBox(height: 2),

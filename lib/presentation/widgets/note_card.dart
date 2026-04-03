@@ -19,6 +19,7 @@ class NoteCard extends StatefulWidget {
   final List<NoteProject> noteProjects;
   final Color accentColor;
   final Color? editorBgColor;
+  final bool isNoteUnlocked;
 
   const NoteCard({
     super.key,
@@ -33,6 +34,7 @@ class NoteCard extends StatefulWidget {
     this.noteProjects = const [],
     required this.accentColor,
     this.editorBgColor,
+    this.isNoteUnlocked = false,
   });
 
   @override
@@ -48,6 +50,7 @@ class _NoteCardState extends State<NoteCard> {
     final noteColor = _parseNoteColor(widget.note.color);
     final cardColor = noteColor ?? widget.editorBgColor;
     final borderColor = noteColor ?? widget.accentColor;
+    final isHidden = widget.note.isLocked && !widget.isNoteUnlocked;
 
     return GestureDetector(
       onSecondaryTapUp: widget.onChangeProject != null
@@ -98,26 +101,47 @@ class _NoteCardState extends State<NoteCard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        widget.note.title.isEmpty
-                            ? 'Untitled'
-                            : widget.note.title,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w700,
-                          color: noteColor != null ? Colors.white : null,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          if (isHidden)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 6),
+                              child: Icon(
+                                Icons.lock_rounded,
+                                size: 16,
+                                color: noteColor != null
+                                    ? Colors.white70
+                                    : Colors.grey.shade500,
+                              ),
+                            ),
+                          Expanded(
+                            child: Text(
+                              isHidden
+                                  ? 'Locked Note'
+                                  : (widget.note.title.isEmpty
+                                      ? 'Untitled'
+                                      : widget.note.title),
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.w700,
+                                color: noteColor != null ? Colors.white : null,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _formatDate(widget.note.updatedAt),
-                        style: theme.textTheme.bodySmall?.copyWith(
-                          color: noteColor != null
-                              ? Colors.white70
-                              : Colors.grey.shade500,
+                      if (!isHidden) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          _formatDate(widget.note.updatedAt),
+                          style: theme.textTheme.bodySmall?.copyWith(
+                            color: noteColor != null
+                                ? Colors.white70
+                                : Colors.grey.shade500,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

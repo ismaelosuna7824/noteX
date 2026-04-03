@@ -8,8 +8,9 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../state/security_state.dart';
+import 'package:get_it/get_it.dart';
 import '../widgets/editor_text_controls.dart';
-import '../widgets/editor_tab_bar.dart';
 import '../widgets/mention_overlay.dart';
 
 /// Rich text note editor with auto-save.
@@ -108,12 +109,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       );
     }
     widget.appState.autoSaveService.unwatch();
-
     _dismissMention();
     _quillController.dispose();
     _titleController.dispose();
     _editorFocusNode.dispose();
     _saveStatus.dispose();
+    _lockPinController.dispose();
+    _lockErrorNotifier.dispose();
     super.dispose();
   }
 
@@ -131,6 +133,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _saveStatus.value = '';
 
     _titleController.text = note.title;
+
+    // Dispose previous controller to prevent listener/memory leaks.
+    _quillController.removeListener(_checkForMention);
+    _quillController.dispose();
 
     try {
       final delta = Document.fromJson(jsonDecode(note.content));
@@ -164,6 +170,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       const Duration(milliseconds: 1500),
       (_) => _pollForEdits(),
     );
+
   }
 
   // ── Edit detection & save ─────────────────────────────────────────────
@@ -713,6 +720,78 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               );
 
+              final securityState = GetIt.instance<SecurityState>();
+              final lockToggle = Tooltip(
+                message: note.isLocked ? 'Unlock Note' : 'Lock Note',
+                child: InkWell(
+                  onTap: () {
+                    if (!note.isLocked && !securityState.hasPin) {
+                      // Need to set PIN first
+                      _showSetPinDialog(context, securityState, note);
+                    } else {
+                      widget.appState.toggleLock(note.id);
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(btnRadius),
+                  child: Container(
+                    height: btnSize,
+                    width: btnSize,
+                    decoration: BoxDecoration(
+                      color: note.isLocked
+                          ? Colors.red.withValues(alpha: 0.15)
+                          : chipBg,
+                      borderRadius: BorderRadius.circular(btnRadius),
+                      border: Border.all(
+                        color: note.isLocked
+                            ? Colors.red.withValues(alpha: 0.4)
+                            : chipBorder,
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      note.isLocked
+                          ? Icons.lock_rounded
+                          : Icons.lock_open_rounded,
+                      size: btnIconSize,
+                      color: note.isLocked ? Colors.red.shade400 : iconColor,
+                    ),
+                  ),
+                ),
+              );
+
+              final splitToggle = Tooltip(
+                message: widget.appState.isSplitMode
+                    ? 'Exit Split View'
+                    : 'Split View',
+                child: InkWell(
+                  onTap: () => widget.appState.toggleSplitMode(),
+                  borderRadius: BorderRadius.circular(btnRadius),
+                  child: Container(
+                    height: btnSize,
+                    width: btnSize,
+                    decoration: BoxDecoration(
+                      color: widget.appState.isSplitMode
+                          ? accentColor.withValues(alpha: 0.15)
+                          : chipBg,
+                      borderRadius: BorderRadius.circular(btnRadius),
+                      border: Border.all(
+                        color: widget.appState.isSplitMode
+                            ? accentColor.withValues(alpha: 0.4)
+                            : chipBorder,
+                        width: 1,
+                      ),
+                    ),
+                    child: Icon(
+                      Icons.vertical_split_rounded,
+                      size: btnIconSize,
+                      color: widget.appState.isSplitMode
+                          ? accentColor
+                          : iconColor,
+                    ),
+                  ),
+                ),
+              );
+
               final zenToggle = InkWell(
                 onTap: () => widget.appState.enterZenMode(),
                 borderRadius: BorderRadius.circular(btnRadius),
@@ -787,6 +866,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   const SizedBox(width: 8),
                   ephemeralToggle,
                   const SizedBox(width: 8),
+                  lockToggle,
+                  const SizedBox(width: 8),
+                  splitToggle,
+                  const SizedBox(width: 8),
                   zenToggle,
                   const SizedBox(width: 8),
                   compactToggle,
@@ -796,44 +879,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             },
           ),
 
-          // Editor tab bar — only shown when multiple tabs are open
-          if (!isZen && widget.appState.openTabs.length > 1) ...[
-            const SizedBox(height: 8),
-            EditorTabBar(
-              tabs: widget.appState.openTabs,
-              activeNoteId: note.id,
-              accentColor: accentColor,
-              bgColor: editorBg,
-              borderColor: chipBorder,
-              textColor: hasNoteColor ? Colors.white : widget.themeState.editorTextColor,
-              mutedColor: hasNoteColor ? Colors.white60 : widget.themeState.editorMutedTextColor,
-              onSwitch: (id) {
-                // Force-save current note before switching
-                widget.appState.autoSaveService.forceSave(
-                  noteId: note.id,
-                  title: _titleController.text,
-                  content: _serializeContent(),
-                );
-                widget.appState.switchTab(id);
-              },
-              onClose: (id) {
-                // Force-save if closing the active tab
-                if (id == note.id) {
-                  widget.appState.autoSaveService.forceSave(
-                    noteId: note.id,
-                    title: _titleController.text,
-                    content: _serializeContent(),
-                  );
-                }
-                widget.appState.closeTab(id);
-              },
-            ),
-          ],
           if (!isZen) const SizedBox(height: 12),
 
           // Main editor area
           Expanded(
-            child: Stack(
+            child: note.isLocked && !GetIt.instance<SecurityState>().isNoteUnlocked(note.id)
+                ? _buildLockedOverlay(context, editorBg, chipBorder, accentColor, note.id)
+                : Stack(
               children: [
                 Row(
               children: [
@@ -1053,6 +1105,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     ],
                   ),
                 ),
+                // Split view: second editor panel
+                if (widget.appState.isSplitMode) ...[
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _SplitEditorPanel(
+                      appState: widget.appState,
+                      themeState: widget.themeState,
+                      accentColor: accentColor,
+                    ),
+                  ),
+                ],
               ],
             ),
 
@@ -1144,6 +1207,104 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         decoration: TextDecoration.underline,
         decorationColor: widget.themeState.accentColor.withValues(alpha: 0.4),
         decorationStyle: TextDecorationStyle.solid,
+      ),
+    );
+  }
+
+  // Reusable controllers for the locked overlay to avoid leaks.
+  final _lockPinController = TextEditingController();
+  final _lockErrorNotifier = ValueNotifier<String?>(null);
+
+  Widget _buildLockedOverlay(
+    BuildContext context,
+    Color editorBg,
+    Color chipBorder,
+    Color accentColor,
+    String noteId,
+  ) {
+    _lockPinController.clear();
+    _lockErrorNotifier.value = null;
+    final securityState = GetIt.instance<SecurityState>();
+
+    return Container(
+      decoration: BoxDecoration(
+        color: editorBg.withValues(alpha: 0.95),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: chipBorder, width: 1),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_rounded, size: 48, color: Colors.grey.shade400),
+            const SizedBox(height: 16),
+            Text(
+              'This note is locked',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Enter your PIN to view this note',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey.shade500,
+                  ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 200,
+              child: TextField(
+                controller: _lockPinController,
+                obscureText: true,
+                keyboardType: TextInputType.number,
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  hintText: 'Enter PIN',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                onSubmitted: (value) {
+                  if (securityState.verifyAndUnlock(noteId, value)) {
+                    setState(() {});
+                  } else {
+                    _lockErrorNotifier.value = 'Incorrect PIN';
+                  }
+                },
+              ),
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: _lockErrorNotifier,
+              builder: (_, error, __) => error != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error,
+                          style: const TextStyle(
+                              color: Colors.red, fontSize: 12)),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                if (securityState.verifyAndUnlock(noteId, _lockPinController.text)) {
+                  setState(() {});
+                } else {
+                  _lockErrorNotifier.value = 'Incorrect PIN';
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentColor,
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Unlock'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1496,6 +1657,405 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
           },
         );
       },
+    );
+  }
+
+  // ── PIN dialogs ──────────────────────────────────────────────────────────
+
+  void _showSetPinDialog(
+    BuildContext context,
+    SecurityState securityState,
+    Note note,
+  ) {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    final errorNotifier = ValueNotifier<String?>(null);
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Set PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Set a PIN to lock notes. You\'ll need this PIN to view locked notes.'),
+            const SizedBox(height: 16),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'PIN',
+                hintText: 'Enter 4-6 digit PIN',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Confirm PIN',
+                hintText: 'Re-enter PIN',
+              ),
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (_, error, __) => error != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error,
+                          style: const TextStyle(
+                              color: Colors.red, fontSize: 12)),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final pin = pinController.text;
+              final confirm = confirmController.text;
+              if (pin.length < 4 || pin.length > 6) {
+                errorNotifier.value = 'PIN must be 4-6 digits';
+                return;
+              }
+              if (pin != confirm) {
+                errorNotifier.value = 'PINs do not match';
+                return;
+              }
+              await securityState.setPin(pin);
+              widget.appState.toggleLock(note.id);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Set PIN & Lock'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Split Editor Panel — second editor for split view mode
+// ═══════════════════════════════════════════════════════════════════════════
+
+class _SplitEditorPanel extends StatefulWidget {
+  final AppState appState;
+  final ThemeState themeState;
+  final Color accentColor;
+
+  const _SplitEditorPanel({
+    required this.appState,
+    required this.themeState,
+    required this.accentColor,
+  });
+
+  @override
+  State<_SplitEditorPanel> createState() => _SplitEditorPanelState();
+}
+
+class _SplitEditorPanelState extends State<_SplitEditorPanel> {
+  QuillController? _quillController;
+  TextEditingController? _titleController;
+  String? _loadedNoteId;
+  Timer? _editPoller;
+  Timer? _debounce;
+  Timer? _hideTimer;
+  String _prevContent = '';
+  String _prevTitle = '';
+  final ValueNotifier<String> _saveStatus = ValueNotifier('');
+
+  static final _controllerConfig = QuillControllerConfig(
+    clipboardConfig: QuillClipboardConfig(
+      enableExternalRichPaste: false,
+    ),
+  );
+
+  @override
+  void dispose() {
+    _editPoller?.cancel();
+    _debounce?.cancel();
+    _hideTimer?.cancel();
+    _forceSave();
+    _quillController?.dispose();
+    _titleController?.dispose();
+    _saveStatus.dispose();
+    super.dispose();
+  }
+
+  void _loadNote(Note note) {
+    if (note.id == _loadedNoteId) return;
+    _forceSave();
+
+    _editPoller?.cancel();
+    _debounce?.cancel();
+    _quillController?.dispose();
+    _titleController?.dispose();
+
+    _loadedNoteId = note.id;
+    _titleController = TextEditingController(text: note.title);
+
+    try {
+      final delta = Document.fromJson(jsonDecode(note.content));
+      _quillController = QuillController(
+        document: delta,
+        selection: const TextSelection.collapsed(offset: 0),
+        config: _controllerConfig,
+      );
+    } catch (_) {
+      _quillController = QuillController.basic(config: _controllerConfig);
+    }
+
+    _prevContent = _serializeContent();
+    _prevTitle = _titleController!.text;
+
+    _editPoller = Timer.periodic(
+      const Duration(milliseconds: 1500),
+      (_) => _pollForEdits(),
+    );
+  }
+
+  String _serializeContent() =>
+      jsonEncode(_quillController!.document.toDelta().toJson());
+
+  void _pollForEdits() {
+    if (_quillController == null || _loadedNoteId == null) return;
+    final content = _serializeContent();
+    final title = _titleController!.text;
+    if (content != _prevContent || title != _prevTitle) {
+      _prevContent = content;
+      _prevTitle = title;
+      _saveStatus.value = 'saving';
+      _debounce?.cancel();
+      _debounce = Timer(const Duration(seconds: 3), _forceSave);
+    }
+  }
+
+  void _forceSave() {
+    if (_loadedNoteId == null || _quillController == null) return;
+    widget.appState.autoSaveService.forceSave(
+      noteId: _loadedNoteId!,
+      title: _titleController!.text,
+      content: _serializeContent(),
+    );
+    _saveStatus.value = 'saved';
+    _hideTimer?.cancel();
+    _hideTimer = Timer(const Duration(seconds: 2), () {
+      _saveStatus.value = '';
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    final editorBg = widget.themeState.editorBgColor;
+    final chipBorder = widget.themeState.editorBorderColor;
+    final chipText = isDark ? Colors.white70 : Colors.grey.shade600;
+    final splitNote = widget.appState.splitNote;
+
+    // No note selected — show note picker
+    if (splitNote == null) {
+      return Container(
+        decoration: BoxDecoration(
+          color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: chipBorder, width: 1),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
+              child: Row(
+                children: [
+                  Icon(Icons.vertical_split_rounded,
+                      size: 16, color: chipText),
+                  const SizedBox(width: 8),
+                  Text('Select a note',
+                      style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: chipText)),
+                  const Spacer(),
+                  IconButton(
+                    onPressed: () => widget.appState.exitSplitMode(),
+                    icon: Icon(Icons.close_rounded,
+                        size: 16, color: chipText),
+                    splashRadius: 14,
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1, color: chipBorder),
+            // Note list
+            Expanded(
+              child: ListView.builder(
+                padding: const EdgeInsets.all(8),
+                itemCount: widget.appState.notes.length,
+                itemBuilder: (context, index) {
+                  final note = widget.appState.notes[index];
+                  if (note.id == widget.appState.currentNote?.id) {
+                    return const SizedBox.shrink();
+                  }
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      note.title.isEmpty ? 'Untitled' : note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: chipText),
+                    ),
+                    onTap: () {
+                      widget.appState.enterSplitMode(note);
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Load the note if needed
+    _loadNote(splitNote);
+
+    final textColor = isDark ? Colors.white : Colors.black87;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: chipBorder, width: 1),
+      ),
+      child: Column(
+        children: [
+          // Header with title + close
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _titleController,
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                    decoration: const InputDecoration(
+                      border: InputBorder.none,
+                      hintText: 'Title',
+                      isDense: true,
+                      contentPadding: EdgeInsets.symmetric(vertical: 8),
+                    ),
+                  ),
+                ),
+                ValueListenableBuilder<String>(
+                  valueListenable: _saveStatus,
+                  builder: (context, status, _) {
+                    if (status == 'saved') {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.check_circle_outline_rounded,
+                                size: 12,
+                                color: isDark
+                                    ? Colors.green.shade300
+                                    : Colors.green.shade600),
+                            const SizedBox(width: 4),
+                            Text('Saved',
+                                style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: isDark
+                                        ? Colors.green.shade300
+                                        : Colors.green.shade600)),
+                          ],
+                        ),
+                      );
+                    }
+                    return const SizedBox.shrink();
+                  },
+                ),
+                IconButton(
+                  onPressed: () {
+                    _forceSave();
+                    widget.appState.exitSplitMode();
+                  },
+                  icon: Icon(Icons.close_rounded,
+                      size: 16, color: chipText),
+                  splashRadius: 14,
+                  tooltip: 'Close split',
+                ),
+              ],
+            ),
+          ),
+          Divider(height: 1, color: chipBorder),
+          // Toolbar
+          Container(
+            decoration: BoxDecoration(
+              color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
+              border: Border(bottom: BorderSide(color: chipBorder, width: 1)),
+            ),
+            child: QuillSimpleToolbar(
+              controller: _quillController!,
+              config: QuillSimpleToolbarConfig(
+                showAlignmentButtons: true,
+                showBackgroundColorButton: false,
+                showClearFormat: false,
+                showFontFamily: false,
+                showSearchButton: false,
+                showInlineCode: false,
+                showLink: false,
+                showClipboardCut: false,
+                showClipboardCopy: false,
+                showClipboardPaste: false,
+                multiRowsDisplay: false,
+              ),
+            ),
+          ),
+          // Editor
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: QuillEditor.basic(
+                controller: _quillController!,
+                config: QuillEditorConfig(
+                  placeholder: 'Start writing...',
+                  padding: const EdgeInsets.all(8),
+                  expands: true,
+                  textSelectionThemeData: TextSelectionThemeData(
+                    cursorColor: widget.accentColor,
+                  ),
+                  customStyles: DefaultStyles(
+                    paragraph: DefaultTextBlockStyle(
+                      TextStyle(
+                        fontSize: widget.themeState.editorFontSize,
+                        height: widget.themeState.editorLineHeight,
+                        color: textColor,
+                      ),
+                      const HorizontalSpacing(0, 0),
+                      const VerticalSpacing(4, 4),
+                      const VerticalSpacing(0, 0),
+                      null,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

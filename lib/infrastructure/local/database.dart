@@ -41,6 +41,7 @@ class NoteEntries extends Table {
   TextColumn get shareToken => text().nullable()();
   DateTimeColumn get sharedAt => dateTime().nullable()();
   BoolColumn get isEphemeral => boolean().withDefault(const Constant(false))();
+  BoolColumn get isLocked => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -212,7 +213,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 12;
+  int get schemaVersion => 13;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -323,6 +324,17 @@ class AppDatabase extends _$AppDatabase {
         }
         await safeAddColumn(noteEntries, noteEntries.isEphemeral);
       }
+      if (from < 13) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+        await safeAddColumn(noteEntries, noteEntries.isLocked);
+      }
     },
   );
 
@@ -364,6 +376,7 @@ class AppDatabase extends _$AppDatabase {
       shareToken: row.shareToken,
       sharedAt: row.sharedAt,
       isEphemeral: row.isEphemeral,
+      isLocked: row.isLocked,
     );
   }
 
@@ -386,6 +399,7 @@ class AppDatabase extends _$AppDatabase {
       shareToken: Value(note.shareToken),
       sharedAt: Value(note.sharedAt),
       isEphemeral: Value(note.isEphemeral),
+      isLocked: Value(note.isLocked),
     );
   }
 

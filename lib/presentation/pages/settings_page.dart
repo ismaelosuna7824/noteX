@@ -10,6 +10,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../state/security_state.dart';
+import 'package:get_it/get_it.dart';
 import '../utils/platform_utils.dart';
 import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
@@ -538,6 +540,11 @@ class _SettingsPageState extends State<SettingsPage> {
                         accentColor: accentColor,
                         child: _buildBackgroundPicker(context, accentColor),
                       ),
+
+                      const SizedBox(height: 16),
+
+                      // Security
+                      _buildSecuritySection(context, isDark, accentColor, innerBg, innerBorder),
 
                       const SizedBox(height: 16),
 
@@ -1614,6 +1621,333 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   // ── Shared section card ────────────────────────────────────────────────────
+
+  Widget _buildSecuritySection(
+    BuildContext context,
+    bool isDark,
+    Color accentColor,
+    Color innerBg,
+    Color innerBorder,
+  ) {
+    final securityState = GetIt.instance<SecurityState>();
+
+    return ListenableBuilder(
+      listenable: securityState,
+      builder: (context, _) {
+        return _buildSection(
+          context,
+          isDark: isDark,
+          title: 'Security',
+          icon: Icons.lock_rounded,
+          accentColor: accentColor,
+          child: Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: innerBg,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: innerBorder),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          securityState.hasPin
+                              ? Icons.lock_rounded
+                              : Icons.lock_open_rounded,
+                          size: 20,
+                          color: securityState.hasPin
+                              ? Colors.green.shade400
+                              : Colors.grey.shade400,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            securityState.hasPin
+                                ? 'PIN is set'
+                                : 'No PIN configured',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: isDark ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Lock individual notes with a PIN to protect their content.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: isDark ? Colors.white54 : Colors.grey.shade500,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        if (!securityState.hasPin)
+                          _buildSecurityButton(
+                            context,
+                            label: 'Set PIN',
+                            icon: Icons.add_rounded,
+                            accentColor: accentColor,
+                            isDark: isDark,
+                            onTap: () => _showSetPinDialog(context, securityState),
+                          ),
+                        if (securityState.hasPin) ...[
+                          _buildSecurityButton(
+                            context,
+                            label: 'Change PIN',
+                            icon: Icons.edit_rounded,
+                            accentColor: accentColor,
+                            isDark: isDark,
+                            onTap: () => _showChangePinDialog(context, securityState),
+                          ),
+                          const SizedBox(width: 8),
+                          _buildSecurityButton(
+                            context,
+                            label: 'Remove PIN',
+                            icon: Icons.delete_rounded,
+                            accentColor: Colors.red,
+                            isDark: isDark,
+                            onTap: () => _showRemovePinDialog(context, securityState),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildSecurityButton(
+    BuildContext context, {
+    required String label,
+    required IconData icon,
+    required Color accentColor,
+    required bool isDark,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: accentColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: accentColor),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: accentColor,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSetPinDialog(BuildContext context, SecurityState securityState) {
+    final pinController = TextEditingController();
+    final confirmController = TextEditingController();
+    final errorNotifier = ValueNotifier<String?>(null);
+
+    showAnimatedDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Set PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'PIN',
+                hintText: '4-6 digits',
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Confirm PIN',
+                hintText: 'Re-enter PIN',
+              ),
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (_, error, __) => error != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              final pin = pinController.text;
+              if (pin.length < 4 || pin.length > 6) {
+                errorNotifier.value = 'PIN must be 4-6 digits';
+                return;
+              }
+              if (pin != confirmController.text) {
+                errorNotifier.value = 'PINs do not match';
+                return;
+              }
+              await securityState.setPin(pin);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Set PIN'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showChangePinDialog(BuildContext context, SecurityState securityState) {
+    final currentController = TextEditingController();
+    final newController = TextEditingController();
+    final confirmController = TextEditingController();
+    final errorNotifier = ValueNotifier<String?>(null);
+
+    showAnimatedDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Change PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: currentController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Current PIN'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: newController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'New PIN', hintText: '4-6 digits'),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: confirmController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Confirm new PIN'),
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (_, error, __) => error != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              if (!securityState.verifyPin(currentController.text)) {
+                errorNotifier.value = 'Current PIN is incorrect';
+                return;
+              }
+              final newPin = newController.text;
+              if (newPin.length < 4 || newPin.length > 6) {
+                errorNotifier.value = 'New PIN must be 4-6 digits';
+                return;
+              }
+              if (newPin != confirmController.text) {
+                errorNotifier.value = 'New PINs do not match';
+                return;
+              }
+              await securityState.setPin(newPin);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Change'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRemovePinDialog(BuildContext context, SecurityState securityState) {
+    final pinController = TextEditingController();
+    final errorNotifier = ValueNotifier<String?>(null);
+
+    showAnimatedDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove PIN'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your current PIN to remove it. All locked notes will be unlocked.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(labelText: 'Current PIN'),
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (_, error, __) => error != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error, style: const TextStyle(color: Colors.red, fontSize: 12)),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () async {
+              if (!securityState.verifyPin(pinController.text)) {
+                errorNotifier.value = 'Incorrect PIN';
+                return;
+              }
+              await securityState.removePin();
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Remove PIN'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildSection(
     BuildContext context, {

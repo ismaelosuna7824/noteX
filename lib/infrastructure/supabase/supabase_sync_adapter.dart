@@ -475,6 +475,7 @@ class SupabaseSyncAdapter implements SyncService {
         'sync_status': 'synced',
         'share_token': note.shareToken,
         'shared_at': note.sharedAt?.toUtc().toIso8601String(),
+        'is_locked': note.isLocked,
       };
 
   Note _mapToNote(Map<String, dynamic> m) => Note(
@@ -498,6 +499,7 @@ class SupabaseSyncAdapter implements SyncService {
         sharedAt: m['shared_at'] != null
             ? DateTime.parse(m['shared_at'] as String)
             : null,
+        isLocked: m['is_locked'] as bool? ?? false,
       );
 
   Map<String, dynamic> _projectToMap(Project p) => {

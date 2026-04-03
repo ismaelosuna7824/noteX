@@ -200,6 +200,21 @@ class $NoteEntriesTable extends NoteEntries
     ),
     defaultValue: const Constant(false),
   );
+  static const VerificationMeta _isLockedMeta = const VerificationMeta(
+    'isLocked',
+  );
+  @override
+  late final GeneratedColumn<bool> isLocked = GeneratedColumn<bool>(
+    'is_locked',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("is_locked" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -219,6 +234,7 @@ class $NoteEntriesTable extends NoteEntries
     shareToken,
     sharedAt,
     isEphemeral,
+    isLocked,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -343,6 +359,12 @@ class $NoteEntriesTable extends NoteEntries
         ),
       );
     }
+    if (data.containsKey('is_locked')) {
+      context.handle(
+        _isLockedMeta,
+        isLocked.isAcceptableOrUnknown(data['is_locked']!, _isLockedMeta),
+      );
+    }
     return context;
   }
 
@@ -420,6 +442,10 @@ class $NoteEntriesTable extends NoteEntries
         DriftSqlType.bool,
         data['${effectivePrefix}is_ephemeral'],
       )!,
+      isLocked: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}is_locked'],
+      )!,
     );
   }
 
@@ -447,6 +473,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
   final String? shareToken;
   final DateTime? sharedAt;
   final bool isEphemeral;
+  final bool isLocked;
   const NoteEntry({
     required this.id,
     required this.title,
@@ -465,6 +492,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     this.shareToken,
     this.sharedAt,
     required this.isEphemeral,
+    required this.isLocked,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -502,6 +530,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       map['shared_at'] = Variable<DateTime>(sharedAt);
     }
     map['is_ephemeral'] = Variable<bool>(isEphemeral);
+    map['is_locked'] = Variable<bool>(isLocked);
     return map;
   }
 
@@ -540,6 +569,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           ? const Value.absent()
           : Value(sharedAt),
       isEphemeral: Value(isEphemeral),
+      isLocked: Value(isLocked),
     );
   }
 
@@ -566,6 +596,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       shareToken: serializer.fromJson<String?>(json['shareToken']),
       sharedAt: serializer.fromJson<DateTime?>(json['sharedAt']),
       isEphemeral: serializer.fromJson<bool>(json['isEphemeral']),
+      isLocked: serializer.fromJson<bool>(json['isLocked']),
     );
   }
   @override
@@ -589,6 +620,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       'shareToken': serializer.toJson<String?>(shareToken),
       'sharedAt': serializer.toJson<DateTime?>(sharedAt),
       'isEphemeral': serializer.toJson<bool>(isEphemeral),
+      'isLocked': serializer.toJson<bool>(isLocked),
     };
   }
 
@@ -610,6 +642,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     Value<String?> shareToken = const Value.absent(),
     Value<DateTime?> sharedAt = const Value.absent(),
     bool? isEphemeral,
+    bool? isLocked,
   }) => NoteEntry(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -630,6 +663,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     shareToken: shareToken.present ? shareToken.value : this.shareToken,
     sharedAt: sharedAt.present ? sharedAt.value : this.sharedAt,
     isEphemeral: isEphemeral ?? this.isEphemeral,
+    isLocked: isLocked ?? this.isLocked,
   );
   NoteEntry copyWithCompanion(NoteEntriesCompanion data) {
     return NoteEntry(
@@ -658,6 +692,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
       isEphemeral: data.isEphemeral.present
           ? data.isEphemeral.value
           : this.isEphemeral,
+      isLocked: data.isLocked.present ? data.isLocked.value : this.isLocked,
     );
   }
 
@@ -680,7 +715,8 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           ..write('projectId: $projectId, ')
           ..write('shareToken: $shareToken, ')
           ..write('sharedAt: $sharedAt, ')
-          ..write('isEphemeral: $isEphemeral')
+          ..write('isEphemeral: $isEphemeral, ')
+          ..write('isLocked: $isLocked')
           ..write(')'))
         .toString();
   }
@@ -704,6 +740,7 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
     shareToken,
     sharedAt,
     isEphemeral,
+    isLocked,
   );
   @override
   bool operator ==(Object other) =>
@@ -725,7 +762,8 @@ class NoteEntry extends DataClass implements Insertable<NoteEntry> {
           other.projectId == this.projectId &&
           other.shareToken == this.shareToken &&
           other.sharedAt == this.sharedAt &&
-          other.isEphemeral == this.isEphemeral);
+          other.isEphemeral == this.isEphemeral &&
+          other.isLocked == this.isLocked);
 }
 
 class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
@@ -746,6 +784,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
   final Value<String?> shareToken;
   final Value<DateTime?> sharedAt;
   final Value<bool> isEphemeral;
+  final Value<bool> isLocked;
   final Value<int> rowid;
   const NoteEntriesCompanion({
     this.id = const Value.absent(),
@@ -765,6 +804,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.shareToken = const Value.absent(),
     this.sharedAt = const Value.absent(),
     this.isEphemeral = const Value.absent(),
+    this.isLocked = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   NoteEntriesCompanion.insert({
@@ -785,6 +825,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     this.shareToken = const Value.absent(),
     this.sharedAt = const Value.absent(),
     this.isEphemeral = const Value.absent(),
+    this.isLocked = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        createdAt = Value(createdAt),
@@ -807,6 +848,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Expression<String>? shareToken,
     Expression<DateTime>? sharedAt,
     Expression<bool>? isEphemeral,
+    Expression<bool>? isLocked,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -827,6 +869,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       if (shareToken != null) 'share_token': shareToken,
       if (sharedAt != null) 'shared_at': sharedAt,
       if (isEphemeral != null) 'is_ephemeral': isEphemeral,
+      if (isLocked != null) 'is_locked': isLocked,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -849,6 +892,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     Value<String?>? shareToken,
     Value<DateTime?>? sharedAt,
     Value<bool>? isEphemeral,
+    Value<bool>? isLocked,
     Value<int>? rowid,
   }) {
     return NoteEntriesCompanion(
@@ -869,6 +913,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
       shareToken: shareToken ?? this.shareToken,
       sharedAt: sharedAt ?? this.sharedAt,
       isEphemeral: isEphemeral ?? this.isEphemeral,
+      isLocked: isLocked ?? this.isLocked,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -927,6 +972,9 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
     if (isEphemeral.present) {
       map['is_ephemeral'] = Variable<bool>(isEphemeral.value);
     }
+    if (isLocked.present) {
+      map['is_locked'] = Variable<bool>(isLocked.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -953,6 +1001,7 @@ class NoteEntriesCompanion extends UpdateCompanion<NoteEntry> {
           ..write('shareToken: $shareToken, ')
           ..write('sharedAt: $sharedAt, ')
           ..write('isEphemeral: $isEphemeral, ')
+          ..write('isLocked: $isLocked, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4843,6 +4892,7 @@ typedef $$NoteEntriesTableCreateCompanionBuilder =
       Value<String?> shareToken,
       Value<DateTime?> sharedAt,
       Value<bool> isEphemeral,
+      Value<bool> isLocked,
       Value<int> rowid,
     });
 typedef $$NoteEntriesTableUpdateCompanionBuilder =
@@ -4864,6 +4914,7 @@ typedef $$NoteEntriesTableUpdateCompanionBuilder =
       Value<String?> shareToken,
       Value<DateTime?> sharedAt,
       Value<bool> isEphemeral,
+      Value<bool> isLocked,
       Value<int> rowid,
     });
 
@@ -4958,6 +5009,11 @@ class $$NoteEntriesTableFilterComposer
 
   ColumnFilters<bool> get isEphemeral => $composableBuilder(
     column: $table.isEphemeral,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get isLocked => $composableBuilder(
+    column: $table.isLocked,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -5055,6 +5111,11 @@ class $$NoteEntriesTableOrderingComposer
     column: $table.isEphemeral,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<bool> get isLocked => $composableBuilder(
+    column: $table.isLocked,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$NoteEntriesTableAnnotationComposer
@@ -5124,6 +5185,9 @@ class $$NoteEntriesTableAnnotationComposer
     column: $table.isEphemeral,
     builder: (column) => column,
   );
+
+  GeneratedColumn<bool> get isLocked =>
+      $composableBuilder(column: $table.isLocked, builder: (column) => column);
 }
 
 class $$NoteEntriesTableTableManager
@@ -5174,6 +5238,7 @@ class $$NoteEntriesTableTableManager
                 Value<String?> shareToken = const Value.absent(),
                 Value<DateTime?> sharedAt = const Value.absent(),
                 Value<bool> isEphemeral = const Value.absent(),
+                Value<bool> isLocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteEntriesCompanion(
                 id: id,
@@ -5193,6 +5258,7 @@ class $$NoteEntriesTableTableManager
                 shareToken: shareToken,
                 sharedAt: sharedAt,
                 isEphemeral: isEphemeral,
+                isLocked: isLocked,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -5214,6 +5280,7 @@ class $$NoteEntriesTableTableManager
                 Value<String?> shareToken = const Value.absent(),
                 Value<DateTime?> sharedAt = const Value.absent(),
                 Value<bool> isEphemeral = const Value.absent(),
+                Value<bool> isLocked = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => NoteEntriesCompanion.insert(
                 id: id,
@@ -5233,6 +5300,7 @@ class $$NoteEntriesTableTableManager
                 shareToken: shareToken,
                 sharedAt: sharedAt,
                 isEphemeral: isEphemeral,
+                isLocked: isLocked,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

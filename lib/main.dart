@@ -19,6 +19,8 @@ import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
 import 'presentation/state/reminder_state.dart';
+import 'presentation/state/security_state.dart';
+import 'presentation/state/writing_stats_state.dart';
 import 'presentation/utils/platform_utils.dart';
 import 'application/services/sync_engine.dart';
 import 'domain/repositories/auth_repository.dart';
@@ -84,6 +86,7 @@ void main() async {
   // 5. Initialize app state (load notes, create daily note)
   final appState = getIt<AppState>();
   await appState.initialize();
+  getIt<WritingStatsState>().recordActivity(appState.notes);
 
   // Initialize timer state so HomePage has daily task stats immediately
   final timerState = getIt<TimerState>();
@@ -97,9 +100,13 @@ void main() async {
   final reminderState = getIt<ReminderState>();
   await reminderState.initialize();
 
-  // 6. Restore persisted theme settings
+  // 6. Restore persisted theme and security settings
   final themeState = getIt<ThemeState>();
   await themeState.loadFromDisk();
+  final securityState = getIt<SecurityState>();
+  await securityState.loadFromDisk();
+  final writingStats = getIt<WritingStatsState>();
+  await writingStats.loadFromDisk();
 
   // 7. Start auto-sync and trigger initial sync if already logged in
   final syncEngine = getIt<SyncEngine>();

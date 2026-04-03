@@ -18,6 +18,7 @@ class NoteGridCard extends StatefulWidget {
   final List<NoteProject> noteProjects;
   final Color accentColor;
   final Color? editorBgColor;
+  final bool isNoteUnlocked;
 
   const NoteGridCard({
     super.key,
@@ -31,6 +32,7 @@ class NoteGridCard extends StatefulWidget {
     this.noteProjects = const [],
     required this.accentColor,
     this.editorBgColor,
+    this.isNoteUnlocked = false,
   });
 
   @override
@@ -70,7 +72,8 @@ class _NoteGridCardState extends State<NoteGridCard> {
     final cardColor = noteColor ?? widget.editorBgColor;
     final borderColor = noteColor ?? widget.accentColor;
     final hasNoteColor = noteColor != null;
-    final preview = widget.note.plainTextPreview;
+    final isHidden = widget.note.isLocked && !widget.isNoteUnlocked;
+    final preview = isHidden ? '' : widget.note.plainTextPreview;
 
     return GestureDetector(
       onSecondaryTapUp: widget.onChangeProject != null
@@ -115,11 +118,24 @@ class _NoteGridCardState extends State<NoteGridCard> {
                     // Title + badges row
                     Row(
                       children: [
+                        if (isHidden)
+                          Padding(
+                            padding: const EdgeInsets.only(right: 6),
+                            child: Icon(
+                              Icons.lock_rounded,
+                              size: 14,
+                              color: hasNoteColor
+                                  ? Colors.white60
+                                  : Colors.grey.shade500,
+                            ),
+                          ),
                         Expanded(
                           child: Text(
-                            widget.note.title.isEmpty
-                                ? 'Untitled'
-                                : widget.note.title,
+                            isHidden
+                                ? 'Locked Note'
+                                : (widget.note.title.isEmpty
+                                    ? 'Untitled'
+                                    : widget.note.title),
                             style: theme.textTheme.titleSmall?.copyWith(
                               fontWeight: FontWeight.w700,
                               color: hasNoteColor ? Colors.white : null,
@@ -147,14 +163,15 @@ class _NoteGridCardState extends State<NoteGridCard> {
                     ),
                     const SizedBox(height: 4),
 
-                    // Date
-                    Text(
-                      _formatDate(widget.note.updatedAt),
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: hasNoteColor ? Colors.white60 : Colors.grey.shade500,
-                        fontSize: 11,
+                    // Date (hidden for locked notes)
+                    if (!isHidden)
+                      Text(
+                        _formatDate(widget.note.updatedAt),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: hasNoteColor ? Colors.white60 : Colors.grey.shade500,
+                          fontSize: 11,
+                        ),
                       ),
-                    ),
 
                     // Content preview
                     if (preview.isNotEmpty) ...[

@@ -22,6 +22,9 @@ import '../../application/use_cases/note/permanent_delete_note_use_case.dart';
 import '../../application/use_cases/check_for_update_use_case.dart';
 import '../../application/use_cases/cleanup_empty_notes_use_case.dart';
 import '../../application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
+import 'package:get_it/get_it.dart';
+import 'security_state.dart';
+import 'writing_stats_state.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
 import '../../domain/repositories/auth_repository.dart'
@@ -65,14 +68,16 @@ class AppState extends ChangeNotifier {
   String? _authErrorMessage;
   StreamSubscription<bool>? _authSub;
 
-  // Editor tabs
-  List<String> _openTabIds = [];
 
   // Compact / sticky note mode
   bool _isCompactMode = false;
 
   // Focus / zen mode
   bool _isZenMode = false;
+
+  // Split view mode
+  bool _isSplitMode = false;
+  Note? _splitNote;
 
   // Goodbye screen on close
   bool _isClosing = false;
@@ -156,17 +161,10 @@ class AppState extends ChangeNotifier {
   bool get showUpdateBanner => _availableUpdate != null && !_updateBannerDismissed;
   bool get isCompactMode => _isCompactMode;
   bool get isZenMode => _isZenMode;
+  bool get isSplitMode => _isSplitMode;
+  Note? get splitNote => _splitNote;
   bool get isClosing => _isClosing;
 
-  /// Notes currently open as editor tabs.
-  List<Note> get openTabs =>
-      _openTabIds
-          .map((id) => _notes.cast<Note?>().firstWhere(
-                (n) => n?.id == id,
-                orElse: () => null,
-              ))
-          .whereType<Note>()
-          .toList();
 
   void startClosing() {
     _isClosing = true;
@@ -269,6 +267,7 @@ class AppState extends ChangeNotifier {
     final updated = await _getNotes.getById(noteId);
     if (updated != null) {
       updateNoteInList(updated);
+      GetIt.instance<WritingStatsState>().recordActivity(_notes);
     }
   }
 
@@ -281,9 +280,6 @@ class AppState extends ChangeNotifier {
 
   /// Set the current note being viewed/edited.
   void selectNote(Note note) {
-    if (!_openTabIds.contains(note.id)) {
-      _openTabIds.add(note.id);
-    }
     _currentNote = note;
     _selectedPageIndex = 2; // Navigate to editor
     notifyListeners();
@@ -291,9 +287,6 @@ class AppState extends ChangeNotifier {
 
   /// Preview a note without navigating to the editor.
   void previewNote(Note note) {
-    if (!_openTabIds.contains(note.id)) {
-      _openTabIds.add(note.id);
-    }
     _currentNote = note;
     notifyListeners();
   }
@@ -305,7 +298,11 @@ class AppState extends ChangeNotifier {
   }
 
   /// Navigate to a specific page via the sidebar.
+  /// Locks the PIN session on navigation so locked notes require re-entry.
   void navigateToPage(int index) {
+    if (index != _selectedPageIndex) {
+      GetIt.instance<SecurityState>().lockAll();
+    }
     _selectedPageIndex = index;
     notifyListeners();
   }
@@ -363,53 +360,38 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  // ── Editor tabs ──────────────────────────────────────────────────────
+  // ── Split view mode ───────────────────────────────────────────────
 
-  /// Open a note as a tab and switch to it.
-  void openTab(Note note) {
-    if (!_openTabIds.contains(note.id)) {
-      _openTabIds.add(note.id);
-    }
-    _currentNote = note;
-    _selectedPageIndex = 2;
+  void enterSplitMode(Note note) {
+    _splitNote = note;
+    _isSplitMode = true;
     notifyListeners();
   }
 
-  /// Close a tab. Switches to adjacent tab or clears editor.
-  void closeTab(String noteId) {
-    final idx = _openTabIds.indexOf(noteId);
-    if (idx < 0) return;
-    _openTabIds.removeAt(idx);
-
-    if (_currentNote?.id == noteId) {
-      if (_openTabIds.isNotEmpty) {
-        // Switch to the tab that's now at the same index (or the last one)
-        final newIdx = idx.clamp(0, _openTabIds.length - 1);
-        final newId = _openTabIds[newIdx];
-        _currentNote = _notes.cast<Note?>().firstWhere(
-              (n) => n?.id == newId,
-              orElse: () => null,
-            );
-      } else {
-        _currentNote = null;
-        _selectedPageIndex = 1; // back to notes list
-      }
-    }
+  void exitSplitMode() {
+    _isSplitMode = false;
+    _splitNote = null;
     notifyListeners();
   }
 
-  /// Switch to an already-open tab.
-  void switchTab(String noteId) {
-    if (!_openTabIds.contains(noteId)) return;
-    final note = _notes.cast<Note?>().firstWhere(
-          (n) => n?.id == noteId,
-          orElse: () => null,
-        );
-    if (note != null) {
-      _currentNote = note;
+  void toggleSplitMode() {
+    if (_isSplitMode) {
+      exitSplitMode();
+    } else {
+      // No note selected for split yet — will show picker
+      _isSplitMode = true;
       notifyListeners();
     }
   }
+
+  /// Update the split note in-memory after auto-save.
+  void updateSplitNote(Note updated) {
+    if (_splitNote?.id == updated.id) {
+      _splitNote = updated;
+    }
+    notifyListeners();
+  }
+
 
   /// Update the search query and filter notes in-memory.
   void search(String query) {
@@ -442,6 +424,22 @@ class AppState extends ChangeNotifier {
   /// Create a quick (ephemeral) note — local-only, auto-deletes after 24h.
   Future<Note> createQuickNote({String? projectId}) async {
     return createNewNote(projectId: projectId, isEphemeral: true);
+  }
+
+  /// Toggle the lock state of a note.
+  Future<void> toggleLock(String noteId) async {
+    final existing = _notes.cast<Note?>().firstWhere(
+          (n) => n?.id == noteId,
+          orElse: () => null,
+        );
+    if (existing == null) return;
+    final updated = await _updateNote.execute(
+      noteId: noteId,
+      isLocked: !existing.isLocked,
+    );
+    if (updated != null) {
+      updateNoteInList(updated);
+    }
   }
 
   /// Toggle the ephemeral state of a note.
@@ -577,22 +575,16 @@ class AppState extends ChangeNotifier {
   /// Delete a note.
   Future<void> deleteNote(String noteId) async {
     await _deleteNote.execute(noteId);
-    _openTabIds.remove(noteId);
     await refreshNotes();
-    // If the deleted note was in compact mode, exit compact mode.
     if (_isCompactMode && _currentNote?.id == noteId) {
       _isCompactMode = false;
     }
     if (_currentNote?.id == noteId) {
-      // Switch to another open tab, or fall back to first note
-      if (_openTabIds.isNotEmpty) {
-        _currentNote = _notes.cast<Note?>().firstWhere(
-              (n) => n?.id == _openTabIds.last,
-              orElse: () => _notes.isNotEmpty ? _notes.first : null,
-            );
-      } else {
-        _currentNote = _notes.isNotEmpty ? _notes.first : null;
-      }
+      _currentNote = _notes.isNotEmpty ? _notes.first : null;
+    }
+    if (_splitNote?.id == noteId) {
+      _splitNote = null;
+      _isSplitMode = false;
     }
     notifyListeners();
   }

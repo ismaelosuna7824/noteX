@@ -24,6 +24,7 @@ class Note {
   final String? shareToken;
   final DateTime? sharedAt;
   final bool isEphemeral;
+  final bool isLocked;
 
   const Note({
     required this.id,
@@ -43,6 +44,7 @@ class Note {
     this.shareToken,
     this.sharedAt,
     this.isEphemeral = false,
+    this.isLocked = false,
   });
 
   /// Creates a new empty note for a given [date] (defaults to today).
@@ -114,6 +116,25 @@ class Note {
     }
   }
 
+  /// Total word count from the Quill Delta JSON content.
+  int get wordCount {
+    try {
+      final decoded = jsonDecode(content);
+      if (decoded is! List) return 0;
+      final buffer = StringBuffer();
+      for (final op in decoded) {
+        if (op is Map && op['insert'] is String) {
+          buffer.write(op['insert']);
+        }
+      }
+      final text = buffer.toString().trim();
+      if (text.isEmpty) return 0;
+      return text.split(RegExp(r'\s+')).length;
+    } catch (_) {
+      return 0;
+    }
+  }
+
   /// Extracts a plain-text preview from the Quill Delta JSON content.
   /// Returns the first ~200 characters, skipping embeds.
   String get plainTextPreview {
@@ -151,6 +172,7 @@ class Note {
     Object? shareToken = const _Unset(),
     Object? sharedAt = const _Unset(),
     bool? isEphemeral,
+    bool? isLocked,
   }) {
     return Note(
       id: id,
@@ -173,6 +195,7 @@ class Note {
       sharedAt:
           sharedAt is _Unset ? this.sharedAt : sharedAt as DateTime?,
       isEphemeral: isEphemeral ?? this.isEphemeral,
+      isLocked: isLocked ?? this.isLocked,
     );
   }
 

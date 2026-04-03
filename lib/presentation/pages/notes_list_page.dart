@@ -11,6 +11,8 @@ import '../../domain/entities/note.dart';
 import '../../domain/entities/note_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
+import '../state/security_state.dart';
+import 'package:get_it/get_it.dart';
 import '../utils/platform_utils.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
@@ -462,10 +464,23 @@ class _NotesListPageState extends State<NotesListPage> {
                           accentColor: accentColor,
                           editorBgColor:
                               widget.themeState.editorBgColor,
+                          isNoteUnlocked:
+                              GetIt.instance<SecurityState>().isNoteUnlocked(note.id),
                           onTap: () {
+                            final sec = GetIt.instance<SecurityState>();
+                            if (note.isLocked && !sec.isNoteUnlocked(note.id)) {
+                              _showUnlockDialog(context, sec, note.id, () {
+                                widget.appState.previewNote(note);
+                                if (kIsMobile) {
+                                  widget.appState.navigateToPage(2);
+                                } else {
+                                  setState(() => _loadNote());
+                                }
+                              });
+                              return;
+                            }
                             widget.appState.previewNote(note);
                             if (kIsMobile) {
-                              // Navigate to full-screen editor on mobile
                               widget.appState.navigateToPage(2);
                             } else {
                               setState(() => _loadNote());
@@ -566,7 +581,19 @@ class _NotesListPageState extends State<NotesListPage> {
                                 accentColor: accentColor,
                                 editorBgColor:
                                     widget.themeState.editorBgColor,
+                                isNoteUnlocked:
+                                    GetIt.instance<SecurityState>().isNoteUnlocked(note.id),
                                 onTap: () {
+                                  final sec = GetIt.instance<SecurityState>();
+                                  if (note.isLocked && !sec.isNoteUnlocked(note.id)) {
+                                    _showUnlockDialog(context, sec, note.id, () {
+                                      widget.appState.selectNote(note);
+                                      if (kIsMobile) {
+                                        widget.appState.navigateToPage(2);
+                                      }
+                                    });
+                                    return;
+                                  }
                                   widget.appState.selectNote(note);
                                   if (kIsMobile) {
                                     widget.appState.navigateToPage(2);
@@ -980,6 +1007,75 @@ class _NotesListPageState extends State<NotesListPage> {
     );
   }
 
+  void _showUnlockDialog(
+    BuildContext context,
+    SecurityState securityState,
+    String noteId,
+    VoidCallback onSuccess,
+  ) {
+    final pinController = TextEditingController();
+    final errorNotifier = ValueNotifier<String?>(null);
+
+    showAnimatedDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Unlock Note'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your PIN to access locked notes.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: pinController,
+              obscureText: true,
+              autofocus: true,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(hintText: 'Enter PIN'),
+              onSubmitted: (value) {
+                if (securityState.verifyAndUnlock(noteId, value)) {
+                  Navigator.pop(ctx);
+                  setState(() {});
+                  onSuccess();
+                } else {
+                  errorNotifier.value = 'Incorrect PIN';
+                }
+              },
+            ),
+            ValueListenableBuilder<String?>(
+              valueListenable: errorNotifier,
+              builder: (_, error, __) => error != null
+                  ? Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(error,
+                          style: const TextStyle(
+                              color: Colors.red, fontSize: 12)),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              if (securityState.verifyAndUnlock(noteId, pinController.text)) {
+                Navigator.pop(ctx);
+                setState(() {});
+                onSuccess();
+              } else {
+                errorNotifier.value = 'Incorrect PIN';
+              }
+            },
+            child: const Text('Unlock'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildTabBtn({
     required IconData icon,
     required String label,
@@ -1082,6 +1178,39 @@ class _NotesListPageState extends State<NotesListPage> {
 
     final isDark = theme.brightness == Brightness.dark;
     final chipBorder = widget.themeState.editorBorderColor;
+
+    // Show locked state instead of editor content
+    if (note != null && note.isLocked && !GetIt.instance<SecurityState>().isNoteUnlocked(note.id)) {
+      return GlassmorphicContainer(
+        borderRadius: 20,
+        color: widget.themeState.editorBgColor,
+        opacity: isDark ? 0.90 : 0.92,
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_rounded, size: 48, color: Colors.grey.shade400),
+              const SizedBox(height: 16),
+              Text(
+                'This note is locked',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: isDark ? Colors.white : Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Enter your PIN to view',
+                style: TextStyle(
+                  color: isDark ? Colors.white54 : Colors.grey.shade500,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
 
     if (note == null || _quillController == null) {
       return GlassmorphicContainer(

@@ -23,6 +23,7 @@ class UpdateNoteUseCase {
     Object? sharedAt = const _Unset(),
     bool? isPinned,
     bool? isEphemeral,
+    bool? isLocked,
   }) async {
     final existing = await _repository.getById(noteId);
     if (existing == null) return null;
@@ -48,6 +49,7 @@ class UpdateNoteUseCase {
       sharedAt: sharedAt is _Unset ? existing.sharedAt : sharedAt,
       isPinned: isPinned,
       isEphemeral: isEphemeral,
+      isLocked: isLocked,
     );
 
     await _repository.save(updated);
