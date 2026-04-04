@@ -98,6 +98,19 @@ class AutoSaveService {
     return _performSave(noteId: noteId, title: title, content: content);
   }
 
+  /// Flush the currently watched note using registered lazy getters.
+  /// Returns true if a save was performed.
+  Future<bool> flushWatched() async {
+    if (_watchedNoteId == null) return false;
+    _isDirty = false;
+    _debounceTimer?.cancel();
+    return _performSave(
+      noteId: _watchedNoteId!,
+      title: _getTitle?.call(),
+      content: _getContent?.call(),
+    );
+  }
+
   /// Cancel any pending changes without saving.
   void cancel() {
     _isDirty = false;

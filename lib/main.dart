@@ -20,6 +20,7 @@ import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
 import 'presentation/state/reminder_state.dart';
 import 'presentation/state/security_state.dart';
+import 'presentation/state/tiling_state.dart';
 import 'presentation/state/writing_stats_state.dart';
 import 'presentation/utils/platform_utils.dart';
 import 'application/services/sync_engine.dart';
@@ -85,7 +86,22 @@ void main() async {
 
   // 5. Initialize app state (load notes, create daily note)
   final appState = getIt<AppState>();
-  await appState.initialize();
+
+  // Load tiling state BEFORE app initialize (which runs cleanupEmptyNotes).
+  // We need to resolve tiling note IDs before cleanup deletes empty notes
+  // that might be in the tiling layout.
+  await appState.loadNotesOnly();
+  final tilingState = getIt<TilingState>();
+  try {
+    await tilingState.loadFromDisk(appState.notes);
+  } catch (_) {
+    // Corrupted tiling state — ignore and start fresh.
+  }
+
+  // Now initialize (cleanup + daily note), passing tiling IDs to protect
+  await appState.initialize(
+    protectedNoteIds: tilingState.tiledNotes.map((n) => n.id).toSet(),
+  );
   getIt<WritingStatsState>().recordActivity(appState.notes);
 
   // Initialize timer state so HomePage has daily task stats immediately

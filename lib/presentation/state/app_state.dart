@@ -24,6 +24,7 @@ import '../../application/use_cases/cleanup_empty_notes_use_case.dart';
 import '../../application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
 import 'package:get_it/get_it.dart';
 import 'security_state.dart';
+import 'tiling_state.dart';
 import 'writing_stats_state.dart';
 import '../../application/services/auto_save_service.dart';
 import '../../application/services/sync_engine.dart';
@@ -75,12 +76,15 @@ class AppState extends ChangeNotifier {
   // Focus / zen mode
   bool _isZenMode = false;
 
-  // Split view mode
+  // Split view mode (deprecated — delegates to TilingState)
   bool _isSplitMode = false;
   Note? _splitNote;
 
   // Goodbye screen on close
   bool _isClosing = false;
+
+  // Editor save callback — registered by NoteEditorPage for on-navigate save
+  Future<void> Function()? _editorSaveCallback;
 
   // Auto-update state
   UpdateInfo? _availableUpdate;
@@ -140,6 +144,7 @@ class AppState extends ChangeNotifier {
 
   /// Late-wired to avoid circular dependency in DI.
   set syncEngine(SyncEngine engine) => _syncEngine = engine;
+  set editorSaveCallback(Future<void> Function()? cb) => _editorSaveCallback = cb;
 
   // Getters
   List<Note> get notes => _notes;
@@ -210,17 +215,29 @@ class AppState extends ChangeNotifier {
     return result;
   }
 
-  /// Initialize: load notes and ensure a daily note exists.
-  Future<void> initialize() async {
+  /// Pre-load notes from DB without cleanup. Used to resolve tiling IDs
+  /// before cleanup deletes empty notes.
+  Future<void> loadNotesOnly() async {
+    _notes = await _getNotes.getAll();
+    _noteProjects = await _getNoteProjects.getAll();
+  }
+
+  /// Initialize: cleanup empty notes and ensure a daily note exists.
+  /// [protectedNoteIds] are excluded from empty-note cleanup (e.g. tiling notes).
+  Future<void> initialize({Set<String> protectedNoteIds = const {}}) async {
     _isLoading = true;
     notifyListeners();
 
     try {
-      _notes = await _getNotes.getAll();
-      _noteProjects = await _getNoteProjects.getAll();
+      // Reload in case loadNotesOnly wasn't called
+      if (_notes.isEmpty) {
+        _notes = await _getNotes.getAll();
+        _noteProjects = await _getNoteProjects.getAll();
+      }
 
       // Safety net: clean up orphaned empty notes and expired ephemeral notes
-      final removed = await _cleanupEmptyNotes.execute();
+      // (skip notes currently open in tiling)
+      final removed = await _cleanupEmptyNotes.execute(excludeIds: protectedNoteIds);
       final expiredRemoved = await _cleanupExpiredEphemeral.execute();
       if (removed > 0 || expiredRemoved > 0) {
         _notes = await _getNotes.getAll();
@@ -275,13 +292,32 @@ class AppState extends ChangeNotifier {
   Future<void> refreshNotes() async {
     _notes = await _getNotes.getAll();
     _noteProjects = await _getNoteProjects.getAll();
+    final noteMap = {for (final n in _notes) n.id: n};
+    // Update currentNote with fresh data from DB
+    if (_currentNote != null) {
+      final fresh = noteMap[_currentNote!.id];
+      if (fresh != null) _currentNote = fresh;
+    }
+    // Update tiling notes with fresh data from DB
+    try {
+      final tiling = GetIt.instance<TilingState>();
+      for (var i = 0; i < tiling.tiledNotes.length; i++) {
+        final fresh = noteMap[tiling.tiledNotes[i].id];
+        if (fresh != null) tiling.tiledNotes[i] = fresh;
+      }
+    } catch (_) {}
     notifyListeners();
   }
 
   /// Set the current note being viewed/edited.
-  void selectNote(Note note) {
-    _currentNote = note;
-    _selectedPageIndex = 2; // Navigate to editor
+  /// Flushes any pending saves and reads fresh content from DB.
+  Future<void> selectNote(Note note) async {
+    // Flush whatever is currently being edited (notes list preview, editor, etc.)
+    await autoSaveService.flushWatched();
+    // Read fresh from DB
+    final fresh = await _getNotes.getById(note.id);
+    _currentNote = fresh ?? note;
+    _selectedPageIndex = 2;
     notifyListeners();
   }
 
@@ -299,9 +335,25 @@ class AppState extends ChangeNotifier {
 
   /// Navigate to a specific page via the sidebar.
   /// Locks the PIN session on navigation so locked notes require re-entry.
-  void navigateToPage(int index) {
+  Future<void> navigateToPage(int index) async {
     if (index != _selectedPageIndex) {
       GetIt.instance<SecurityState>().lockAll();
+      // Flush all pending saves when changing pages
+      final futures = <Future>[];
+      // Flush autoSaveService (covers editor + notes list preview)
+      futures.add(autoSaveService.flushWatched());
+      // Flush editor callback + tiling if leaving editor
+      if (_selectedPageIndex == 2) {
+        if (_editorSaveCallback != null) {
+          futures.add(_editorSaveCallback!());
+        }
+        final tiling = GetIt.instance<TilingState>();
+        if (tiling.isActive) {
+          futures.add(tiling.flushAll());
+        }
+      }
+      await Future.wait(futures);
+      await refreshNotes();
     }
     _selectedPageIndex = index;
     notifyListeners();
@@ -784,6 +836,14 @@ class AppState extends ChangeNotifier {
     if (_currentNote?.id == updatedNote.id) {
       _currentNote = updatedNote;
     }
+    // Sync to tiling if the note is open there
+    try {
+      final tiling = GetIt.instance<TilingState>();
+      final ti = tiling.tiledNotes.indexWhere((n) => n.id == updatedNote.id);
+      if (ti >= 0) {
+        tiling.tiledNotes[ti] = updatedNote;
+      }
+    } catch (_) {}
     notifyListeners();
   }
 

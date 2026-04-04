@@ -1398,6 +1398,7 @@ class _NotesListPageState extends State<NotesListPage> {
             ),
           ),
 
+          const SizedBox(height: 8),
           Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
 
           // Editable content

@@ -12,6 +12,8 @@ import '../state/security_state.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/editor_text_controls.dart';
 import '../widgets/mention_overlay.dart';
+import '../state/tiling_state.dart';
+import '../widgets/tiling_layout.dart';
 
 /// Rich text note editor with auto-save.
 ///
@@ -47,6 +49,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   late FocusNode _editorFocusNode;
   String? _loadedNoteId;
 
+  // ── Tiling state (singleton, persisted to disk) ─────────────────────
+  TilingState get _tiling => GetIt.instance<TilingState>();
+
+
   // ignore: experimental_member_use
   static final _controllerConfig = QuillControllerConfig(
     // ignore: experimental_member_use
@@ -57,13 +63,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   );
 
   // ── Save indicator ────────────────────────────────────────────────────
-  // ValueNotifier so only the chip rebuilds, never the whole widget tree.
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
-  Timer? _debounce; // 3 s after last edit → save
-  Timer? _hideTimer; // 2 s after save → hide "Saved"
-  Timer? _editPoller; // 500 ms periodic edit detector
+  Timer? _debounce;
+  Timer? _hideTimer;
+  Timer? _editPoller;
 
-  // Snapshots used by the poller to detect real edits.
+  // Snapshots for polling-based edit detection.
+  // Why polling instead of document.changes?
+  //   QuillEditor emits phantom change events on widget rebuilds triggered
+  //   by notifyListeners(). Polling is immune to that — it only reacts
+  //   when the serialized content actually differs.
   String _prevContent = '';
   String _prevTitle = '';
   int _prevDocLength = 0;
@@ -83,13 +92,21 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _titleController = TextEditingController();
     _quillController = QuillController.basic(config: _controllerConfig);
     _loadNote();
+    // Register save callback so navigateToPage can flush before switching
+    widget.appState.editorSaveCallback = _saveCurrentNote;
   }
 
   @override
   void didUpdateWidget(covariant NoteEditorPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.appState.currentNote?.id != _loadedNoteId) {
+    final note = widget.appState.currentNote;
+    if (note == null) return;
+    if (note.id != _loadedNoteId) {
       _loadNote();
+      setState(() {});
+    } else if (note.content != _prevContent) {
+      // Same note but content changed (e.g. edited in notes list preview)
+      _loadNote(force: true);
       setState(() {});
     }
   }
@@ -101,13 +118,14 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _editPoller?.cancel();
 
     final note = widget.appState.currentNote;
-    if (note != null) {
+    if (note != null && !_tiling.isActive) {
       widget.appState.autoSaveService.forceSave(
         noteId: note.id,
         title: _titleController.text,
         content: _serializeContent(),
       );
     }
+    widget.appState.editorSaveCallback = null;
     widget.appState.autoSaveService.unwatch();
     _dismissMention();
     _quillController.dispose();
@@ -121,12 +139,12 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   // ── Note loading ──────────────────────────────────────────────────────
 
-  void _loadNote() {
+  void _loadNote({bool force = false}) {
     final note = widget.appState.currentNote;
-    if (note == null || note.id == _loadedNoteId) return;
+    if (note == null) return;
+    if (!force && note.id == _loadedNoteId) return;
     _loadedNoteId = note.id;
 
-    // Reset timers from previous note.
     _debounce?.cancel();
     _hideTimer?.cancel();
     _editPoller?.cancel();
@@ -134,7 +152,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     _titleController.text = note.title;
 
-    // Dispose previous controller to prevent listener/memory leaks.
     _quillController.removeListener(_checkForMention);
     _quillController.dispose();
 
@@ -149,28 +166,39 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       _quillController = QuillController.basic(config: _controllerConfig);
     }
 
-    // Listen for selection changes to detect @mention trigger.
     _quillController.addListener(_checkForMention);
 
-    // Initialize snapshots.
+    // Initialize snapshots
     _prevContent = _serializeContent();
     _prevTitle = _titleController.text;
     _prevDocLength = _quillController.document.length;
 
-    // Register lazy getters for the service's periodic safety-net timer.
+    // Register for auto-save service safety net
     widget.appState.autoSaveService.watch(
       noteId: note.id,
       getTitle: () => _titleController.text,
       getContent: _serializeContent,
     );
 
-    // Start polling for edits — immune to phantom QuillEditor events.
-    // 1.5 s is enough since the debounce save is 3 s after last edit.
+    // Polling-based edit detection (immune to phantom QuillEditor events)
     _editPoller = Timer.periodic(
       const Duration(milliseconds: 1500),
       (_) => _pollForEdits(),
     );
+  }
 
+  /// Save the current note content to DB. Called by AppState.navigateToPage.
+  Future<void> _saveCurrentNote() async {
+    // Don't save from the main editor when tiling is active —
+    // tiling panels own the content and flushAll handles their saves.
+    if (_tiling.isActive) return;
+    final note = widget.appState.currentNote;
+    if (note == null) return;
+    await widget.appState.autoSaveService.forceSave(
+      noteId: note.id,
+      title: _titleController.text,
+      content: _serializeContent(),
+    );
   }
 
   // ── Edit detection & save ─────────────────────────────────────────────
@@ -179,12 +207,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       jsonEncode(_quillController.document.toDelta().toJson());
 
   /// Called every 1.5 s — compares current state against previous snapshot.
-  /// Uses a cheap length check first to skip expensive serialization when idle.
   void _pollForEdits() {
     final title = _titleController.text;
     final doc = _quillController.document;
 
-    // Cheap check: if title and doc length are unchanged, likely no edit.
     if (title == _prevTitle && doc.length == _prevDocLength) return;
 
     final content = _serializeContent();
@@ -204,10 +230,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _saveStatus.value = '';
     widget.appState.autoSaveService.markDirty();
     _debounce?.cancel();
-    _debounce = Timer(const Duration(seconds: 3), _save);
+    _debounce = Timer(const Duration(seconds: 2), _save);
   }
 
-  /// Fires 3 s after the last detected edit.
+  /// Fires 2 s after the last detected edit.
   Future<void> _save() async {
     if (!mounted) return;
     final note = widget.appState.currentNote;
@@ -224,7 +250,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     if (!mounted) return;
     if (ok) {
-      // Update snapshots so the poller won't re-detect saved content.
       _prevContent = content;
       _prevTitle = title;
       _saveStatus.value = 'saved';
@@ -232,8 +257,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       _hideTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) _saveStatus.value = '';
       });
-    } else {
-      _saveStatus.value = '';
     }
   }
 
@@ -408,9 +431,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
     final accentColor = widget.themeState.accentColor;
-    final note = widget.appState.currentNote;
+    final currentNote = widget.appState.currentNote;
+    // In tiling mode, toolbar reflects the focused note
+    final note = _tiling.isActive
+        ? _tiling.tiledNotes.cast<Note?>().firstWhere(
+              (n) => n!.id == _tiling.focusedNoteId,
+              orElse: () => _tiling.tiledNotes.isNotEmpty ? _tiling.tiledNotes.first : currentNote,
+            )
+        : currentNote;
 
-    final noteColor = _parseNoteColor(note?.color);
+    // In tiling mode, toolbar always uses default theme colors
+    // (each panel handles its own note color independently)
+    final noteColor = _tiling.isActive ? null : _parseNoteColor(note?.color);
     final hasNoteColor = noteColor != null;
     final editorBg = noteColor ?? widget.themeState.editorBgColor;
     // Lower opacity when note has a color so the glass effect shows through
@@ -482,409 +514,35 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               : const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         children: [
-          // Top controls row: title + toolbar (hidden in zen mode)
-          if (!isZen) LayoutBuilder(
-            builder: (context, constraints) {
-              final isMobile = constraints.maxWidth < 560;
-
-              // ── Shared widgets ──
-
-              final titleField = SizedBox(
-                height: isMobile ? 40 : 44,
-                child: TextField(
-                  controller: _titleController,
-                  onChanged: (_) {
-                    _prevTitle = _titleController.text;
-                    _onUserEdit();
-                  },
-                  style: TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: isMobile ? 14 : 15,
-                    color: hasNoteColor
-                        ? iconColor
-                        : widget.themeState.editorTextColor,
-                  ),
-                  decoration: InputDecoration(
-                    hintText: 'Note title...',
-                    filled: true,
-                    fillColor: chipBg,
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(isMobile ? 12 : 14),
-                      borderSide: BorderSide(color: chipBorder, width: 1),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(isMobile ? 12 : 14),
-                      borderSide: BorderSide(
-                        color: accentColor.withValues(alpha: 0.4),
-                        width: 1.5,
-                      ),
-                    ),
-                    contentPadding: EdgeInsets.symmetric(
-                      horizontal: isMobile ? 12 : 16,
-                      vertical: isMobile ? 10 : 12,
-                    ),
-                    prefixIcon: Icon(
-                      Icons.edit_note_rounded,
-                      color: iconColor.withValues(alpha: 0.6),
-                      size: isMobile ? 18 : 20,
-                    ),
-                    hintStyle: TextStyle(
-                      color: widget.themeState.editorMutedTextColor,
-                      fontWeight: FontWeight.w500,
-                      fontSize: isMobile ? 14 : 15,
-                    ),
-                  ),
-                ),
-              );
-
-              final dateChip = Container(
-                height: isMobile ? 36 : 44,
-                padding: EdgeInsets.symmetric(
-                    horizontal: isMobile ? 10 : 14),
-                decoration: BoxDecoration(
-                  color: chipBg,
-                  borderRadius:
-                      BorderRadius.circular(isMobile ? 12 : 14),
-                  border: Border.all(color: chipBorder, width: 1),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.calendar_today_rounded,
-                      size: isMobile ? 12 : 14,
-                      color: iconColor,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      isMobile
-                          ? '${note.updatedAt.month}/${note.updatedAt.day}'
-                          : '${note.updatedAt.month}/${note.updatedAt.day}/${note.updatedAt.year}',
-                      style: TextStyle(
-                        fontSize: isMobile ? 11 : 13,
-                        fontWeight: FontWeight.w500,
-                        color: chipText,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-
-              final btnSize = isMobile ? 36.0 : 44.0;
-              final btnRadius = isMobile ? 12.0 : 14.0;
-              final btnIconSize = isMobile ? 16.0 : 18.0;
-
-              final syncIndicator = Container(
-                height: btnSize,
-                width: btnSize,
-                decoration: BoxDecoration(
-                  color: chipBg,
-                  borderRadius: BorderRadius.circular(btnRadius),
-                  border: Border.all(color: chipBorder, width: 1),
-                ),
-                child: Icon(
-                  _getSyncIcon(note.syncStatus.name),
-                  size: btnIconSize,
-                  color: iconColor,
-                ),
-              );
-
-              final colorButton = _buildColorButton(
-                note, accentColor, iconColor, chipBg, chipBorder,
-                size: btnSize, radius: btnRadius,
-              );
-
-              final compactToggle = InkWell(
-                onTap: () => isCompact
-                    ? widget.appState.exitCompactMode()
-                    : widget.appState.enterCompactMode(note),
-                borderRadius: BorderRadius.circular(btnRadius),
-                child: Container(
-                  height: btnSize,
-                  width: btnSize,
-                  decoration: BoxDecoration(
-                    color: chipBg,
-                    borderRadius: BorderRadius.circular(btnRadius),
-                    border: Border.all(color: chipBorder, width: 1),
-                  ),
-                  child: Icon(
-                    isCompact
-                        ? Icons.fullscreen_rounded
-                        : Icons.picture_in_picture_alt_outlined,
-                    size: btnIconSize,
-                    color: iconColor,
-                  ),
-                ),
-              );
-
-              final saveIndicator = ValueListenableBuilder<String>(
-                valueListenable: _saveStatus,
-                builder: (context, status, _) {
-                  return AnimatedSize(
-                    duration: const Duration(milliseconds: 250),
-                    curve: Curves.easeInOut,
-                    alignment: Alignment.centerLeft,
-                    child: status == 'saved'
-                        ? Container(
-                            height: btnSize,
-                            margin: EdgeInsets.only(
-                                left: isMobile ? 6 : 8),
-                            padding: EdgeInsets.symmetric(
-                                horizontal: isMobile ? 8 : 12),
-                            decoration: BoxDecoration(
-                              color: isDark
-                                  ? Colors.green.withValues(alpha: 0.15)
-                                  : Colors.green.shade50,
-                              borderRadius:
-                                  BorderRadius.circular(btnRadius),
-                              border: Border.all(
-                                color: isDark
-                                    ? Colors.green.withValues(alpha: 0.30)
-                                    : Colors.green.shade200,
-                                width: 1,
-                              ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  Icons.check_circle_outline_rounded,
-                                  size: isMobile ? 12 : 14,
-                                  color: isDark
-                                      ? Colors.green.shade300
-                                      : Colors.green.shade600,
-                                ),
-                                const SizedBox(width: 4),
-                                Text(
-                                  'Saved',
-                                  style: TextStyle(
-                                    fontSize: isMobile ? 10 : 12,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDark
-                                        ? Colors.green.shade300
-                                        : Colors.green.shade600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          )
-                        : const SizedBox.shrink(),
-                  );
-                },
-              );
-
-              if (isMobile) {
-                // Mobile: single row — title + color + save only
-                return Row(
-                  children: [
-                    Expanded(child: titleField),
-                    const SizedBox(width: 8),
-                    colorButton,
-                    saveIndicator,
-                  ],
-                );
-              }
-
-              final ephemeralToggle = Tooltip(
-                message: note.isEphemeral
-                    ? 'Quick Note (auto-deletes in 24h)'
-                    : 'Make Quick Note',
-                child: InkWell(
-                  onTap: () => widget.appState.toggleEphemeral(note.id),
-                  borderRadius: BorderRadius.circular(btnRadius),
-                  child: Container(
-                    height: btnSize,
-                    width: btnSize,
-                    decoration: BoxDecoration(
-                      color: note.isEphemeral
-                          ? Colors.amber.withValues(alpha: 0.15)
-                          : chipBg,
-                      borderRadius: BorderRadius.circular(btnRadius),
-                      border: Border.all(
-                        color: note.isEphemeral
-                            ? Colors.amber.withValues(alpha: 0.4)
-                            : chipBorder,
-                        width: 1,
-                      ),
-                    ),
-                    child: Icon(
-                      note.isEphemeral
-                          ? Icons.bolt_rounded
-                          : Icons.bolt_outlined,
-                      size: btnIconSize,
-                      color: note.isEphemeral
-                          ? Colors.amber.shade600
-                          : iconColor,
-                    ),
-                  ),
-                ),
-              );
-
-              final securityState = GetIt.instance<SecurityState>();
-              final lockToggle = Tooltip(
-                message: note.isLocked ? 'Unlock Note' : 'Lock Note',
-                child: InkWell(
-                  onTap: () {
-                    if (!note.isLocked && !securityState.hasPin) {
-                      // Need to set PIN first
-                      _showSetPinDialog(context, securityState, note);
-                    } else {
-                      widget.appState.toggleLock(note.id);
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(btnRadius),
-                  child: Container(
-                    height: btnSize,
-                    width: btnSize,
-                    decoration: BoxDecoration(
-                      color: note.isLocked
-                          ? Colors.red.withValues(alpha: 0.15)
-                          : chipBg,
-                      borderRadius: BorderRadius.circular(btnRadius),
-                      border: Border.all(
-                        color: note.isLocked
-                            ? Colors.red.withValues(alpha: 0.4)
-                            : chipBorder,
-                        width: 1,
-                      ),
-                    ),
-                    child: Icon(
-                      note.isLocked
-                          ? Icons.lock_rounded
-                          : Icons.lock_open_rounded,
-                      size: btnIconSize,
-                      color: note.isLocked ? Colors.red.shade400 : iconColor,
-                    ),
-                  ),
-                ),
-              );
-
-              final splitToggle = Tooltip(
-                message: widget.appState.isSplitMode
-                    ? 'Exit Split View'
-                    : 'Split View',
-                child: InkWell(
-                  onTap: () => widget.appState.toggleSplitMode(),
-                  borderRadius: BorderRadius.circular(btnRadius),
-                  child: Container(
-                    height: btnSize,
-                    width: btnSize,
-                    decoration: BoxDecoration(
-                      color: widget.appState.isSplitMode
-                          ? accentColor.withValues(alpha: 0.15)
-                          : chipBg,
-                      borderRadius: BorderRadius.circular(btnRadius),
-                      border: Border.all(
-                        color: widget.appState.isSplitMode
-                            ? accentColor.withValues(alpha: 0.4)
-                            : chipBorder,
-                        width: 1,
-                      ),
-                    ),
-                    child: Icon(
-                      Icons.vertical_split_rounded,
-                      size: btnIconSize,
-                      color: widget.appState.isSplitMode
-                          ? accentColor
-                          : iconColor,
-                    ),
-                  ),
-                ),
-              );
-
-              final zenToggle = InkWell(
-                onTap: () => widget.appState.enterZenMode(),
-                borderRadius: BorderRadius.circular(btnRadius),
-                child: Container(
-                  height: btnSize,
-                  width: btnSize,
-                  decoration: BoxDecoration(
-                    color: chipBg,
-                    borderRadius: BorderRadius.circular(btnRadius),
-                    border: Border.all(color: chipBorder, width: 1),
-                  ),
-                  child: Tooltip(
-                    message: 'Focus Mode (F11)',
-                    child: Icon(
-                      Icons.spa_outlined,
-                      size: btnIconSize,
-                      color: iconColor,
-                    ),
-                  ),
-                ),
-              );
-
-              final shareButton = InkWell(
-                onTap: () async {
-                  final url = await widget.appState.shareNote(note);
-                  if (url != null && context.mounted) {
-                    await Clipboard.setData(ClipboardData(text: url));
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: const Text('Share link copied! Expires in 5 minutes.'),
-                          backgroundColor: accentColor,
-                          behavior: SnackBarBehavior.floating,
-                          duration: const Duration(seconds: 3),
-                        ),
-                      );
-                    }
-                  }
-                },
-                borderRadius: BorderRadius.circular(btnRadius),
-                child: Container(
-                  height: btnSize,
-                  width: btnSize,
-                  decoration: BoxDecoration(
-                    color: chipBg,
-                    borderRadius: BorderRadius.circular(btnRadius),
-                    border: Border.all(color: chipBorder, width: 1),
-                  ),
-                  child: Tooltip(
-                    message: 'Share note',
-                    child: Icon(
-                      Icons.share_outlined,
-                      size: btnIconSize,
-                      color: iconColor,
-                    ),
-                  ),
-                ),
-              );
-
-              // Desktop: single row (original)
-              return Row(
-                children: [
-                  Expanded(flex: 3, child: titleField),
-                  const SizedBox(width: 12),
-                  dateChip,
-                  const SizedBox(width: 12),
-                  syncIndicator,
-                  const SizedBox(width: 8),
-                  colorButton,
-                  const SizedBox(width: 8),
-                  shareButton,
-                  const SizedBox(width: 8),
-                  ephemeralToggle,
-                  const SizedBox(width: 8),
-                  lockToggle,
-                  const SizedBox(width: 8),
-                  splitToggle,
-                  const SizedBox(width: 8),
-                  zenToggle,
-                  const SizedBox(width: 8),
-                  compactToggle,
-                  saveIndicator,
-                ],
-              );
-            },
-          ),
-
-          if (!isZen) const SizedBox(height: 12),
+          // ── Static toolbar (top) — or Exit Zen button in zen mode ───
+          if (!isZen)
+            _buildEditorToolbar(note, accentColor, editorBg, chipBg, chipBorder, chipText, iconColor, isDark, isCompact, hasNoteColor),
 
           // Main editor area
           Expanded(
             child: note.isLocked && !GetIt.instance<SecurityState>().isNoteUnlocked(note.id)
                 ? _buildLockedOverlay(context, editorBg, chipBorder, accentColor, note.id)
+                : _tiling.isActive
+                ? // Tiling mode: full tiling layout replaces the editor
+                  TilingLayoutWidget(
+                    tiling: _tiling,
+                    appState: widget.appState,
+                    themeState: widget.themeState,
+                    accentColor: accentColor,
+                    onChanged: () async {
+                      if (!_tiling.isActive) {
+                        // Tiling auto-exited — flush saves then refresh
+                        await _tiling.flushAll();
+                        await widget.appState.refreshNotes();
+                        if (mounted) {
+                          _loadNote(force: true);
+                          setState(() {});
+                        }
+                      } else {
+                        setState(() {});
+                      }
+                    },
+                  )
                 : Stack(
               children: [
                 Row(
@@ -1105,55 +763,350 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     ],
                   ),
                 ),
-                // Split view: second editor panel
-                if (widget.appState.isSplitMode) ...[
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _SplitEditorPanel(
-                      appState: widget.appState,
-                      themeState: widget.themeState,
-                      accentColor: accentColor,
-                    ),
-                  ),
-                ],
               ],
             ),
 
-                // Zen mode: floating exit button (top-right)
-                if (isZen)
-                  Positioned(
-                    top: 8,
-                    right: 8,
-                    child: Material(
-                      color: editorBg.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(12),
-                      child: InkWell(
-                        onTap: () => widget.appState.exitZenMode(),
-                        borderRadius: BorderRadius.circular(12),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 12, vertical: 8),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.close_fullscreen_rounded,
-                                  size: 16, color: iconColor),
-                              const SizedBox(width: 6),
-                              Text('Exit Zen',
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w500,
-                                      color: chipText)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
               ],
             ),
           ),
         ],
+      ),
+    );
+  }
+
+
+  // ── Tiling note picker ─────────────────────────────────────────────
+
+  void _showTilingNotePicker(BuildContext context, Color accentColor) {
+    final tiledIds = _tiling.tiledNotes.map((n) => n.id).toSet();
+    final available = widget.appState.notes
+        .where((n) => !tiledIds.contains(n.id))
+        .toList();
+
+    showDialog<Note>(
+      context: context,
+      builder: (dialogCtx) {
+        final isDark = Theme.of(dialogCtx).brightness == Brightness.dark;
+        final chipText = isDark ? Colors.white70 : Colors.grey.shade600;
+
+        return SimpleDialog(
+          title: const Text('Add note to tiling',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          children: [
+            // Create new note option
+            ListTile(
+              leading: Icon(Icons.add_rounded, color: accentColor),
+              title: Text('Create new note',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: accentColor)),
+              onTap: () async {
+                final newNote = await widget.appState.createNewNote();
+                if (dialogCtx.mounted) {
+                  Navigator.of(dialogCtx).pop(newNote);
+                }
+              },
+            ),
+            const Divider(height: 1),
+            if (available.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('No existing notes available',
+                    style: TextStyle(fontSize: 13, color: chipText),
+                    textAlign: TextAlign.center),
+              )
+            else
+              SizedBox(
+                width: 340,
+                height: 300,
+                child: ListView.builder(
+                  itemCount: available.length,
+                  itemBuilder: (ctx, i) {
+                    final note = available[i];
+                    return ListTile(
+                      dense: true,
+                      title: Text(
+                        note.title.isEmpty ? 'Untitled' : note.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13),
+                      ),
+                      onTap: () => Navigator.of(dialogCtx).pop(note),
+                    );
+                  },
+                ),
+              ),
+          ],
+        );
+      },
+    ).then((selectedNote) {
+      if (selectedNote != null) {
+        setState(() => _tiling.addNote(selectedNote));
+      }
+    });
+  }
+
+  // ── Editor toolbar (static, top) ──────────────────────────────────────
+
+  Widget _buildEditorToolbar(
+    Note note, Color accentColor, Color editorBg, Color chipBg,
+    Color chipBorder, Color chipText, Color iconColor, bool isDark,
+    bool isCompact, bool hasNoteColor,
+  ) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isMobile = constraints.maxWidth < 560;
+          final btnSize = isMobile ? 36.0 : 38.0;
+          final btnRadius = isMobile ? 10.0 : 12.0;
+          final btnIconSize = 16.0;
+
+          return Row(
+            children: [
+              // Title
+              Expanded(
+                flex: 3,
+                child: SizedBox(
+                  height: 38,
+                  child: TextField(
+                    controller: _titleController,
+                    onChanged: (_) {
+                      _prevTitle = _titleController.text;
+                      _onUserEdit();
+                    },
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: hasNoteColor
+                          ? iconColor
+                          : widget.themeState.editorTextColor,
+                    ),
+                    decoration: InputDecoration(
+                      hintText: 'Note title...',
+                      filled: true,
+                      fillColor: chipBg,
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(btnRadius),
+                        borderSide: BorderSide(color: chipBorder, width: 1),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(btnRadius),
+                        borderSide: BorderSide(
+                          color: accentColor.withValues(alpha: 0.4),
+                          width: 1.5,
+                        ),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.edit_note_rounded,
+                        color: iconColor.withValues(alpha: 0.6),
+                        size: 18,
+                      ),
+                      hintStyle: TextStyle(
+                        color: widget.themeState.editorMutedTextColor,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Date
+              Text(
+                '${note.updatedAt.month}/${note.updatedAt.day}/${note.updatedAt.year}',
+                style: TextStyle(fontSize: 12, color: chipText),
+              ),
+              const SizedBox(width: 8),
+              // Sync
+              Icon(_getSyncIcon(note.syncStatus.name), size: 14, color: iconColor),
+              const SizedBox(width: 6),
+              // Color
+              _buildColorButton(
+                note, accentColor, iconColor, chipBg, chipBorder,
+                size: btnSize, radius: btnRadius,
+              ),
+              const SizedBox(width: 4),
+              // Share
+              _buildToolbarBtn(
+                icon: Icons.share_outlined, tooltip: 'Share note',
+                onTap: () async {
+                  final url = await widget.appState.shareNote(note);
+                  if (url != null && context.mounted) {
+                    await Clipboard.setData(ClipboardData(text: url));
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: const Text('Share link copied!')),
+                      );
+                    }
+                  }
+                },
+                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+              ),
+              const SizedBox(width: 4),
+              // Ephemeral
+              _buildToolbarBtn(
+                icon: note.isEphemeral ? Icons.bolt_rounded : Icons.bolt_outlined,
+                tooltip: note.isEphemeral ? 'Quick Note (24h)' : 'Make Quick Note',
+                onTap: () => widget.appState.toggleEphemeral(note.id),
+                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                iconColor: note.isEphemeral ? Colors.amber.shade600 : iconColor,
+                chipBg: note.isEphemeral ? Colors.amber.withValues(alpha: 0.15) : chipBg,
+                chipBorder: note.isEphemeral ? Colors.amber.withValues(alpha: 0.4) : chipBorder,
+              ),
+              const SizedBox(width: 4),
+              // Lock
+              _buildToolbarBtn(
+                icon: note.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                tooltip: note.isLocked ? 'Unlock' : 'Lock',
+                onTap: () {
+                  final sec = GetIt.instance<SecurityState>();
+                  if (!note.isLocked && !sec.hasPin) {
+                    _showSetPinDialog(context, sec, note);
+                  } else {
+                    widget.appState.toggleLock(note.id);
+                  }
+                },
+                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                iconColor: note.isLocked ? Colors.red.shade400 : iconColor,
+                chipBg: note.isLocked ? Colors.red.withValues(alpha: 0.15) : chipBg,
+                chipBorder: note.isLocked ? Colors.red.withValues(alpha: 0.4) : chipBorder,
+              ),
+              const SizedBox(width: 4),
+              // Tiling
+              _buildToolbarBtn(
+                icon: Icons.dashboard_rounded,
+                tooltip: _tiling.isActive
+                    ? 'Tiling (${_tiling.tileCount}/${TilingState.maxTiles})'
+                    : 'Tiling View',
+                onTap: () async {
+                  if (!_tiling.isActive) {
+                    // Save current editor content before entering tiling
+                    await widget.appState.autoSaveService.forceSave(
+                      noteId: note.id,
+                      title: _titleController.text,
+                      content: _serializeContent(),
+                    );
+                    await widget.appState.refreshNotes();
+                    if (!mounted) return;
+                    // Use the fresh note from DB
+                    final freshNote = widget.appState.currentNote ?? note;
+                    setState(() => _tiling.enterTiling(initialNotes: [freshNote]));
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _showTilingNotePicker(context, accentColor);
+                    });
+                  }
+                },
+                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                iconColor: _tiling.isActive ? accentColor : iconColor,
+                chipBg: _tiling.isActive ? accentColor.withValues(alpha: 0.15) : chipBg,
+                chipBorder: _tiling.isActive ? accentColor.withValues(alpha: 0.4) : chipBorder,
+              ),
+              if (_tiling.isActive && _tiling.canAddTile) ...[
+                const SizedBox(width: 4),
+                _buildToolbarBtn(
+                  icon: Icons.add_rounded, tooltip: 'Add note',
+                  onTap: () => _showTilingNotePicker(context, accentColor),
+                  size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                  iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                ),
+              ],
+              if (_tiling.isActive) ...[
+                const SizedBox(width: 4),
+                _buildToolbarBtn(
+                  icon: Icons.close_fullscreen_rounded, tooltip: 'Exit Tiling',
+                  onTap: () async {
+                    // Flush all panel edits BEFORE destroying them
+                    await _tiling.flushAll();
+                    _tiling.exitTiling();
+                    // Small delay for any fire-and-forget dispose saves
+                    await Future.delayed(const Duration(milliseconds: 100));
+                    await widget.appState.refreshNotes();
+                    if (mounted) {
+                      _loadNote(force: true);
+                      setState(() {});
+                    }
+                  },
+                  size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                  iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                ),
+              ],
+              const SizedBox(width: 4),
+              // Zen
+              _buildToolbarBtn(
+                icon: Icons.spa_outlined, tooltip: 'Focus Mode',
+                onTap: () => widget.appState.enterZenMode(),
+                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+              ),
+              // Compact (disabled in tiling mode)
+              if (!_tiling.isActive) ...[
+                const SizedBox(width: 4),
+                _buildToolbarBtn(
+                  icon: isCompact ? Icons.fullscreen_rounded : Icons.picture_in_picture_alt_outlined,
+                  tooltip: isCompact ? 'Full size' : 'Compact',
+                  onTap: () => isCompact
+                      ? widget.appState.exitCompactMode()
+                      : widget.appState.enterCompactMode(note),
+                  size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                  iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                ),
+              ],
+              // Save indicator
+              ValueListenableBuilder<String>(
+                valueListenable: _saveStatus,
+                builder: (context, status, _) {
+                  if (status != 'saved') return const SizedBox.shrink();
+                  return Padding(
+                    padding: const EdgeInsets.only(left: 6),
+                    child: Icon(Icons.check_circle_outline_rounded,
+                        size: 14,
+                        color: isDark
+                            ? Colors.green.shade300
+                            : Colors.green.shade600),
+                  );
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Toolbar button helper ────────────────────────────────────────────
+
+  Widget _buildToolbarBtn({
+    required IconData icon,
+    required String tooltip,
+    required VoidCallback onTap,
+    required double size,
+    required double radius,
+    required double iconSize,
+    required Color iconColor,
+    required Color chipBg,
+    required Color chipBorder,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(radius),
+        child: Container(
+          height: size,
+          width: size,
+          decoration: BoxDecoration(
+            color: chipBg,
+            borderRadius: BorderRadius.circular(radius),
+            border: Border.all(color: chipBorder, width: 1),
+          ),
+          child: Icon(icon, size: iconSize, color: iconColor),
+        ),
       ),
     );
   }
@@ -1741,321 +1694,3 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// Split Editor Panel — second editor for split view mode
-// ═══════════════════════════════════════════════════════════════════════════
-
-class _SplitEditorPanel extends StatefulWidget {
-  final AppState appState;
-  final ThemeState themeState;
-  final Color accentColor;
-
-  const _SplitEditorPanel({
-    required this.appState,
-    required this.themeState,
-    required this.accentColor,
-  });
-
-  @override
-  State<_SplitEditorPanel> createState() => _SplitEditorPanelState();
-}
-
-class _SplitEditorPanelState extends State<_SplitEditorPanel> {
-  QuillController? _quillController;
-  TextEditingController? _titleController;
-  String? _loadedNoteId;
-  Timer? _editPoller;
-  Timer? _debounce;
-  Timer? _hideTimer;
-  String _prevContent = '';
-  String _prevTitle = '';
-  final ValueNotifier<String> _saveStatus = ValueNotifier('');
-
-  static final _controllerConfig = QuillControllerConfig(
-    clipboardConfig: QuillClipboardConfig(
-      enableExternalRichPaste: false,
-    ),
-  );
-
-  @override
-  void dispose() {
-    _editPoller?.cancel();
-    _debounce?.cancel();
-    _hideTimer?.cancel();
-    _forceSave();
-    _quillController?.dispose();
-    _titleController?.dispose();
-    _saveStatus.dispose();
-    super.dispose();
-  }
-
-  void _loadNote(Note note) {
-    if (note.id == _loadedNoteId) return;
-    _forceSave();
-
-    _editPoller?.cancel();
-    _debounce?.cancel();
-    _quillController?.dispose();
-    _titleController?.dispose();
-
-    _loadedNoteId = note.id;
-    _titleController = TextEditingController(text: note.title);
-
-    try {
-      final delta = Document.fromJson(jsonDecode(note.content));
-      _quillController = QuillController(
-        document: delta,
-        selection: const TextSelection.collapsed(offset: 0),
-        config: _controllerConfig,
-      );
-    } catch (_) {
-      _quillController = QuillController.basic(config: _controllerConfig);
-    }
-
-    _prevContent = _serializeContent();
-    _prevTitle = _titleController!.text;
-
-    _editPoller = Timer.periodic(
-      const Duration(milliseconds: 1500),
-      (_) => _pollForEdits(),
-    );
-  }
-
-  String _serializeContent() =>
-      jsonEncode(_quillController!.document.toDelta().toJson());
-
-  void _pollForEdits() {
-    if (_quillController == null || _loadedNoteId == null) return;
-    final content = _serializeContent();
-    final title = _titleController!.text;
-    if (content != _prevContent || title != _prevTitle) {
-      _prevContent = content;
-      _prevTitle = title;
-      _saveStatus.value = 'saving';
-      _debounce?.cancel();
-      _debounce = Timer(const Duration(seconds: 3), _forceSave);
-    }
-  }
-
-  void _forceSave() {
-    if (_loadedNoteId == null || _quillController == null) return;
-    widget.appState.autoSaveService.forceSave(
-      noteId: _loadedNoteId!,
-      title: _titleController!.text,
-      content: _serializeContent(),
-    );
-    _saveStatus.value = 'saved';
-    _hideTimer?.cancel();
-    _hideTimer = Timer(const Duration(seconds: 2), () {
-      _saveStatus.value = '';
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final isDark = theme.brightness == Brightness.dark;
-    final editorBg = widget.themeState.editorBgColor;
-    final chipBorder = widget.themeState.editorBorderColor;
-    final chipText = isDark ? Colors.white70 : Colors.grey.shade600;
-    final splitNote = widget.appState.splitNote;
-
-    // No note selected — show note picker
-    if (splitNote == null) {
-      return Container(
-        decoration: BoxDecoration(
-          color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: chipBorder, width: 1),
-        ),
-        child: Column(
-          children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
-              child: Row(
-                children: [
-                  Icon(Icons.vertical_split_rounded,
-                      size: 16, color: chipText),
-                  const SizedBox(width: 8),
-                  Text('Select a note',
-                      style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color: chipText)),
-                  const Spacer(),
-                  IconButton(
-                    onPressed: () => widget.appState.exitSplitMode(),
-                    icon: Icon(Icons.close_rounded,
-                        size: 16, color: chipText),
-                    splashRadius: 14,
-                  ),
-                ],
-              ),
-            ),
-            Divider(height: 1, color: chipBorder),
-            // Note list
-            Expanded(
-              child: ListView.builder(
-                padding: const EdgeInsets.all(8),
-                itemCount: widget.appState.notes.length,
-                itemBuilder: (context, index) {
-                  final note = widget.appState.notes[index];
-                  if (note.id == widget.appState.currentNote?.id) {
-                    return const SizedBox.shrink();
-                  }
-                  return ListTile(
-                    dense: true,
-                    title: Text(
-                      note.title.isEmpty ? 'Untitled' : note.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(fontSize: 13, color: chipText),
-                    ),
-                    onTap: () {
-                      widget.appState.enterSplitMode(note);
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    // Load the note if needed
-    _loadNote(splitNote);
-
-    final textColor = isDark ? Colors.white : Colors.black87;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: chipBorder, width: 1),
-      ),
-      child: Column(
-        children: [
-          // Header with title + close
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 8, 0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _titleController,
-                    style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: textColor,
-                    ),
-                    decoration: const InputDecoration(
-                      border: InputBorder.none,
-                      hintText: 'Title',
-                      isDense: true,
-                      contentPadding: EdgeInsets.symmetric(vertical: 8),
-                    ),
-                  ),
-                ),
-                ValueListenableBuilder<String>(
-                  valueListenable: _saveStatus,
-                  builder: (context, status, _) {
-                    if (status == 'saved') {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.check_circle_outline_rounded,
-                                size: 12,
-                                color: isDark
-                                    ? Colors.green.shade300
-                                    : Colors.green.shade600),
-                            const SizedBox(width: 4),
-                            Text('Saved',
-                                style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDark
-                                        ? Colors.green.shade300
-                                        : Colors.green.shade600)),
-                          ],
-                        ),
-                      );
-                    }
-                    return const SizedBox.shrink();
-                  },
-                ),
-                IconButton(
-                  onPressed: () {
-                    _forceSave();
-                    widget.appState.exitSplitMode();
-                  },
-                  icon: Icon(Icons.close_rounded,
-                      size: 16, color: chipText),
-                  splashRadius: 14,
-                  tooltip: 'Close split',
-                ),
-              ],
-            ),
-          ),
-          Divider(height: 1, color: chipBorder),
-          // Toolbar
-          Container(
-            decoration: BoxDecoration(
-              color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
-              border: Border(bottom: BorderSide(color: chipBorder, width: 1)),
-            ),
-            child: QuillSimpleToolbar(
-              controller: _quillController!,
-              config: QuillSimpleToolbarConfig(
-                showAlignmentButtons: true,
-                showBackgroundColorButton: false,
-                showClearFormat: false,
-                showFontFamily: false,
-                showSearchButton: false,
-                showInlineCode: false,
-                showLink: false,
-                showClipboardCut: false,
-                showClipboardCopy: false,
-                showClipboardPaste: false,
-                multiRowsDisplay: false,
-              ),
-            ),
-          ),
-          // Editor
-          Expanded(
-            child: Padding(
-              padding: const EdgeInsets.all(8),
-              child: QuillEditor.basic(
-                controller: _quillController!,
-                config: QuillEditorConfig(
-                  placeholder: 'Start writing...',
-                  padding: const EdgeInsets.all(8),
-                  expands: true,
-                  textSelectionThemeData: TextSelectionThemeData(
-                    cursorColor: widget.accentColor,
-                  ),
-                  customStyles: DefaultStyles(
-                    paragraph: DefaultTextBlockStyle(
-                      TextStyle(
-                        fontSize: widget.themeState.editorFontSize,
-                        height: widget.themeState.editorLineHeight,
-                        color: textColor,
-                      ),
-                      const HorizontalSpacing(0, 0),
-                      const VerticalSpacing(4, 4),
-                      const VerticalSpacing(0, 0),
-                      null,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}

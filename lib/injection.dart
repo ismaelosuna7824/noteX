@@ -73,6 +73,7 @@ import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
 import 'presentation/state/reminder_state.dart';
 import 'presentation/state/security_state.dart';
+import 'presentation/state/tiling_state.dart';
 import 'presentation/state/writing_stats_state.dart';
 
 final getIt = GetIt.instance;
@@ -313,6 +314,7 @@ Future<void> setupDependencies() async {
   // Presentation - State
   getIt.registerSingleton<SecurityState>(SecurityState());
   getIt.registerSingleton<WritingStatsState>(WritingStatsState());
+  getIt.registerSingleton<TilingState>(TilingState());
   getIt.registerSingleton<ThemeState>(ThemeState());
   final appState = AppState(
     createNote: getIt<CreateNoteUseCase>(),

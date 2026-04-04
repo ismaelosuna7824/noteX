@@ -448,14 +448,20 @@ class _AppShellState extends State<AppShell> with WindowListener {
                   children: [
                     ListenableBuilder(
                       listenable: widget.appState,
-                      builder: (context, _) => TopBar(
-                        appState: widget.appState,
-                        themeState: widget.themeState,
-                        userName: widget.appState.userName,
-                        avatarUrl: widget.appState.userAvatar,
-                        onProfileTap: () =>
-                            widget.appState.navigateToPage(6),
-                      ),
+                      builder: (context, _) {
+                        // Hide top bar in note editor for a cleaner view
+                        if (widget.appState.selectedPageIndex == 2) {
+                          return const SizedBox.shrink();
+                        }
+                        return TopBar(
+                          appState: widget.appState,
+                          themeState: widget.themeState,
+                          userName: widget.appState.userName,
+                          avatarUrl: widget.appState.userAvatar,
+                          onProfileTap: () =>
+                              widget.appState.navigateToPage(6),
+                        );
+                      },
                     ),
                     ListenableBuilder(
                       listenable: widget.appState,
@@ -592,6 +598,13 @@ class _AppShellState extends State<AppShell> with WindowListener {
         child: Row(
           children: [
             const Spacer(),
+            // Exit Zen button (only in zen/focus mode)
+            if (widget.appState.isZenMode)
+              _WinButton(
+                icon: Icons.close_fullscreen_rounded,
+                tooltip: 'Exit Focus Mode',
+                onTap: () => widget.appState.exitZenMode(),
+              ),
             _WinButton(
               icon: Icons.remove_rounded,
               tooltip: 'Minimize',

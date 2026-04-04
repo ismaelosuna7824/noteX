@@ -14,12 +14,13 @@ class CleanupEmptyNotesUseCase {
   const CleanupEmptyNotesUseCase(this._repository);
 
   /// Hard-deletes **all** empty notes.
+  /// Notes in [excludeIds] are skipped (e.g. notes open in tiling).
   /// Returns the number of notes removed.
-  Future<int> execute() async {
+  Future<int> execute({Set<String> excludeIds = const {}}) async {
     final allNotes = await _repository.getAll();
     int removed = 0;
     for (final note in allNotes) {
-      if (note.isEmpty) {
+      if (note.isEmpty && !excludeIds.contains(note.id)) {
         await _repository.delete(note.id);
         removed++;
       }
