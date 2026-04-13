@@ -102,7 +102,11 @@ void main() async {
   await appState.initialize(
     protectedNoteIds: tilingState.tiledNotes.map((n) => n.id).toSet(),
   );
-  getIt<WritingStatsState>().recordActivity(appState.notes);
+  // Load writing stats from disk *before* recordActivity so snapshots are
+  // available and the first call doesn't reset today's count to 0.
+  final writingStats = getIt<WritingStatsState>();
+  await writingStats.loadFromDisk();
+  writingStats.recordActivity(appState.notes);
 
   // Initialize timer state so HomePage has daily task stats immediately
   final timerState = getIt<TimerState>();
@@ -121,8 +125,6 @@ void main() async {
   await themeState.loadFromDisk();
   final securityState = getIt<SecurityState>();
   await securityState.loadFromDisk();
-  final writingStats = getIt<WritingStatsState>();
-  await writingStats.loadFromDisk();
 
   // 7. Start auto-sync and trigger initial sync if already logged in
   final syncEngine = getIt<SyncEngine>();

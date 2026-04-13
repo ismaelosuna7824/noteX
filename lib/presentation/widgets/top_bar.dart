@@ -58,7 +58,7 @@ class _TopBarState extends State<TopBar>
     if (!_searchFocusNode.hasFocus) {
       // Delay hiding so overlay item taps can fire first
       Future.delayed(const Duration(milliseconds: 200), () {
-        if (!_searchFocusNode.hasFocus) {
+        if (mounted && !_searchFocusNode.hasFocus) {
           _hideOverlay();
         }
       });
@@ -220,18 +220,19 @@ class _TopBarState extends State<TopBar>
     ),
     );
     overlay.insert(_overlayEntry!);
-    _searchAnimController.forward(from: 0.0);
+    if (mounted) _searchAnimController.forward(from: 0.0);
   }
 
   void _hideOverlay() {
     _overlayEntry?.remove();
     _overlayEntry = null;
-    _searchAnimController.reset();
+    if (mounted) _searchAnimController.reset();
   }
 
   @override
   void dispose() {
-    _hideOverlay();
+    _overlayEntry?.remove();
+    _overlayEntry = null;
     _hideUpdateOverlay();
     _searchCurved.dispose();
     _searchAnimController.dispose();

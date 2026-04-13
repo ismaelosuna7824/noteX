@@ -52,6 +52,21 @@ class _AppShellState extends State<AppShell> with WindowListener {
   /// Tracks the previous page index for direction-aware page transitions.
   int _previousPageIndex = 0;
 
+  /// Build adaptive shadows that contrast against the wallpaper.
+  /// Light hero text (bright bg) → dark shadow; dark hero text → light shadow.
+  static List<Shadow> _buildHeroShadows(ThemeState themeState) {
+    final heroColor = themeState.heroTextColor;
+    final isLight = heroColor.computeLuminance() > 0.5;
+    return [
+      Shadow(
+        color: isLight
+            ? Colors.black.withValues(alpha: 0.35)
+            : Colors.white.withValues(alpha: 0.4),
+        blurRadius: 12,
+      ),
+    ];
+  }
+
   // ── Compact / sticky note mode ────────────────────────────────────────────
   bool _wasCompactMode = false;
   Size? _fullModeSize;
@@ -440,7 +455,8 @@ class _AppShellState extends State<AppShell> with WindowListener {
                   },
                   accentColor: widget.themeState.accentColor,
                   editorBgColor: widget.themeState.editorBgColor,
-                  sidebarIconColor: widget.themeState.sidebarIconColor,
+                  heroTextColor: widget.themeState.heroTextColor,
+                  heroShadows: _buildHeroShadows(widget.themeState),
                 ),
               ),
               Expanded(

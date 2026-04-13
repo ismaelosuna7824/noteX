@@ -1,7 +1,7 @@
 import 'dart:async';
+import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
 import '../../domain/entities/note.dart';
@@ -32,12 +32,14 @@ class _HomePageState extends State<HomePage>
 
   // Staggered intervals — each element fades/slides in overlapping.
   static const _intervals = [
-    Interval(0.0, 0.5, curve: Curves.easeOutCubic), // hero text
-    Interval(0.1, 0.6, curve: Curves.easeOutCubic), // reminder card
-    Interval(0.25, 0.75, curve: Curves.easeOutCubic), // enjoy card
-    Interval(0.35, 0.85, curve: Curves.easeOutCubic), // stats card
-    Interval(0.45, 1.0, curve: Curves.easeOutCubic), // right column
-    Interval(0.15, 0.65, curve: Curves.easeOutCubic), // recent activity
+    Interval(0.0, 0.5, curve: Curves.easeOutCubic), // 0: hero text
+    Interval(0.1, 0.6, curve: Curves.easeOutCubic), // 1: reminder card
+    Interval(0.25, 0.75, curve: Curves.easeOutCubic), // 2: enjoy card
+    Interval(0.35, 0.85, curve: Curves.easeOutCubic), // 3: stats card
+    Interval(0.45, 1.0, curve: Curves.easeOutCubic), // 4: right column
+    Interval(0.15, 0.65, curve: Curves.easeOutCubic), // 5: recent activity
+    Interval(0.08, 0.55, curve: Curves.easeOutCubic), // 6: shortcuts bar
+    Interval(0.40, 0.90, curve: Curves.easeOutCubic), // 7: heatmap
   ];
 
   late final List<Animation<double>> _fadeAnims;
@@ -89,6 +91,7 @@ class _HomePageState extends State<HomePage>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final accentColor = themeState.accentColor;
+    final isDark = theme.brightness == Brightness.dark;
 
     // Hero text color computed via WCAG contrast ratio against the background.
     final heroColor = themeState.heroTextColor;
@@ -108,12 +111,20 @@ class _HomePageState extends State<HomePage>
       builder: (context, constraints) {
         final isMobile = constraints.maxWidth < _mobileBreakpoint;
 
+        final h = constraints.maxHeight;
+
+        // Vertical rhythm: hero at ~8% from top, cards at ~58% from top
+        // so the middle zone has breathing room for the "Continue writing"
+        // card which sits vertically centered between hero and cards.
+        final heroTop = isMobile ? 20.0 : (h * 0.08).clamp(28.0, 56.0);
+        final cardsBottom = isMobile ? 16.0 : (h * 0.05).clamp(20.0, 36.0);
+
         return Stack(
           children: [
-            // Hero typography in top-left
+            // Hero typography — top-left
             Positioned(
               left: isMobile ? 20 : 32,
-              top: isMobile ? 20 : 32,
+              top: heroTop,
               right: isMobile ? 60 : null, // leave room for reminder
               child: FadeTransition(
                 opacity: _fadeAnims[0],
@@ -133,7 +144,7 @@ class _HomePageState extends State<HomePage>
             // Pending reminders card (top-right)
             Positioned(
               right: isMobile ? 16 : 24,
-              top: 16,
+              top: heroTop - 16,
               child: FadeTransition(
                 opacity: _fadeAnims[1],
                 child: SlideTransition(
@@ -147,35 +158,51 @@ class _HomePageState extends State<HomePage>
               ),
             ),
 
-            // Stats & Actions at bottom (with Continue Writing above)
+            // Quick shortcuts bar — below the hero text
+            if (!isMobile)
+              Positioned(
+                left: 32,
+                top: heroTop + 200,
+                child: FadeTransition(
+                  opacity: _fadeAnims[6],
+                  child: SlideTransition(
+                    position: _slideAnims[6],
+                    child: _QuickShortcutsBar(
+                      accentColor: accentColor,
+                      heroColor: heroColor,
+                      shadows: heroShadows,
+                      onNavigate: (page) => appState.navigateToPage(page),
+                    ),
+                  ),
+                ),
+              ),
+
+            // "Continue writing" card — right side, middle zone
+            if (recentNote != null && !isMobile)
+              Positioned(
+                right: 32,
+                top: h * 0.46,
+                child: FadeTransition(
+                  opacity: _fadeAnims[5],
+                  child: SlideTransition(
+                    position: _slideAnims[5],
+                    child: _RecentActivityCard(
+                      note: recentNote,
+                      heroColor: heroColor,
+                      accentColor: accentColor,
+                      shadows: heroShadows,
+                      onTap: () => appState.selectNote(recentNote),
+                    ),
+                  ),
+                ),
+              ),
+
+            // Stats & Actions — bottom
             Positioned(
               left: isMobile ? 16 : 24,
               right: isMobile ? 16 : 24,
-              bottom: isMobile ? 16 : 24,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (recentNote != null && !isMobile)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12, right: 8),
-                      child: FadeTransition(
-                        opacity: _fadeAnims[5],
-                        child: SlideTransition(
-                          position: _slideAnims[5],
-                          child: _RecentActivityCard(
-                            note: recentNote,
-                            heroColor: heroColor,
-                            accentColor: accentColor,
-                            shadows: heroShadows,
-                            onTap: () => appState.selectNote(recentNote),
-                          ),
-                        ),
-                      ),
-                    ),
-                  _buildStatsRow(context, theme, accentColor),
-                ],
-              ),
+              bottom: cardsBottom,
+              child: _buildStatsRow(context, theme, accentColor),
             ),
           ],
         );
@@ -226,7 +253,7 @@ class _HomePageState extends State<HomePage>
             ),
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
 
           // Combined "Total Notes + Today's Note" organic card (center)
           Expanded(
@@ -245,7 +272,7 @@ class _HomePageState extends State<HomePage>
             ),
           ),
 
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
 
           // Right column: Writing Stats card stacked above Pinned Notes card
           Expanded(
@@ -397,19 +424,11 @@ class _HomePageState extends State<HomePage>
       ),
     );
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: ShapeDecoration(
-        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
-        shape: shape,
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
+    return _BlurredShapeCard(
+      shape: shape,
+      color: themeState.editorBgColor,
+      isDark: isDark,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -431,7 +450,7 @@ class _HomePageState extends State<HomePage>
               color: isDark ? Colors.white : Colors.black87,
             ),
           ),
-          const SizedBox(height: 400),
+          const Spacer(),
           Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -462,6 +481,7 @@ class _HomePageState extends State<HomePage>
           ),
         ],
       ),
+      ),
     );
   }
 
@@ -482,19 +502,12 @@ class _HomePageState extends State<HomePage>
       borderRadius: DynamicBorderRadius.all(DynamicRadius.circular(Length(22))),
     );
 
-    final card = Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: ShapeDecoration(
-        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
-        shape: shape,
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-            blurRadius: 16,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
+    final card = _BlurredShapeCard(
+      shape: shape,
+      color: themeState.editorBgColor,
+      isDark: isDark,
+      blur: 12,
+      child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       child: Row(
         children: [
@@ -542,6 +555,7 @@ class _HomePageState extends State<HomePage>
             ),
           ),
         ],
+      ),
       ),
     );
 
@@ -602,70 +616,62 @@ class _HomePageState extends State<HomePage>
       ),
     );
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: ShapeDecoration(
-        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
-        shape: shape,
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.all(28),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          Text(
-            'Explore, Write, and',
-            style: theme.textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w500,
-              color: isDark ? Colors.white54 : Colors.black54,
-            ),
-          ),
-          Text(
-            'ENJOY',
-            style: theme.textTheme.headlineLarge?.copyWith(
-              fontWeight: FontWeight.w900,
-              letterSpacing: 3,
-              color: isDark ? Colors.white : Colors.black87,
-            ),
-          ),
-          const SizedBox(height: 70),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _buildActionButton(
-                context: context,
-                label: 'Quick Note',
-                accentColor: Colors.amber.shade700,
-                isDark: isDark,
-                onTap: () async {
-                  await appState.createQuickNote();
-                  appState.navigateToPage(2);
-                },
+    return _BlurredShapeCard(
+      shape: shape,
+      color: themeState.editorBgColor,
+      isDark: isDark,
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.start,
+          children: [
+            Text(
+              'Explore, Write, and',
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white54 : Colors.black54,
               ),
-              _buildActionButton(
-                context: context,
-                label: 'New Note',
-                accentColor: accentColor,
-                isDark: isDark,
-                onTap: () async {
-                  await appState.createNewNote();
-                  appState.navigateToPage(2);
-                },
+            ),
+            Text(
+              'ENJOY',
+              style: theme.textTheme.headlineLarge?.copyWith(
+                fontWeight: FontWeight.w900,
+                letterSpacing: 3,
+                color: isDark ? Colors.white : Colors.black87,
               ),
-              _buildImportButton(context, accentColor, isDark),
-            ],
-          ),
-        ],
+            ),
+            const Spacer(),
+            Wrap(
+              spacing: 12,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _buildPrimaryActionButton(
+                  context: context,
+                  label: 'New Note',
+                  accentColor: accentColor,
+                  onTap: () async {
+                    await appState.createNewNote();
+                    appState.navigateToPage(2);
+                  },
+                ),
+                _buildActionButton(
+                  context: context,
+                  label: 'Quick Note',
+                  accentColor: Colors.amber.shade700,
+                  isDark: isDark,
+                  onTap: () async {
+                    await appState.createQuickNote();
+                    appState.navigateToPage(2);
+                  },
+                ),
+                _buildImportButton(context, accentColor, isDark),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -695,120 +701,113 @@ class _HomePageState extends State<HomePage>
         ? Colors.white.withValues(alpha: 0.10)
         : Colors.grey.shade100;
 
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: ShapeDecoration(
-        color: themeState.editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
-        shape: shape,
-        shadows: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(30, 26, 28, 30),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.max,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // ── Total Notes ──────────────────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '$totalNotes',
-                    style: theme.textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: primaryText,
+    return _BlurredShapeCard(
+      shape: shape,
+      color: themeState.editorBgColor,
+      isDark: isDark,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(30, 26, 28, 30),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.max,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            // ── Total Notes ──────────────────────────────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '$totalNotes',
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: primaryText,
+                      ),
                     ),
-                  ),
-                  Text(
-                    'Total Notes',
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: secondaryText,
-                      fontWeight: FontWeight.w500,
+                    Text(
+                      'Total Notes',
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: secondaryText,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: accentColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(14),
+                  ],
                 ),
-                child: Icon(
-                  Icons.note_alt_rounded,
-                  color: accentColor,
-                  size: 20,
-                ),
-              ),
-            ],
-          ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 30),
-            child: Divider(color: dividerColor, thickness: 1),
-          ),
-
-          // ── Today's Note ─────────────────────────────────────────
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    hasTodayNote ? '1' : '0',
-                    style: theme.textTheme.headlineLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: primaryText,
-                    ),
-                  ),
-                  Text(
-                    "Today's Note",
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      color: secondaryText,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              _PressButton(
-                onTap: hasTodayNote ? () => appState.navigateToPage(2) : null,
-                pressScale: 0.88,
-                child: Container(
+                const Spacer(),
+                Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: hasTodayNote
-                        ? accentColor.withValues(alpha: 0.15)
-                        : (isDark
-                              ? Colors.white.withValues(alpha: 0.10)
-                              : Colors.grey.shade100),
+                    color: accentColor.withValues(alpha: 0.15),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(
-                    hasTodayNote
-                        ? Icons.north_east_rounded
-                        : Icons.today_rounded,
-                    color: hasTodayNote
-                        ? accentColor
-                        : (isDark ? Colors.white38 : Colors.grey.shade400),
+                    Icons.note_alt_rounded,
+                    color: accentColor,
                     size: 20,
                   ),
                 ),
-              ),
-            ],
-          ),
-        ],
+              ],
+            ),
+
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Divider(color: dividerColor, thickness: 1),
+            ),
+
+            // ── Today's Note ─────────────────────────────────────────
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      hasTodayNote ? '1' : '0',
+                      style: theme.textTheme.headlineLarge?.copyWith(
+                        fontWeight: FontWeight.w900,
+                        color: primaryText,
+                      ),
+                    ),
+                    Text(
+                      "Today's Note",
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: secondaryText,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                _PressButton(
+                  onTap: hasTodayNote ? () => appState.navigateToPage(2) : null,
+                  pressScale: 0.88,
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: hasTodayNote
+                          ? accentColor.withValues(alpha: 0.15)
+                          : (isDark
+                                ? Colors.white.withValues(alpha: 0.10)
+                                : Colors.grey.shade100),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Icon(
+                      hasTodayNote
+                          ? Icons.north_east_rounded
+                          : Icons.today_rounded,
+                      color: hasTodayNote
+                          ? accentColor
+                          : (isDark ? Colors.white38 : Colors.grey.shade400),
+                      size: 20,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -935,106 +934,80 @@ class _HomePageState extends State<HomePage>
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final stats = GetIt.instance<WritingStatsState>();
         final streak = stats.currentStreak;
-        final todayWords = stats.todayWordCount;
-        final yesterdayWords = stats.yesterdayWordCount;
-        final yesterdayNotes = stats.yesterdayNoteCount;
-        final weekly = stats.weeklyWordCounts;
+        final todayNotes = stats.todayNoteCount;
+        final weekly = stats.weeklyNoteCounts;
         final labels = stats.weeklyLabels;
-        final maxWords = weekly.fold<int>(0, (a, b) => a > b ? a : b);
+        final maxNotes = weekly.fold<int>(0, (a, b) => a > b ? a : b);
 
         final primaryText = isDark ? Colors.white : Colors.black87;
         final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
 
         return _PressButton(
           onTap: () => appState.navigateToPage(1),
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: ShapeDecoration(
-              color: themeState.editorBgColor.withValues(
-                alpha: isDark ? 0.90 : 0.94,
-              ),
-              shape: shape,
-              shadows: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-                  blurRadius: 20,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
+          child: _BlurredShapeCard(
+            shape: shape,
+            color: themeState.editorBgColor,
+            isDark: isDark,
+            child: Padding(
             padding: const EdgeInsets.fromLTRB(24, 16, 22, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Streak row
+                // Streak ring + info
                 Row(
                   children: [
-                    Text(
-                      streak > 0 ? '🔥' : '✍️',
-                      style: const TextStyle(fontSize: 20),
+                    // Animated progress ring
+                    _StreakRing(
+                      streak: streak,
+                      accentColor: accentColor,
+                      isDark: isDark,
+                      size: 44,
                     ),
-                    const SizedBox(width: 8),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        streak > 0 ? '$streak day streak' : 'Start writing!',
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w800,
-                          color: primaryText,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: accentColor.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        '$todayWords words',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: accentColor,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            streak > 0 ? '$streak day streak' : 'Start writing!',
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w800,
+                              color: primaryText,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            todayNotes > 0
+                                ? '$todayNotes note${todayNotes == 1 ? '' : 's'} today'
+                                : 'No notes yet today',
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: secondaryText,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(height: 6),
-
-                // Yesterday summary
-                Text(
-                  yesterdayNotes > 0
-                      ? 'Yesterday: $yesterdayNotes note${yesterdayNotes == 1 ? '' : 's'}, $yesterdayWords words'
-                      : 'No activity yesterday',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: secondaryText,
-                    fontSize: 12,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
                 // Mini 7-day bar chart
                 SizedBox(
-                  height: 32,
+                  height: 28,
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: List.generate(7, (i) {
-                      final ratio = maxWords > 0 ? weekly[i] / maxWords : 0.0;
+                      final ratio = maxNotes > 0 ? weekly[i] / maxNotes : 0.0;
                       final isToday = i == 6;
                       return Expanded(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 2),
                           child: Tooltip(
-                            message: '${labels[i]}: ${weekly[i]} words',
+                            message: '${labels[i]}: ${weekly[i]} note${weekly[i] == 1 ? '' : 's'}',
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.end,
                               children: [
@@ -1079,6 +1052,7 @@ class _HomePageState extends State<HomePage>
               ],
             ),
           ),
+          ),
         );
       },
     );
@@ -1106,21 +1080,11 @@ class _HomePageState extends State<HomePage>
 
     return _PressButton(
       onTap: () => appState.navigateToPinnedNotes(),
-      child: Container(
-        clipBehavior: Clip.antiAlias,
-        decoration: ShapeDecoration(
-          color: themeState.editorBgColor.withValues(
-            alpha: isDark ? 0.90 : 0.94,
-          ),
-          shape: shape,
-          shadows: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-              blurRadius: 20,
-              offset: const Offset(0, 6),
-            ),
-          ],
-        ),
+      child: _BlurredShapeCard(
+        shape: shape,
+        color: themeState.editorBgColor,
+        isDark: isDark,
+        child: Padding(
         padding: const EdgeInsets.fromLTRB(28, 26, 28, 28),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1165,6 +1129,7 @@ class _HomePageState extends State<HomePage>
             ),
           ],
         ),
+      ),
       ),
     );
   }
@@ -1215,6 +1180,52 @@ class _HomePageState extends State<HomePage>
               ),
               child: const Icon(
                 Icons.north_east_rounded,
+                color: Colors.white,
+                size: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Primary accent-filled action button (stands out as the main CTA).
+  Widget _buildPrimaryActionButton({
+    required BuildContext context,
+    required String label,
+    required Color accentColor,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+
+    return _PressButton(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+        decoration: BoxDecoration(
+          color: accentColor,
+          borderRadius: BorderRadius.circular(30),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: theme.textTheme.bodyLarge?.copyWith(
+                fontWeight: FontWeight.w700,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.25),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.add_rounded,
                 color: Colors.white,
                 size: 14,
               ),
@@ -1613,7 +1624,7 @@ class _HeroTextState extends State<_HeroText>
 // over the background image.
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _RecentActivityCard extends StatelessWidget {
+class _RecentActivityCard extends StatefulWidget {
   final Note note;
   final Color heroColor;
   final Color accentColor;
@@ -1629,71 +1640,134 @@ class _RecentActivityCard extends StatelessWidget {
   });
 
   @override
+  State<_RecentActivityCard> createState() => _RecentActivityCardState();
+}
+
+class _RecentActivityCardState extends State<_RecentActivityCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _progressAnim;
+
+  @override
+  void initState() {
+    super.initState();
+    _progressAnim = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..forward();
+  }
+
+  @override
+  void dispose() {
+    _progressAnim.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final note = widget.note;
     final timeAgo = _formatTimeAgo(note.updatedAt);
     final title = note.title.isNotEmpty ? note.title : 'Untitled';
+    final wordCount = note.wordCount;
+    final accent = widget.accentColor;
+    final heroColor = widget.heroColor;
 
-    final cardBg = heroColor.withValues(alpha: 0.15);
-    final cardBorder = heroColor.withValues(alpha: 0.10);
-    final labelColor = heroColor.withValues(alpha: 0.70);
-    final titleColor = heroColor.withValues(alpha: 0.85);
-    final timeColor = heroColor.withValues(alpha: 0.80);
+    final cardBg = heroColor.withValues(alpha: 0.12);
+    final cardBorder = heroColor.withValues(alpha: 0.08);
+    final labelColor = heroColor.withValues(alpha: 0.60);
+    final titleColor = heroColor.withValues(alpha: 0.90);
+    final subtitleColor = heroColor.withValues(alpha: 0.65);
 
     return _PressButton(
-      onTap: onTap,
+      onTap: widget.onTap,
       child: Container(
-        width: 190,
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        width: 220,
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: cardBg,
-          borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(8),
-            bottomLeft: Radius.circular(8),
-            bottomRight: Radius.circular(20),
-          ),
+          borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cardBorder),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              'Continue writing',
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: labelColor,
-                letterSpacing: 1,
-                fontWeight: FontWeight.w600,
-                shadows: shadows,
-              ),
-            ),
-            const SizedBox(height: 6),
+            // Top row: "NOW EDITING" label + accent dot
             Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Flexible(
-                  child: Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: theme.textTheme.bodyLarge?.copyWith(
-                      color: titleColor,
-                      fontWeight: FontWeight.w700,
-                      shadows: shadows,
-                    ),
+                Container(
+                  width: 6,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: accent,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: accent.withValues(alpha: 0.5),
+                        blurRadius: 6,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 10),
+                const SizedBox(width: 8),
+                Text(
+                  'NOW EDITING',
+                  style: theme.textTheme.labelSmall?.copyWith(
+                    color: labelColor,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 10,
+                    shadows: widget.shadows,
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 2),
+
+            const SizedBox(height: 10),
+
+            // Title
             Text(
-              timeAgo,
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: timeColor,
-                shadows: shadows,
+              title,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: titleColor,
+                fontWeight: FontWeight.w700,
+                shadows: widget.shadows,
               ),
+            ),
+
+            const SizedBox(height: 4),
+
+            // Subtitle: word count + time
+            Text(
+              '$wordCount word${wordCount == 1 ? '' : 's'}  \u00B7  $timeAgo',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: subtitleColor,
+                fontSize: 11,
+                shadows: widget.shadows,
+              ),
+            ),
+
+            const SizedBox(height: 12),
+
+            // Animated progress bar
+            AnimatedBuilder(
+              animation: _progressAnim,
+              builder: (context, _) {
+                return ClipRRect(
+                  borderRadius: BorderRadius.circular(2),
+                  child: SizedBox(
+                    height: 3,
+                    child: LinearProgressIndicator(
+                      value: _progressAnim.value,
+                      backgroundColor: heroColor.withValues(alpha: 0.10),
+                      color: accent.withValues(alpha: 0.7),
+                      minHeight: 3,
+                    ),
+                  ),
+                );
+              },
             ),
           ],
         ),
@@ -1762,19 +1836,11 @@ class _ReminderCard extends StatelessWidget {
           onTap: onNavigateToReminders,
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 280, maxHeight: 260),
-            child: Container(
-              clipBehavior: Clip.antiAlias,
-              decoration: ShapeDecoration(
-                color: editorBgColor.withValues(alpha: isDark ? 0.90 : 0.94),
-                shape: shape,
-                shadows: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
-              ),
+            child: _BlurredShapeCard(
+              shape: shape,
+              color: editorBgColor,
+              isDark: isDark,
+              child: Padding(
               padding: const EdgeInsets.fromLTRB(24, 18, 22, 18),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
@@ -1850,6 +1916,7 @@ class _ReminderCard extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
             ),
           ),
         );
@@ -2010,6 +2077,492 @@ class _PressButtonState extends State<_PressButton> {
         duration: const Duration(milliseconds: 100),
         curve: Curves.easeOut,
         child: widget.child,
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Quick shortcuts bar — row of subtle icon buttons for fast navigation.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Ambient accent line — a flowing sine wave that drifts slowly across
+// the middle zone.  Purely decorative, adds life without competing with
+// content.  Uses CustomPainter for smooth rendering.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _AmbientAccentLine extends StatefulWidget {
+  final Color accentColor;
+
+  const _AmbientAccentLine({required this.accentColor});
+
+  @override
+  State<_AmbientAccentLine> createState() => _AmbientAccentLineState();
+}
+
+class _AmbientAccentLineState extends State<_AmbientAccentLine>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, _) {
+        return CustomPaint(
+          painter: _AccentLinePainter(
+            progress: _controller.value,
+            color: widget.accentColor.withValues(alpha: 0.12),
+            glowColor: widget.accentColor.withValues(alpha: 0.06),
+          ),
+          size: Size.infinite,
+        );
+      },
+    );
+  }
+}
+
+class _AccentLinePainter extends CustomPainter {
+  final double progress;
+  final Color color;
+  final Color glowColor;
+
+  _AccentLinePainter({
+    required this.progress,
+    required this.color,
+    required this.glowColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // Two flowing sine waves offset from each other
+    for (var line = 0; line < 2; line++) {
+      final path = Path();
+      final yCenter = h * (0.42 + line * 0.08);
+      final amplitude = 30.0 + line * 15.0;
+      final phaseOffset = line * 1.5;
+      final frequency = 2.0 + line * 0.5;
+
+      path.moveTo(0, yCenter);
+
+      for (var x = 0.0; x <= w; x += 2) {
+        final t = x / w;
+        final phase = (progress * 2 * 3.14159) + phaseOffset;
+        final y = yCenter +
+            amplitude *
+                _sin((t * frequency * 3.14159) + phase) *
+                _smoothEdge(t);
+        path.lineTo(x, y);
+      }
+
+      // Glow layer (thicker, more transparent)
+      final glowPaint = Paint()
+        ..color = glowColor
+        ..strokeWidth = 6.0
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      canvas.drawPath(path, glowPaint);
+
+      // Main line (thin, slightly more visible)
+      final linePaint = Paint()
+        ..color = color
+        ..strokeWidth = 1.5
+        ..style = PaintingStyle.stroke
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(path, linePaint);
+    }
+  }
+
+  /// Fade the wave near edges so it doesn't start/end abruptly.
+  double _smoothEdge(double t) {
+    if (t < 0.05) return t / 0.05;
+    if (t > 0.95) return (1.0 - t) / 0.05;
+    return 1.0;
+  }
+
+  /// Simple sine without importing dart:math.
+  double _sin(double x) {
+    // Normalize to [-pi, pi] range for Taylor approximation.
+    x = x % (2 * 3.14159265);
+    if (x > 3.14159265) x -= 2 * 3.14159265;
+    // Bhaskara I approximation — accurate within 0.2%.
+    final abs = x < 0 ? -x : x;
+    final sign = x < 0 ? -1.0 : 1.0;
+    return sign *
+        (16 * abs * (3.14159265 - abs)) /
+        (5 * 3.14159265 * 3.14159265 - 4 * abs * (3.14159265 - abs));
+  }
+
+  @override
+  bool shouldRepaint(_AccentLinePainter old) => old.progress != progress;
+}
+
+class _QuickShortcutsBar extends StatelessWidget {
+  final Color accentColor;
+  final Color heroColor;
+  final List<Shadow> shadows;
+  final void Function(int page) onNavigate;
+
+  const _QuickShortcutsBar({
+    required this.accentColor,
+    required this.heroColor,
+    required this.shadows,
+    required this.onNavigate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final items = [
+      (Icons.calendar_month_rounded, 'Calendar', 3),
+      (Icons.timer_rounded, 'Timer', 4),
+      (Icons.article_rounded, 'Markdown', 5),
+      (Icons.notifications_rounded, 'Reminders', 7),
+    ];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: items.map((item) {
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: _PressButton(
+            onTap: () => onNavigate(item.$3),
+            pressScale: 0.88,
+            child: Tooltip(
+              message: item.$2,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: heroColor.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  item.$1,
+                  color: heroColor.withValues(alpha: 0.80),
+                  size: 18,
+                  shadows: shadows,
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Activity heatmap — 4-week grid (7 cols x 4 rows) showing daily activity.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ActivityHeatmap extends StatelessWidget {
+  final Color accentColor;
+  final Color editorBgColor;
+  final bool isDark;
+
+  const _ActivityHeatmap({
+    required this.accentColor,
+    required this.editorBgColor,
+    required this.isDark,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: GetIt.instance<WritingStatsState>(),
+      builder: (context, _) {
+        final stats = GetIt.instance<WritingStatsState>();
+        final data = stats.monthlyNoteCounts; // 28 days
+        final maxVal = data.fold<int>(0, (a, b) => a > b ? a : b);
+
+        const cellSize = 12.0;
+        const gap = 3.0;
+        const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+
+        // Inside the glass container, use standard dark/light colors
+        final labelColor = isDark ? Colors.white38 : Colors.black38;
+        final emptyColor = isDark
+            ? Colors.white.withValues(alpha: 0.08)
+            : Colors.black.withValues(alpha: 0.06);
+
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(14),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+            child: Container(
+              decoration: BoxDecoration(
+                color: isDark
+                    ? editorBgColor.withValues(alpha: 0.50)
+                    : Colors.white.withValues(alpha: 0.50),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.white.withValues(alpha: 0.50),
+                  width: 0.5,
+                ),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Day labels row
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: List.generate(7, (col) {
+                        return SizedBox(
+                          width: cellSize + gap,
+                          child: Text(
+                            days[col],
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 8,
+                              fontWeight: FontWeight.w600,
+                              color: labelColor,
+                            ),
+                          ),
+                        );
+                      }),
+                    ),
+                  ),
+                  // 4 rows x 7 cols grid
+                  ...List.generate(4, (row) {
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: gap),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: List.generate(7, (col) {
+                          final dayIndex = row * 7 + col;
+                          final count = dayIndex < 28 ? data[dayIndex] : 0;
+                          final isToday = dayIndex == 27;
+
+                          Color cellColor;
+                          if (count == 0) {
+                            cellColor = emptyColor;
+                          } else if (maxVal > 0) {
+                            final intensity = (count / maxVal).clamp(0.3, 1.0);
+                            cellColor = accentColor.withValues(alpha: intensity);
+                          } else {
+                            cellColor = accentColor.withValues(alpha: 0.3);
+                          }
+
+                          return Container(
+                            width: cellSize,
+                            height: cellSize,
+                            margin: const EdgeInsets.only(right: gap),
+                            decoration: BoxDecoration(
+                              color: cellColor,
+                              borderRadius: BorderRadius.circular(3),
+                              border: isToday
+                                  ? Border.all(
+                                      color: accentColor,
+                                      width: 1.5,
+                                    )
+                                  : null,
+                            ),
+                          );
+                        }),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Streak ring — animated circular progress showing streak towards weekly goal.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StreakRing extends StatefulWidget {
+  final int streak;
+  final Color accentColor;
+  final bool isDark;
+  final double size;
+
+  const _StreakRing({
+    required this.streak,
+    required this.accentColor,
+    required this.isDark,
+    this.size = 44,
+  });
+
+  @override
+  State<_StreakRing> createState() => _StreakRingState();
+}
+
+class _StreakRingState extends State<_StreakRing>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 800),
+    )..forward();
+  }
+
+  @override
+  void didUpdateWidget(_StreakRing old) {
+    super.didUpdateWidget(old);
+    if (old.streak != widget.streak) {
+      _controller.forward(from: 0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Goal: 7 days (one full week)
+    const goal = 7;
+    final progress = (widget.streak % goal) / goal;
+    final fullWeeks = widget.streak ~/ goal;
+
+    return AnimatedBuilder(
+      animation: _controller,
+      builder: (context, child) {
+        final animatedProgress = progress * Curves.easeOutCubic.transform(
+          _controller.value,
+        );
+
+        return SizedBox(
+          width: widget.size,
+          height: widget.size,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Background ring
+              SizedBox.expand(
+                child: CircularProgressIndicator(
+                  value: 1.0,
+                  strokeWidth: 3.5,
+                  color: widget.isDark
+                      ? Colors.white.withValues(alpha: 0.08)
+                      : Colors.black.withValues(alpha: 0.06),
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+              // Progress ring
+              SizedBox.expand(
+                child: CircularProgressIndicator(
+                  value: widget.streak == 0 ? 0 : animatedProgress == 0 ? 1.0 : animatedProgress,
+                  strokeWidth: 3.5,
+                  color: widget.accentColor,
+                  strokeCap: StrokeCap.round,
+                ),
+              ),
+              // Center text
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${widget.streak}',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                      color: widget.accentColor,
+                      height: 1,
+                    ),
+                  ),
+                  if (fullWeeks > 0)
+                    Text(
+                      '${fullWeeks}w',
+                      style: TextStyle(
+                        fontSize: 8,
+                        fontWeight: FontWeight.w600,
+                        color: widget.isDark
+                            ? Colors.white38
+                            : Colors.grey.shade500,
+                        height: 1.2,
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Blurred organic shape card — wraps content in a morphable shape with
+// backdrop blur for a frosted-glass effect that lets the background through.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BlurredShapeCard extends StatelessWidget {
+  final ShapeBorder shape;
+  final Color color;
+  final bool isDark;
+  final Widget child;
+  final double blur;
+
+  const _BlurredShapeCard({
+    required this.shape,
+    required this.color,
+    required this.isDark,
+    required this.child,
+    this.blur = 16,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: ShapeDecoration(
+        shape: shape,
+        shadows: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.30 : 0.07),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: blur, sigmaY: blur),
+        child: Container(
+          decoration: ShapeDecoration(
+            color: color.withValues(alpha: isDark ? 0.72 : 0.82),
+            shape: shape,
+          ),
+          child: child,
+        ),
       ),
     );
   }

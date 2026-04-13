@@ -1,31 +1,17 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 
-/// Vertical spacing for each nav button: 10px top + 46px button + 10px bottom.
-const double _kNavButtonPitch = 66.0;
+/// Sidebar width (including margin).
+const double kSidebarWidth = 62.0;
 
-/// Top padding of the sidebar column.
-const double _kTopPadding = 48.0;
-
-/// Bottom padding of the sidebar column.
-const double _kBottomPadding = 24.0;
-
-/// Height of each nav button circle.
-const double _kButtonSize = 46.0;
-
-/// Height of the animated selection indicator bar.
-const double _kIndicatorHeight = 20.0;
-
-/// Minimalist vertical icon rail sidebar matching the reference design.
-///
-/// Clean sidebar with white circle icon buttons.
-/// Selected item has accent color filled circle background.
-/// An animated indicator bar on the left edge slides to the selected item.
+/// Floating vertical pill sidebar with frosted glass effect.
 class Sidebar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onItemSelected;
   final Color accentColor;
   final Color editorBgColor;
-  final Color sidebarIconColor;
+  final Color heroTextColor;
+  final List<Shadow> heroShadows;
 
   const Sidebar({
     super.key,
@@ -33,7 +19,8 @@ class Sidebar extends StatelessWidget {
     required this.onItemSelected,
     required this.accentColor,
     required this.editorBgColor,
-    required this.sidebarIconColor,
+    required this.heroTextColor,
+    required this.heroShadows,
   });
 
   static const _navItems = [
@@ -45,154 +32,111 @@ class Sidebar extends StatelessWidget {
     (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
     (7, _SidebarItem(Icons.notifications_rounded, 'Reminders')),
     (8, _SidebarItem(Icons.delete_outline_rounded, 'Trash')),
+    (6, _SidebarItem(Icons.settings_rounded, 'Settings')),
   ];
-  static const _settingsItem =
-      (6, _SidebarItem(Icons.settings_rounded, 'Settings'));
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final totalHeight = constraints.maxHeight;
-        final navIndex =
-            _navItems.indexWhere((e) => e.$1 == selectedIndex);
-        final isSettings = selectedIndex == _settingsItem.$1;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
 
-        // Calculate indicator vertical position.
-        final double indicatorTop;
-        if (isSettings) {
-          indicatorTop = totalHeight -
-              _kBottomPadding -
-              _kButtonSize +
-              (_kButtonSize - _kIndicatorHeight) / 2;
-        } else if (navIndex >= 0) {
-          indicatorTop = _kTopPadding +
-              (navIndex * _kNavButtonPitch) +
-              10 + // top padding of _NavButton
-              (_kButtonSize - _kIndicatorHeight) / 2;
-        } else {
-          indicatorTop =
-              _kTopPadding + 10 + (_kButtonSize - _kIndicatorHeight) / 2;
-        }
-
-        return Stack(
-          children: [
-            // Original sidebar layout — untouched structure
-            Container(
-              width: 72,
-              padding:
-                  const EdgeInsets.only(top: _kTopPadding, bottom: _kBottomPadding),
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          for (final (pageIndex, item) in _navItems)
-                            _NavButton(
-                              pageIndex: pageIndex,
-                              item: item,
-                              isSelected: selectedIndex == pageIndex,
-                              accentColor: accentColor,
-                              editorBgColor: editorBgColor,
-                              sidebarIconColor: sidebarIconColor,
-                              onTap: () => onItemSelected(pageIndex),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  _NavButton(
-                    pageIndex: _settingsItem.$1,
-                    item: _settingsItem.$2,
-                    isSelected: selectedIndex == _settingsItem.$1,
-                    accentColor: accentColor,
-                    editorBgColor: editorBgColor,
-                    sidebarIconColor: sidebarIconColor,
-                    onTap: () => onItemSelected(_settingsItem.$1),
-                  ),
-                ],
+    return Padding(
+      padding: const EdgeInsets.only(left: 8, top: 6, bottom: 14),
+      child: Align(
+        alignment: Alignment.topCenter,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(22),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 32, sigmaY: 32),
+            child: Container(
+              width: 46,
+              decoration: BoxDecoration(
+                color: isDark
+                    ? editorBgColor.withValues(alpha: 0.45)
+                    : Colors.white.withValues(alpha: 0.45),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: isDark
+                      ? Colors.white.withValues(alpha: 0.10)
+                      : Colors.white.withValues(alpha: 0.55),
+                  width: 0.5,
+                ),
               ),
-            ),
-
-            // Animated selection indicator bar (overlaid)
-            AnimatedPositioned(
-              duration: const Duration(milliseconds: 250),
-              curve: Curves.easeOutCubic,
-              left: 2,
-              top: indicatorTop,
-              child: Container(
-                width: 3,
-                height: _kIndicatorHeight,
-                decoration: BoxDecoration(
-                  color: accentColor,
-                  borderRadius: BorderRadius.circular(2),
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final (pageIndex, item) in _navItems)
+                      _NavIcon(
+                        item: item,
+                        isSelected: selectedIndex == pageIndex,
+                        accentColor: accentColor,
+                        isDark: isDark,
+                        onTap: () => onItemSelected(pageIndex),
+                      ),
+                  ],
                 ),
               ),
             ),
-          ],
-        );
-      },
+          ),
+        ),
+      ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Single nav button — uses MouseRegion so hover state is fully controlled
-// and never leaks through the InkWell splash/hover overlay.
-// ─────────────────────────────────────────────────────────────────────────────
 
-class _NavButton extends StatefulWidget {
-  final int pageIndex;
+class _NavIcon extends StatefulWidget {
   final _SidebarItem item;
   final bool isSelected;
   final Color accentColor;
-  final Color editorBgColor;
-  final Color sidebarIconColor;
+  final bool isDark;
   final VoidCallback onTap;
 
-  const _NavButton({
-    required this.pageIndex,
+  const _NavIcon({
     required this.item,
     required this.isSelected,
     required this.accentColor,
-    required this.editorBgColor,
-    required this.sidebarIconColor,
+    required this.isDark,
     required this.onTap,
   });
 
   @override
-  State<_NavButton> createState() => _NavButtonState();
+  State<_NavIcon> createState() => _NavIconState();
 }
 
-class _NavButtonState extends State<_NavButton> {
+class _NavIconState extends State<_NavIcon> {
   bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final isSelected = widget.isSelected;
     final accent = widget.accentColor;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final isDark = widget.isDark;
 
-    // Adapt circle color to dark/light mode.
-    final bgColor = widget.editorBgColor;
-    final Color circleColor;
+    final Color iconColor;
     if (isSelected) {
-      circleColor = accent;
+      iconColor = Colors.white;
     } else if (_hovered) {
-      circleColor = Color.lerp(bgColor, isDark ? Colors.white : Colors.black, 0.08)!;
+      iconColor = isDark ? Colors.white70 : Colors.black54;
     } else {
-      circleColor = bgColor;
+      iconColor = isDark ? Colors.white38 : Colors.black26;
     }
 
-    final shadowColor = isSelected
-        ? accent.withValues(alpha: 0.35)
-        : (isDark
-            ? Colors.black.withValues(alpha: _hovered ? 0.30 : 0.20)
-            : Colors.black.withValues(alpha: _hovered ? 0.14 : 0.08));
+    final Color bgColor;
+    if (isSelected) {
+      bgColor = accent;
+    } else if (_hovered) {
+      bgColor = isDark
+          ? Colors.white.withValues(alpha: 0.08)
+          : Colors.black.withValues(alpha: 0.04);
+    } else {
+      bgColor = Colors.transparent;
+    }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+      padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 5),
       child: Tooltip(
         message: widget.item.label,
         preferBelow: false,
@@ -205,30 +149,27 @@ class _NavButtonState extends State<_NavButton> {
             onTap: widget.onTap,
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 150),
-              width: _kButtonSize,
-              height: _kButtonSize,
+              curve: Curves.easeOutCubic,
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: circleColor,
-                shape: BoxShape.circle,
-                border: isDark && !isSelected
-                    ? Border.all(
-                        color: Colors.white.withValues(alpha: 0.08),
-                        width: 1,
-                      )
+                color: bgColor,
+                borderRadius: BorderRadius.circular(10),
+                boxShadow: isSelected
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.3),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ]
                     : null,
-                boxShadow: [
-                  BoxShadow(
-                    color: shadowColor,
-                    blurRadius: isSelected ? 12 : (_hovered ? 8 : 6),
-                    offset: const Offset(0, 2),
-                  ),
-                ],
               ),
               child: Icon(
                 widget.item.icon,
-                // Selected → always white; unselected uses custom icon color.
-                color: isSelected ? Colors.white : widget.sidebarIconColor,
-                size: 22,
+                color: iconColor,
+                size: 19,
               ),
             ),
           ),
