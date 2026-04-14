@@ -148,7 +148,7 @@ class _NavIconState extends State<_NavIcon> {
           child: GestureDetector(
             onTap: widget.onTap,
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
+              duration: const Duration(milliseconds: 250),
               curve: Curves.easeOutCubic,
               width: 36,
               height: 36,
@@ -156,20 +156,25 @@ class _NavIconState extends State<_NavIcon> {
               decoration: BoxDecoration(
                 color: bgColor,
                 borderRadius: BorderRadius.circular(10),
-                boxShadow: isSelected
-                    ? [
-                        BoxShadow(
-                          color: accent.withValues(alpha: 0.3),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ]
-                    : null,
+                boxShadow: [
+                  BoxShadow(
+                    color: isSelected
+                        ? accent.withValues(alpha: 0.3)
+                        : Colors.transparent,
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
               ),
-              child: Icon(
-                widget.item.icon,
-                color: iconColor,
-                size: 19,
+              child: TweenAnimationBuilder<Color?>(
+                tween: ColorTween(end: iconColor),
+                duration: const Duration(milliseconds: 250),
+                curve: Curves.easeOutCubic,
+                builder: (context, color, _) => Icon(
+                  widget.item.icon,
+                  color: color,
+                  size: 19,
+                ),
               ),
             ),
           ),
