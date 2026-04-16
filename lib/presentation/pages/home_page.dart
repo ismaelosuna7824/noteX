@@ -152,44 +152,27 @@ class _HomePageState extends State<HomePage>
                   child: _ReminderCard(
                     accentColor: accentColor,
                     editorBgColor: themeState.editorBgColor,
+                    heroColor: heroColor,
+                    heroShadows: heroShadows,
                     onNavigateToReminders: () => appState.navigateToPage(7),
                   ),
                 ),
               ),
             ),
 
-            // Quick shortcuts bar — below the hero text
-            if (!isMobile)
+            // Now Editing — in the hero area
+            if (recentNote != null && !isMobile)
               Positioned(
                 left: 32,
                 top: heroTop + 200,
                 child: FadeTransition(
-                  opacity: _fadeAnims[6],
-                  child: SlideTransition(
-                    position: _slideAnims[6],
-                    child: _QuickShortcutsBar(
-                      accentColor: accentColor,
-                      heroColor: heroColor,
-                      shadows: heroShadows,
-                      onNavigate: (page) => appState.navigateToPage(page),
-                    ),
-                  ),
-                ),
-              ),
-
-            // "Continue writing" card — right side, middle zone
-            if (recentNote != null && !isMobile)
-              Positioned(
-                right: 32,
-                top: h * 0.46,
-                child: FadeTransition(
                   opacity: _fadeAnims[5],
                   child: SlideTransition(
                     position: _slideAnims[5],
-                    child: _RecentActivityCard(
+                    child: _HeroNowEditing(
                       note: recentNote,
-                      heroColor: heroColor,
                       accentColor: accentColor,
+                      heroColor: heroColor,
                       shadows: heroShadows,
                       onTap: () => appState.selectNote(recentNote),
                     ),
@@ -287,7 +270,20 @@ class _HomePageState extends State<HomePage>
                   children: [
                     _buildWritingStatsCard(context, theme, accentColor),
                     const SizedBox(height: 12),
-                    _buildPinnedNotesCard(context, theme, accentColor),
+                    Expanded(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: _buildPinnedNotesCard(context, theme, accentColor),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildNowEditingCard(context, theme, accentColor),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -1134,6 +1130,133 @@ class _HomePageState extends State<HomePage>
     );
   }
 
+  // ─── Now Editing card (bottom-right, next to Pinned Notes) ──────────────────
+  Widget _buildNowEditingCard(
+    BuildContext context,
+    ThemeData theme,
+    Color accentColor,
+  ) {
+    final isDark = theme.brightness == Brightness.dark;
+    final recentNote = _mostRecentNote;
+
+    final shape = RectangleShapeBorder(
+      borderRadius: DynamicBorderRadius.only(
+        topLeft: DynamicRadius.circular(Length(24)),
+        topRight: DynamicRadius.circular(Length(24)),
+        bottomLeft: DynamicRadius.circular(Length(24)),
+        bottomRight: DynamicRadius.circular(Length(56)),
+      ),
+    );
+
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+
+    if (recentNote == null) {
+      return _BlurredShapeCard(
+        shape: shape,
+        color: themeState.editorBgColor,
+        isDark: isDark,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 22, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'No recent notes',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: secondaryText,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final title = recentNote.title.isNotEmpty ? recentNote.title : 'Untitled';
+    final timeAgo = _formatTimeAgo(recentNote.updatedAt);
+    final wordCount = recentNote.wordCount;
+
+    return _PressButton(
+      onTap: () => appState.selectNote(recentNote),
+      child: _BlurredShapeCard(
+        shape: shape,
+        color: themeState.editorBgColor,
+        isDark: isDark,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 18, 22, 20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Row(
+                children: [
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.5),
+                          blurRadius: 6,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'NOW EDITING',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: secondaryText,
+                      letterSpacing: 1.5,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 9,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              // Title
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.titleSmall?.copyWith(
+                  color: primaryText,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(height: 2),
+              // Word count + time
+              Text(
+                '$wordCount word${wordCount == 1 ? '' : 's'}  \u00B7  $timeAgo',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: secondaryText,
+                  fontSize: 11,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatTimeAgo(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+
   // ─── New Note action button ─────────────────────────────────────────────────
   Widget _buildActionButton({
     required BuildContext context,
@@ -1527,8 +1650,8 @@ class _HeroTextState extends State<_HeroText>
         Text(
           _greeting(),
           style: theme.textTheme.bodyLarge?.copyWith(
-            color: widget.heroColor.withValues(alpha: 0.8),
-            fontWeight: FontWeight.w500,
+            color: widget.heroColor,
+            fontWeight: FontWeight.w600,
             shadows: widget.shadows,
           ),
         ),
@@ -1539,7 +1662,7 @@ class _HeroTextState extends State<_HeroText>
         Text(
           _dailyQuote(),
           style: theme.textTheme.bodyMedium?.copyWith(
-            color: widget.heroColor.withValues(alpha: 0.60),
+            color: widget.heroColor.withValues(alpha: 0.80),
             fontStyle: FontStyle.italic,
             shadows: widget.shadows,
           ),
@@ -1628,6 +1751,8 @@ class _RecentActivityCard extends StatefulWidget {
   final Note note;
   final Color heroColor;
   final Color accentColor;
+  final Color editorBgColor;
+  final bool isDark;
   final List<Shadow> shadows;
   final VoidCallback onTap;
 
@@ -1635,6 +1760,8 @@ class _RecentActivityCard extends StatefulWidget {
     required this.note,
     required this.heroColor,
     required this.accentColor,
+    required this.editorBgColor,
+    required this.isDark,
     required this.shadows,
     required this.onTap,
   });
@@ -1670,23 +1797,31 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
     final title = note.title.isNotEmpty ? note.title : 'Untitled';
     final wordCount = note.wordCount;
     final accent = widget.accentColor;
-    final heroColor = widget.heroColor;
 
-    final cardBg = heroColor.withValues(alpha: 0.12);
-    final cardBorder = heroColor.withValues(alpha: 0.08);
-    final labelColor = heroColor.withValues(alpha: 0.60);
-    final titleColor = heroColor.withValues(alpha: 0.90);
-    final subtitleColor = heroColor.withValues(alpha: 0.65);
+    final isDark = widget.isDark;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
 
     return _PressButton(
       onTap: widget.onTap,
-      child: Container(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
         width: 220,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: cardBg,
+          color: isDark
+              ? widget.editorBgColor.withValues(alpha: 0.28)
+              : widget.editorBgColor.withValues(alpha: 0.38),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: cardBorder),
+          border: Border.all(
+            color: isDark
+                ? Colors.white.withValues(alpha: 0.08)
+                : Colors.white.withValues(alpha: 0.2),
+            width: 0.5,
+          ),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1713,11 +1848,10 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
                 Text(
                   'NOW EDITING',
                   style: theme.textTheme.labelSmall?.copyWith(
-                    color: labelColor,
+                    color: secondaryText,
                     letterSpacing: 1.5,
                     fontWeight: FontWeight.w600,
                     fontSize: 10,
-                    shadows: widget.shadows,
                   ),
                 ),
               ],
@@ -1731,9 +1865,8 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: theme.textTheme.titleSmall?.copyWith(
-                color: titleColor,
+                color: primaryText,
                 fontWeight: FontWeight.w700,
-                shadows: widget.shadows,
               ),
             ),
 
@@ -1743,9 +1876,8 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
             Text(
               '$wordCount word${wordCount == 1 ? '' : 's'}  \u00B7  $timeAgo',
               style: theme.textTheme.bodySmall?.copyWith(
-                color: subtitleColor,
+                color: secondaryText,
                 fontSize: 11,
-                shadows: widget.shadows,
               ),
             ),
 
@@ -1761,7 +1893,9 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
                     height: 3,
                     child: LinearProgressIndicator(
                       value: _progressAnim.value,
-                      backgroundColor: heroColor.withValues(alpha: 0.10),
+                      backgroundColor: isDark
+                          ? Colors.white.withValues(alpha: 0.08)
+                          : Colors.black.withValues(alpha: 0.06),
                       color: accent.withValues(alpha: 0.7),
                       minHeight: 3,
                     ),
@@ -1771,6 +1905,8 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
             ),
           ],
         ),
+      ),
+      ),
       ),
     );
   }
@@ -1795,11 +1931,15 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
 class _ReminderCard extends StatelessWidget {
   final Color accentColor;
   final Color editorBgColor;
+  final Color heroColor;
+  final List<Shadow> heroShadows;
   final VoidCallback onNavigateToReminders;
 
   const _ReminderCard({
     required this.accentColor,
     required this.editorBgColor,
+    required this.heroColor,
+    required this.heroShadows,
     required this.onNavigateToReminders,
   });
 
@@ -1816,109 +1956,108 @@ class _ReminderCard extends StatelessWidget {
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final pending = reminderState.pendingToday;
         final theme = Theme.of(context);
+        final maxVisible = 4;
+        final visible = pending.take(maxVisible).toList();
+        final remaining = pending.length - maxVisible;
 
         final primaryText = isDark ? Colors.white : Colors.black87;
         final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
-        final dividerColor = isDark
-            ? Colors.white.withValues(alpha: 0.10)
-            : Colors.grey.shade100;
+        final checkColor = isDark ? Colors.white38 : Colors.grey.shade400;
 
-        final shape = RectangleShapeBorder(
-          borderRadius: DynamicBorderRadius.only(
-            topLeft: DynamicRadius.circular(Length(24)),
-            topRight: DynamicRadius.circular(Length(56)),
-            bottomLeft: DynamicRadius.circular(Length(56)),
-            bottomRight: DynamicRadius.circular(Length(24)),
+        return ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+            child: Container(
+          width: 220,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: isDark
+                ? editorBgColor.withValues(alpha: 0.28)
+                : Colors.white.withValues(alpha: 0.38),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.2),
+              width: 0.5,
+            ),
           ),
-        );
-
-        return _PressButton(
-          onTap: onNavigateToReminders,
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 280, maxHeight: 260),
-            child: _BlurredShapeCard(
-              shape: shape,
-              color: editorBgColor,
-              isDark: isDark,
-              child: Padding(
-              padding: const EdgeInsets.fromLTRB(24, 18, 22, 18),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header: dot + label + count
+              Row(
                 children: [
-                  // Header row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            '${pending.length}',
-                            style: theme.textTheme.headlineLarge?.copyWith(
-                              fontWeight: FontWeight.w900,
-                              color: primaryText,
-                            ),
-                          ),
-                          Text(
-                            'Pending',
-                            style: theme.textTheme.bodySmall?.copyWith(
-                              color: secondaryText,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: accentColor.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(14),
+                  Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accentColor.withValues(alpha: 0.5),
+                          blurRadius: 6,
                         ),
-                        child: Icon(
-                          Icons.notifications_active_rounded,
-                          color: accentColor,
-                          size: 20,
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
-                    child: Divider(color: dividerColor, thickness: 1),
-                  ),
-
-                  // Reminder list with staggered entrance
-                  Flexible(
-                    child: ListView.builder(
-                      shrinkWrap: true,
-                      padding: EdgeInsets.zero,
-                      itemCount: pending.length,
-                      itemBuilder: (context, index) {
-                        final reminder = pending[index];
-                        return _HomeReminderItem(
-                          key: ValueKey(reminder.id),
-                          index: index,
-                          reminder: reminder,
-                          accentColor: accentColor,
-                          isDark: isDark,
-                          primaryText: primaryText,
-                          onComplete: () {
-                            GetIt.instance<ReminderState>().completeReminder(
-                              reminder.id,
-                            );
-                          },
-                        );
-                      },
+                  const SizedBox(width: 8),
+                  Text(
+                    '${pending.length} PENDING',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: secondaryText,
+                      letterSpacing: 1.5,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 10,
                     ),
                   ),
                 ],
               ),
-            ),
-            ),
+
+              const SizedBox(height: 12),
+
+              // Reminder items (max 3)
+              for (final reminder in visible)
+                _HomeReminderItem(
+                  key: ValueKey(reminder.id),
+                  index: 0,
+                  reminder: reminder,
+                  accentColor: accentColor,
+                  isDark: isDark,
+                  primaryText: primaryText,
+                  checkColor: checkColor,
+                  shadows: const [],
+                  onComplete: () {
+                    GetIt.instance<ReminderState>().completeReminder(
+                      reminder.id,
+                    );
+                  },
+                ),
+
+              // "View all" link — always visible
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: _PressButton(
+                  onTap: onNavigateToReminders,
+                  child: Text(
+                    remaining > 0
+                        ? '+$remaining more  \u2192'
+                        : 'View all  \u2192',
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: accentColor,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 11,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
+        ),
+        ),
         );
       },
     );
@@ -1935,6 +2074,8 @@ class _HomeReminderItem extends StatefulWidget {
   final Color accentColor;
   final bool isDark;
   final Color primaryText;
+  final Color checkColor;
+  final List<Shadow> shadows;
   final VoidCallback onComplete;
 
   const _HomeReminderItem({
@@ -1944,6 +2085,8 @@ class _HomeReminderItem extends StatefulWidget {
     required this.accentColor,
     required this.isDark,
     required this.primaryText,
+    required this.checkColor,
+    required this.shadows,
     required this.onComplete,
   });
 
@@ -2005,9 +2148,7 @@ class _HomeReminderItemState extends State<_HomeReminderItem>
                   onChanged: (_) => _handleComplete(),
                   activeColor: widget.accentColor,
                   side: BorderSide(
-                    color: widget.isDark
-                        ? Colors.white38
-                        : Colors.grey.shade400,
+                    color: widget.checkColor,
                     width: 1.5,
                   ),
                   shape: RoundedRectangleBorder(
@@ -2022,9 +2163,10 @@ class _HomeReminderItemState extends State<_HomeReminderItem>
                 child: Text(
                   widget.reminder.title,
                   style: TextStyle(
-                    fontSize: 13,
+                    fontSize: 12,
                     fontWeight: FontWeight.w500,
                     color: widget.primaryText,
+                    shadows: widget.shadows,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -2217,6 +2359,119 @@ class _AccentLinePainter extends CustomPainter {
   bool shouldRepaint(_AccentLinePainter old) => old.progress != progress;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Hero Now Editing — compact CTA in the hero area using heroColor styling
+// so it blends naturally with the hero text and shortcuts.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _HeroNowEditing extends StatelessWidget {
+  final Note note;
+  final Color accentColor;
+  final Color heroColor;
+  final List<Shadow> shadows;
+  final VoidCallback onTap;
+
+  const _HeroNowEditing({
+    required this.note,
+    required this.accentColor,
+    required this.heroColor,
+    required this.shadows,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final title = note.title.isNotEmpty ? note.title : 'Untitled';
+    final timeAgo = _formatTimeAgoStatic(note.updatedAt);
+
+    final titleColor = heroColor.withValues(alpha: 0.90);
+    final subtitleColor = heroColor.withValues(alpha: 0.60);
+
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final primaryText = isDark ? Colors.white : Colors.black87;
+    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+
+    return _PressButton(
+      onTap: onTap,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: isDark
+                  ? Colors.black.withValues(alpha: 0.30)
+                  : Colors.white.withValues(alpha: 0.45),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.4),
+                width: 0.5,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Accent bar
+                Container(
+                  width: 3,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                // Text
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: primaryText,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      timeAgo,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: secondaryText,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 12),
+                // Arrow
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  color: accentColor,
+                  size: 14,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static String _formatTimeAgoStatic(DateTime date) {
+    final diff = DateTime.now().difference(date);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inDays == 1) return 'Yesterday';
+    if (diff.inDays < 7) return '${diff.inDays}d ago';
+    return '${date.day}/${date.month}/${date.year}';
+  }
+}
+
 class _QuickShortcutsBar extends StatelessWidget {
   final Color accentColor;
   final Color heroColor;
@@ -2232,6 +2487,9 @@ class _QuickShortcutsBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final iconColor = isDark ? Colors.white70 : Colors.black45;
+
     final items = [
       (Icons.calendar_month_rounded, 'Calendar', 3),
       (Icons.timer_rounded, 'Timer', 4),
@@ -2239,33 +2497,49 @@ class _QuickShortcutsBar extends StatelessWidget {
       (Icons.notifications_rounded, 'Reminders', 7),
     ];
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: items.map((item) {
-        return Padding(
-          padding: const EdgeInsets.only(right: 8),
-          child: _PressButton(
-            onTap: () => onNavigate(item.$3),
-            pressScale: 0.88,
-            child: Tooltip(
-              message: item.$2,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: heroColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  item.$1,
-                  color: heroColor.withValues(alpha: 0.80),
-                  size: 18,
-                  shadows: shadows,
-                ),
-              ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          decoration: BoxDecoration(
+            color: isDark
+                ? Colors.black.withValues(alpha: 0.30)
+                : Colors.white.withValues(alpha: 0.45),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.white.withValues(alpha: 0.4),
+              width: 0.5,
             ),
           ),
-        );
-      }).toList(),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: items.map((item) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: _PressButton(
+                  onTap: () => onNavigate(item.$3),
+                  pressScale: 0.88,
+                  child: Tooltip(
+                    message: item.$2,
+                    child: Padding(
+                      padding: const EdgeInsets.all(8),
+                      child: Icon(
+                        item.$1,
+                        color: iconColor,
+                        size: 18,
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+      ),
     );
   }
 }
