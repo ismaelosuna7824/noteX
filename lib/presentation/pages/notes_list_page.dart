@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -16,7 +15,6 @@ import 'package:get_it/get_it.dart';
 import '../utils/platform_utils.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
-import '../widgets/note_card.dart';
 import '../widgets/note_grid_card.dart';
 
 /// Notes list view with inline edit panel.
@@ -435,6 +433,12 @@ class _NotesListPageState extends State<NotesListPage> {
     bool showPinned,
     List<Note> displayedNotes,
   ) {
+    // For pinned mode, fall back to the simple empty state when there's
+    // nothing pinned — the tree (which always renders "+ New folder")
+    // wouldn't make sense here.
+    final showEmpty =
+        showPinned && widget.appState.pinnedNotes.isEmpty;
+
     final listPanel = GlassmorphicContainer(
       borderRadius: 20,
       color: widget.themeState.editorBgColor,
@@ -444,64 +448,10 @@ class _NotesListPageState extends State<NotesListPage> {
         children: [
           _buildHeader(theme, accentColor, showPinned),
           const SizedBox(height: 8),
-          _buildProjectChips(theme, accentColor),
-          const SizedBox(height: 8),
           Expanded(
-            child: displayedNotes.isEmpty
+            child: showEmpty
                 ? _buildEmptyState(theme, showPinned)
-                : ListView.builder(
-                    key: ValueKey(showPinned ? 'pinned' : 'all'),
-                    itemCount: displayedNotes.length,
-                    itemBuilder: (context, index) {
-                      final note = displayedNotes[index];
-                      return _StaggeredEntry(
-                        index: index,
-                        child: NoteCard(
-                          note: note,
-                          isSelected:
-                              note.id ==
-                              widget.appState.currentNote?.id,
-                          accentColor: accentColor,
-                          editorBgColor:
-                              widget.themeState.editorBgColor,
-                          isNoteUnlocked:
-                              GetIt.instance<SecurityState>().isNoteUnlocked(note.id),
-                          onTap: () {
-                            final sec = GetIt.instance<SecurityState>();
-                            if (note.isLocked && !sec.isNoteUnlocked(note.id)) {
-                              _showUnlockDialog(context, sec, note.id, () {
-                                widget.appState.previewNote(note);
-                                if (kIsMobile) {
-                                  widget.appState.navigateToPage(2);
-                                } else {
-                                  setState(() => _loadNote());
-                                }
-                              });
-                              return;
-                            }
-                            widget.appState.previewNote(note);
-                            if (kIsMobile) {
-                              widget.appState.navigateToPage(2);
-                            } else {
-                              setState(() => _loadNote());
-                            }
-                          },
-                          onCompactMode: kIsMobile
-                              ? null
-                              : () => widget.appState.enterCompactMode(note),
-                          onPin: () => widget.appState.togglePin(note),
-                          onDelete: () =>
-                              widget.appState.deleteNote(note.id),
-                          onDuplicate: () =>
-                              widget.appState.duplicateNote(note),
-                          noteProjects: widget.appState.noteProjects,
-                          onChangeProject: (projectId) =>
-                              widget.appState.updateNoteProject(
-                                  note.id, projectId),
-                        ),
-                      );
-                    },
-                  ),
+                : _buildUnifiedTree(theme, accentColor, showPinned),
           ),
         ],
       ),
@@ -550,8 +500,6 @@ class _NotesListPageState extends State<NotesListPage> {
         child: Column(
           children: [
             _buildHeader(theme, accentColor, showPinned),
-            const SizedBox(height: 8),
-            _buildProjectChips(theme, accentColor),
             const SizedBox(height: 8),
             Expanded(
               child: displayedNotes.isEmpty
@@ -625,118 +573,312 @@ class _NotesListPageState extends State<NotesListPage> {
     );
   }
 
-  Widget _buildProjectChips(ThemeData theme, Color accentColor) {
+  /// Unified vertical tree that shows folders AND their notes as a single
+  /// file-explorer-style hierarchy. Clicking a folder toggles expand/collapse;
+  /// clicking a note opens it in the editor.
+  Widget _buildUnifiedTree(
+    ThemeData theme,
+    Color accentColor,
+    bool showPinned,
+  ) {
     final isDark = theme.brightness == Brightness.dark;
-    final selected = widget.appState.selectedNoteProjectId;
-    final projects = widget.appState.noteProjects;
+    final state = widget.appState;
+    final currentNoteId = state.currentNote?.id;
+    final selectedFolderId = state.selectedNoteProjectId;
+    final rows = <Widget>[];
 
-    return SizedBox(
-      height: 30,
-      child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse},
+    if (showPinned) {
+      for (final n in state.pinnedNotes) {
+        rows.add(_buildNoteRow(n, 0, isDark, accentColor, currentNoteId,
+            guides: const []));
+      }
+    } else if (state.searchQuery.isNotEmpty) {
+      // Flat list of search results — no folder hierarchy.
+      for (final n in state.filteredNotes) {
+        rows.add(_buildNoteRow(n, 0, isDark, accentColor, currentNoteId,
+            guides: const []));
+      }
+    } else {
+      // "All" pseudo-row at the top represents the root scope. Click to
+      // deselect any folder so new notes / sub-folders land at root.
+      // Hover-revealed actions let users create a root note or folder from
+      // the top of the tree — no need to scroll past a long list to reach
+      // the "+ New folder" row at the bottom.
+      rows.add(_FolderTreeRow(
+        label: 'All',
+        depth: 0,
+        guides: const [],
+        color: accentColor,
+        isDark: isDark,
+        // Only one row in the tree ever shows as selected: when a note is
+        // open, the note wins (it's the "child" / most-specific selection).
+        // The folder filter context is still tracked under the hood so new
+        // notes / folders land in the right place.
+        isSelected: selectedFolderId == null && currentNoteId == null,
+        hasChildren: false,
+        isExpanded: false,
+        count: 0,
+        leadingIcon: Icons.inbox_rounded,
+        onTap: () => state.filterByNoteProject(null),
+        // Switch to root scope first so the underlying creators don't inherit
+        // a previously selected folder as the parent.
+        onCreateNote: () {
+          state.filterByNoteProject(null);
+          state.createNewNote();
+        },
+        onCreateSubfolder: () {
+          state.filterByNoteProject(null);
+          _showCreateProjectDialog(accentColor);
+        },
+        alwaysShowActions: true,
+        onNoteDropped: (note) =>
+            widget.appState.updateNoteProject(note.id, null),
+      ));
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Container(
+          height: 1,
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.06)
+              : Colors.black.withValues(alpha: 0.06),
         ),
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            // "All" chip
-            _buildChip(
-              label: 'All',
-              isSelected: selected == null,
-              color: accentColor,
-              isDark: isDark,
-              onTap: () => widget.appState.filterByNoteProject(null),
-            ),
-            const SizedBox(width: 6),
-            // Per-project chips
-            for (final p in projects) ...[
-              GestureDetector(
-                onSecondaryTapUp: (details) =>
-                    _showProjectContextMenu(details.globalPosition, p),
-                child: _buildChip(
-                  label: p.name,
-                  isSelected: selected == p.id,
-                  color: p.color,
-                  isDark: isDark,
-                  onTap: () => widget.appState.filterByNoteProject(p.id),
-                  onLongPress: () => _showDeleteProjectDialog(p),
-                ),
-              ),
-              const SizedBox(width: 6),
-            ],
-            // "Uncategorized" chip
-            _buildChip(
-              label: 'Uncategorized',
-              isSelected: selected == '__root__',
-              color: isDark ? Colors.white54 : Colors.grey,
-              isDark: isDark,
-              onTap: () => widget.appState.filterByNoteProject('__root__'),
-            ),
-            const SizedBox(width: 6),
-            // "+" button to create project
-            InkWell(
-              onTap: () => _showCreateProjectDialog(accentColor),
-              borderRadius: BorderRadius.circular(14),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? Colors.white.withValues(alpha: 0.1)
-                      : Colors.grey.shade100,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Icon(
-                  Icons.add,
-                  size: 14,
-                  color: isDark ? Colors.white54 : Colors.grey.shade500,
-                ),
-              ),
-            ),
-          ],
-        ),
+      ));
+      _appendTreeNodes(rows, null, 0, isDark, accentColor, currentNoteId,
+          selectedFolderId, const []);
+    }
+
+    rows.add(_NewFolderRow(
+      isDark: isDark,
+      onTap: () => _showCreateProjectDialog(accentColor),
+    ));
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
       ),
     );
   }
 
-  Widget _buildChip({
-    required String label,
-    required bool isSelected,
-    required Color color,
-    required bool isDark,
-    required VoidCallback onTap,
-    VoidCallback? onLongPress,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? color.withValues(alpha: 0.2)
-              : (isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.grey.shade100),
-          borderRadius: BorderRadius.circular(14),
-          border: isSelected
-              ? Border.all(color: color.withValues(alpha: 0.5), width: 1)
-              : null,
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-            color: isSelected
-                ? color
-                : (isDark ? Colors.white54 : Colors.grey.shade600),
+  /// Recursively appends folder + note rows for the given [parentId] level.
+  ///
+  /// [ancestorContinues] has length == [depth]; index `i` holds
+  /// `!isLastInLevel` of the depth-`i` ancestor on this branch. For a row at
+  /// depth D, column k's pass-through (k in [0, D-2]) reflects whether the
+  /// depth-(k+1) ancestor still has siblings below — i.e., ancestorContinues
+  /// at index k+1. Index 0 is the root ancestor's flag and is never read by a
+  /// column (root items have no parent column to draw a trunk through).
+  void _appendTreeNodes(
+    List<Widget> rows,
+    String? parentId,
+    int depth,
+    bool isDark,
+    Color accentColor,
+    String? currentNoteId,
+    String? selectedFolderId,
+    List<bool> ancestorContinues,
+  ) {
+    final state = widget.appState;
+    final folders = state.childFoldersOf(parentId);
+    final notes = state.notesInFolder(parentId);
+
+    // Build the per-row guide list: pass-through guides for ancestors, then a
+    // terminal tee (├) or ell (└) at the immediate-parent column.
+    List<_GuideKind> guidesFor(bool isLastInLevel) {
+      if (depth == 0) return const [];
+      return [
+        for (var idx = 0; idx < depth - 1; idx++)
+          ancestorContinues[idx + 1] ? _GuideKind.vertical : _GuideKind.none,
+        isLastInLevel ? _GuideKind.ell : _GuideKind.tee,
+      ];
+    }
+
+    for (var i = 0; i < folders.length; i++) {
+      final folder = folders[i];
+      final children = state.childFoldersOf(folder.id);
+      final notesIn = state.notesInFolder(folder.id);
+      final hasChildren = children.isNotEmpty || notesIn.isNotEmpty;
+      final isExpanded = state.isFolderExpanded(folder.id);
+      // Folders come before notes in render order, so a folder is "last in
+      // level" only if it's the final folder AND there are no notes after.
+      final isLastInLevel = (i == folders.length - 1) && notes.isEmpty;
+
+      rows.add(
+        GestureDetector(
+          onSecondaryTapUp: (details) =>
+              _showProjectContextMenu(details.globalPosition, folder),
+          child: _FolderTreeRow(
+            label: folder.name,
+            depth: depth,
+            guides: guidesFor(isLastInLevel),
+            color: folder.color,
+            isDark: isDark,
+            // Folder shows as selected only while no note is open — the
+            // currently-open note wins as the single visible selection.
+            isSelected:
+                selectedFolderId == folder.id && currentNoteId == null,
+            hasChildren: hasChildren,
+            isExpanded: isExpanded,
+            count: state.noteCountInScope(folder.id),
+            leadingIcon: Icons.folder_rounded,
+            // Clicking the row selects the folder (so new notes / sub-folders
+            // land here). If the folder has children and isn't expanded yet,
+            // also expand it for convenience.
+            onTap: () {
+              state.filterByNoteProject(folder.id);
+              if (hasChildren && !isExpanded) {
+                state.toggleFolderExpanded(folder.id);
+              }
+            },
+            // Chevron is its own hit target — only toggles expand, never
+            // changes the selection.
+            onChevronTap: hasChildren
+                ? () => state.toggleFolderExpanded(folder.id)
+                : null,
+            onLongPress: () => _showDeleteProjectDialog(folder),
+            // Inline hover actions: create a note or sub-folder directly
+            // inside *this* folder, no matter what's currently selected.
+            onCreateNote: () => state.createNewNote(projectId: folder.id),
+            onCreateSubfolder: () =>
+                _showCreateProjectDialog(accentColor, parent: folder),
+            onNoteDropped: (note) =>
+                widget.appState.updateNoteProject(note.id, folder.id),
           ),
         ),
+      );
+
+      if (hasChildren && isExpanded) {
+        _appendTreeNodes(
+          rows,
+          folder.id,
+          depth + 1,
+          isDark,
+          accentColor,
+          currentNoteId,
+          selectedFolderId,
+          [...ancestorContinues, !isLastInLevel],
+        );
+      }
+    }
+
+    for (var j = 0; j < notes.length; j++) {
+      final note = notes[j];
+      final isLastInLevel = (j == notes.length - 1);
+      rows.add(_buildNoteRow(
+          note, depth, isDark, accentColor, currentNoteId,
+          guides: guidesFor(isLastInLevel)));
+    }
+  }
+
+  Widget _buildNoteRow(
+    Note note,
+    int depth,
+    bool isDark,
+    Color accentColor,
+    String? currentNoteId, {
+    required List<_GuideKind> guides,
+  }) {
+    return GestureDetector(
+      onSecondaryTapUp: (details) =>
+          _showNoteContextMenu(details.globalPosition, note),
+      child: _NoteTreeRow(
+        note: note,
+        depth: depth,
+        guides: guides,
+        isDark: isDark,
+        accentColor: accentColor,
+        isSelected: note.id == currentNoteId,
+        onTap: () => _openNote(note),
       ),
     );
   }
 
-  void _showCreateProjectDialog(Color accentColor) {
+  void _openNote(Note note) {
+    // Selecting a note also focuses its parent folder so subsequent "new
+    // note" / "new folder" actions land alongside it.
+    widget.appState.filterByNoteProject(note.projectId);
+
+    final sec = GetIt.instance<SecurityState>();
+    if (note.isLocked && !sec.isNoteUnlocked(note.id)) {
+      _showUnlockDialog(context, sec, note.id, () {
+        widget.appState.previewNote(note);
+        if (kIsMobile) {
+          widget.appState.navigateToPage(2);
+        } else {
+          setState(() => _loadNote());
+        }
+      });
+      return;
+    }
+    widget.appState.previewNote(note);
+    if (kIsMobile) {
+      widget.appState.navigateToPage(2);
+    } else {
+      setState(() => _loadNote());
+    }
+  }
+
+  void _showNoteContextMenu(Offset position, Note note) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        position.dx,
+        position.dy,
+        position.dx,
+        position.dy,
+      ),
+      items: [
+        PopupMenuItem(
+          value: 'pin',
+          child: Row(
+            children: [
+              Icon(
+                note.isPinned
+                    ? Icons.push_pin_rounded
+                    : Icons.push_pin_outlined,
+                size: 16,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(width: 8),
+              Text(note.isPinned ? 'Unpin' : 'Pin',
+                  style: const TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'duplicate',
+          child: Row(
+            children: [
+              Icon(Icons.copy_rounded, size: 16, color: Colors.grey.shade400),
+              const SizedBox(width: 8),
+              const Text('Duplicate', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+        const PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_rounded, size: 16, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete',
+                  style: TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (result == 'pin') {
+      widget.appState.togglePin(note);
+    } else if (result == 'duplicate') {
+      widget.appState.duplicateNote(note);
+    } else if (result == 'delete') {
+      widget.appState.deleteNote(note.id);
+    }
+  }
+
+  void _showCreateProjectDialog(Color accentColor, {NoteProject? parent}) {
     final nameController = TextEditingController();
     int selectedColor = accentColor.toARGB32();
     final colorOptions = [
@@ -754,7 +896,9 @@ class _NotesListPageState extends State<NotesListPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('New Project'),
+          title: Text(parent == null
+              ? 'New Project'
+              : 'New Project in "${parent.name}"'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -806,6 +950,7 @@ class _NotesListPageState extends State<NotesListPage> {
                 await widget.appState.createNoteProject(
                   name: name,
                   colorValue: selectedColor,
+                  parentId: parent?.id,
                 );
                 if (ctx.mounted) Navigator.pop(ctx);
                 setState(() {});
@@ -891,6 +1036,7 @@ class _NotesListPageState extends State<NotesListPage> {
   }
 
   void _showProjectContextMenu(Offset position, NoteProject project) async {
+    final accentColor = widget.themeState.accentColor;
     final result = await showMenu<String>(
       context: context,
       position: RelativeRect.fromLTRB(
@@ -900,6 +1046,17 @@ class _NotesListPageState extends State<NotesListPage> {
         position.dy,
       ),
       items: [
+        PopupMenuItem(
+          value: 'new_sub',
+          child: Row(
+            children: [
+              Icon(Icons.create_new_folder_rounded,
+                  size: 16, color: Colors.grey.shade400),
+              const SizedBox(width: 8),
+              const Text('New sub-folder', style: TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
         PopupMenuItem(
           value: 'rename',
           child: Row(
@@ -925,7 +1082,9 @@ class _NotesListPageState extends State<NotesListPage> {
         ),
       ],
     );
-    if (result == 'rename') {
+    if (result == 'new_sub') {
+      _showCreateProjectDialog(accentColor, parent: project);
+    } else if (result == 'rename') {
       _showRenameProjectDialog(project);
     } else if (result == 'delete') {
       _showDeleteProjectDialog(project);
@@ -1774,6 +1933,667 @@ class _StaggeredEntryState extends State<_StaggeredEntry> {
         curve: Curves.easeOutCubic,
         transform: Matrix4.translationValues(0, _visible ? 0 : 12, 0),
         child: widget.child,
+      ),
+    );
+  }
+}
+
+/// A row in the folder tree. Renders indentation, optional chevron,
+/// folder color dot/icon, name and note count.
+class _FolderTreeRow extends StatefulWidget {
+  final String label;
+  final int depth;
+  // One guide kind per indent column (length == depth). Drives the L-shaped
+  // connector lines that visually anchor each row to its parent folder.
+  final List<_GuideKind> guides;
+  final Color color;
+  final bool isDark;
+  final bool isSelected;
+  final bool hasChildren;
+  final bool isExpanded;
+  final int count;
+  final IconData leadingIcon;
+  final VoidCallback onTap;
+  final VoidCallback? onChevronTap;
+  final VoidCallback? onLongPress;
+  // Inline hover actions — when set, small icons appear on the right while
+  // the row is hovered so the user can create directly inside this folder
+  // without first selecting it.
+  final VoidCallback? onCreateNote;
+  final VoidCallback? onCreateSubfolder;
+  // When true, the trailing action icons are pinned visible instead of only
+  // appearing on hover. Used by the root "All" row so users don't need to
+  // scroll past a long tree to reach the "+ folder" affordance.
+  final bool alwaysShowActions;
+  // Drop callback: when set, the row becomes a DragTarget for notes dragged
+  // from elsewhere in the tree.
+  final void Function(Note note)? onNoteDropped;
+
+  const _FolderTreeRow({
+    required this.label,
+    required this.depth,
+    required this.guides,
+    required this.color,
+    required this.isDark,
+    required this.isSelected,
+    required this.hasChildren,
+    required this.isExpanded,
+    required this.count,
+    required this.leadingIcon,
+    required this.onTap,
+    this.onChevronTap,
+    this.onLongPress,
+    this.onCreateNote,
+    this.onCreateSubfolder,
+    this.alwaysShowActions = false,
+    this.onNoteDropped,
+  });
+
+  @override
+  State<_FolderTreeRow> createState() => _FolderTreeRowState();
+}
+
+class _FolderTreeRowState extends State<_FolderTreeRow> {
+  bool _hover = false;
+  bool _isDragOver = false;
+  Timer? _autoExpandTimer;
+
+  bool get _isFolderEntry => widget.leadingIcon == Icons.folder_rounded;
+
+  @override
+  void dispose() {
+    _autoExpandTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedBg = widget.color.withValues(alpha: 0.12);
+    final hoverBg = widget.isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.035);
+    final textColor = widget.isSelected
+        ? widget.color
+        : (widget.isDark ? Colors.white70 : Colors.grey.shade700);
+    final mutedColor = widget.isDark ? Colors.white38 : Colors.grey.shade500;
+
+    // Swap folder icon based on expanded state; keep custom icons (e.g. the
+    // "All" inbox row) untouched.
+    final IconData renderIcon = _isFolderEntry
+        ? (widget.isExpanded
+            ? Icons.folder_open_rounded
+            : Icons.folder_rounded)
+        : widget.leadingIcon;
+
+    // Folders get a subtle tint of their assigned color so each one has
+    // identity even when not selected.
+    final iconColor = _isFolderEntry
+        ? (widget.isSelected
+            ? widget.color
+            : widget.color.withValues(alpha: 0.65))
+        : (widget.isSelected ? widget.color : mutedColor);
+
+    final dropTintBg = widget.color.withValues(alpha: 0.22);
+    final Color rowBg = _isDragOver
+        ? dropTintBg
+        : (widget.isSelected
+            ? selectedBg
+            : (_hover ? hoverBg : Colors.transparent));
+
+    final row = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        onLongPress: widget.onLongPress,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          decoration: BoxDecoration(
+            color: rowBg,
+            border: _isDragOver
+                ? Border.all(color: widget.color, width: 1)
+                : null,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                // Left accent bar — only visible when selected; gives the row
+                // a "snapped to the hierarchy" feel without the heavy full-row
+                // fill of the previous design.
+                Container(
+                  width: 2.5,
+                  decoration: BoxDecoration(
+                    color: widget.isSelected
+                        ? widget.color
+                        : Colors.transparent,
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(6),
+                    ),
+                  ),
+                ),
+                // One indent guide per depth level — the last guide draws the
+                // L/T bracket that points at this row, the earlier ones draw
+                // pass-through verticals only where an ancestor still has
+                // siblings below.
+                for (final g in widget.guides)
+                  _IndentGuide(kind: g, isDark: widget.isDark),
+                const SizedBox(width: 4),
+                SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: widget.hasChildren
+                      ? InkWell(
+                          onTap: widget.onChevronTap,
+                          borderRadius: BorderRadius.circular(4),
+                          child: AnimatedRotation(
+                            turns: widget.isExpanded ? 0.25 : 0,
+                            duration: const Duration(milliseconds: 150),
+                            child: Icon(
+                              Icons.chevron_right_rounded,
+                              size: 16,
+                              color: mutedColor,
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 2),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Icon(renderIcon, size: 14, color: iconColor),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Text(
+                      widget.label,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.1,
+                        fontWeight: widget.isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ),
+                if ((_hover || widget.alwaysShowActions) &&
+                    (widget.onCreateNote != null ||
+                        widget.onCreateSubfolder != null)) ...[
+                  if (widget.onCreateNote != null)
+                    _MiniIconButton(
+                      icon: Icons.note_add_outlined,
+                      tooltip: 'New note here',
+                      color: mutedColor,
+                      onTap: widget.onCreateNote!,
+                    ),
+                  if (widget.onCreateSubfolder != null)
+                    _MiniIconButton(
+                      icon: Icons.create_new_folder_outlined,
+                      tooltip: 'New sub-folder',
+                      color: mutedColor,
+                      onTap: widget.onCreateSubfolder!,
+                    ),
+                  const SizedBox(width: 4),
+                ] else if (widget.count > 0) ...[
+                  _CountPill(count: widget.count, isDark: widget.isDark),
+                  const SizedBox(width: 6),
+                ] else
+                  const SizedBox(width: 8),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (widget.onNoteDropped == null) return row;
+    return DragTarget<Note>(
+      onWillAcceptWithDetails: (details) {
+        // Don't visually accept a drop on the note's own folder; the actual
+        // no-op write is already short-circuited inside UpdateNoteUseCase,
+        // but skipping the highlight avoids misleading affordance.
+        return true;
+      },
+      onMove: (_) {
+        if (!_isDragOver) setState(() => _isDragOver = true);
+        // Auto-expand a collapsed folder after a brief pause so users can
+        // drop into nested folders without first clicking the chevron.
+        if (widget.hasChildren &&
+            !widget.isExpanded &&
+            widget.onChevronTap != null &&
+            _autoExpandTimer == null) {
+          _autoExpandTimer = Timer(const Duration(milliseconds: 600), () {
+            if (mounted && _isDragOver) widget.onChevronTap!();
+          });
+        }
+      },
+      onLeave: (_) {
+        _autoExpandTimer?.cancel();
+        _autoExpandTimer = null;
+        if (_isDragOver) setState(() => _isDragOver = false);
+      },
+      onAcceptWithDetails: (details) {
+        _autoExpandTimer?.cancel();
+        _autoExpandTimer = null;
+        setState(() => _isDragOver = false);
+        widget.onNoteDropped!(details.data);
+      },
+      builder: (_, __, ___) => row,
+    );
+  }
+}
+
+/// A note (leaf) row in the unified tree.
+class _NoteTreeRow extends StatefulWidget {
+  final Note note;
+  final int depth;
+  // One guide kind per indent column (length == depth). Mirrors the folder
+  // row's tree-bracket scheme so notes nest visually under their folder.
+  final List<_GuideKind> guides;
+  final bool isDark;
+  final Color accentColor;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _NoteTreeRow({
+    required this.note,
+    required this.depth,
+    required this.guides,
+    required this.isDark,
+    required this.accentColor,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  State<_NoteTreeRow> createState() => _NoteTreeRowState();
+}
+
+class _NoteTreeRowState extends State<_NoteTreeRow> {
+  bool _hover = false;
+
+  String get _displayTitle {
+    final t = widget.note.title.trim();
+    if (t.isNotEmpty) return t;
+    return 'Untitled';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = widget.accentColor;
+    final selectedBg = accent.withValues(alpha: 0.12);
+    final hoverBg = widget.isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.035);
+    final textColor = widget.isSelected
+        ? accent
+        : (widget.isDark ? Colors.white70 : Colors.grey.shade700);
+    final mutedColor = widget.isDark ? Colors.white38 : Colors.grey.shade500;
+
+    final row = MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.symmetric(vertical: 1),
+          decoration: BoxDecoration(
+            color: widget.isSelected
+                ? selectedBg
+                : (_hover ? hoverBg : Colors.transparent),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: IntrinsicHeight(
+            child: Row(
+              children: [
+                // Left accent bar — only visible when selected.
+                Container(
+                  width: 2.5,
+                  decoration: BoxDecoration(
+                    color: widget.isSelected ? accent : Colors.transparent,
+                    borderRadius: const BorderRadius.horizontal(
+                      left: Radius.circular(6),
+                    ),
+                  ),
+                ),
+                // Indent guides — notes nest one level deeper than their
+                // parent folder; the final guide carries the L/T bracket
+                // pointing at this note row.
+                for (final g in widget.guides)
+                  _IndentGuide(kind: g, isDark: widget.isDark),
+                const SizedBox(width: 4),
+                // Empty chevron slot to align with folder rows.
+                const SizedBox(width: 16),
+                const SizedBox(width: 2),
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 5),
+                  child: Icon(
+                    Icons.description_outlined,
+                    size: 13,
+                    color: widget.isSelected ? accent : mutedColor,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Text(
+                      _displayTitle,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        height: 1.1,
+                        fontWeight: widget.isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w500,
+                        color: textColor,
+                      ),
+                    ),
+                  ),
+                ),
+                if (widget.note.isLocked) ...[
+                  Icon(Icons.lock_outline_rounded,
+                      size: 12, color: mutedColor),
+                  const SizedBox(width: 4),
+                ],
+                if (widget.note.isPinned) ...[
+                  Icon(Icons.push_pin_rounded,
+                      size: 12,
+                      color: widget.isSelected ? accent : mutedColor),
+                  const SizedBox(width: 4),
+                ],
+                const SizedBox(width: 4),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final feedback = Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: 0.95),
+          borderRadius: BorderRadius.circular(6),
+          boxShadow: const [
+            BoxShadow(blurRadius: 10, color: Colors.black38, offset: Offset(0, 2)),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.description_outlined,
+                size: 13, color: Colors.white),
+            const SizedBox(width: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 200),
+              child: Text(
+                _displayTitle,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+    final placeholder = Opacity(opacity: 0.35, child: row);
+
+    if (kIsMobile) {
+      return LongPressDraggable<Note>(
+        data: widget.note,
+        feedback: feedback,
+        childWhenDragging: placeholder,
+        child: row,
+      );
+    }
+    return Draggable<Note>(
+      data: widget.note,
+      feedback: feedback,
+      childWhenDragging: placeholder,
+      child: row,
+    );
+  }
+}
+
+/// The "+ New folder" row pinned at the bottom of the tree.
+class _NewFolderRow extends StatefulWidget {
+  final bool isDark;
+  final VoidCallback onTap;
+
+  const _NewFolderRow({required this.isDark, required this.onTap});
+
+  @override
+  State<_NewFolderRow> createState() => _NewFolderRowState();
+}
+
+class _NewFolderRowState extends State<_NewFolderRow> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = widget.isDark
+        ? (_hover ? Colors.white70 : Colors.white38)
+        : (_hover ? Colors.grey.shade700 : Colors.grey.shade500);
+    final hoverBg = widget.isDark
+        ? Colors.white.withValues(alpha: 0.05)
+        : Colors.black.withValues(alpha: 0.035);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: widget.onTap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 120),
+          margin: const EdgeInsets.only(top: 6, bottom: 2),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+          decoration: BoxDecoration(
+            color: _hover ? hoverBg : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: widget.isDark
+                  ? Colors.white.withValues(alpha: _hover ? 0.18 : 0.08)
+                  : Colors.black.withValues(alpha: _hover ? 0.15 : 0.06),
+              width: 1,
+              strokeAlign: BorderSide.strokeAlignInside,
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.add_rounded, size: 14, color: color),
+              const SizedBox(width: 6),
+              Text(
+                'New folder',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// A single vertical guide line drawn in the indent column of a tree row.
+/// Multiple guides stack horizontally — one per depth level — to give the
+/// tree a clear visual hierarchy like VS Code's explorer.
+/// Shape of the indent-guide stroke at one column for one row.
+///
+/// File-explorer style: pass-through ancestors draw a vertical line; the
+/// immediate-parent column of a row draws a tee (├) for non-last children
+/// or an ell (└) for the last child of that parent.
+enum _GuideKind { none, vertical, tee, ell }
+
+class _IndentGuide extends StatelessWidget {
+  final _GuideKind kind;
+  final bool isDark;
+  const _IndentGuide({required this.kind, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    if (kind == _GuideKind.none) {
+      return const SizedBox(width: 14);
+    }
+    final color = isDark
+        ? Colors.white.withValues(alpha: 0.10)
+        : Colors.black.withValues(alpha: 0.08);
+    return SizedBox(
+      width: 14,
+      child: CustomPaint(
+        painter: _GuidePainter(kind: kind, color: color),
+        child: const SizedBox.expand(),
+      ),
+    );
+  }
+}
+
+class _GuidePainter extends CustomPainter {
+  final _GuideKind kind;
+  final Color color;
+  _GuidePainter({required this.kind, required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    // Vertical trunk x sits slightly left of geometric center so the L's
+    // horizontal stroke has visible length pointing toward the chevron.
+    const double trunkX = 6.5;
+    final double midY = size.height / 2;
+    switch (kind) {
+      case _GuideKind.none:
+        break;
+      case _GuideKind.vertical:
+        canvas.drawLine(
+            const Offset(trunkX, 0), Offset(trunkX, size.height), paint);
+        break;
+      case _GuideKind.tee:
+        canvas.drawLine(
+            const Offset(trunkX, 0), Offset(trunkX, size.height), paint);
+        canvas.drawLine(
+            Offset(trunkX, midY), Offset(size.width, midY), paint);
+        break;
+      case _GuideKind.ell:
+        canvas.drawLine(const Offset(trunkX, 0), Offset(trunkX, midY), paint);
+        canvas.drawLine(
+            Offset(trunkX, midY), Offset(size.width, midY), paint);
+        break;
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GuidePainter old) =>
+      old.kind != kind || old.color != color;
+}
+
+/// Pill-shaped badge showing the note count next to a folder name.
+class _CountPill extends StatelessWidget {
+  final int count;
+  final bool isDark;
+  const _CountPill({required this.count, required this.isDark});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+      decoration: BoxDecoration(
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.07)
+            : Colors.black.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        '$count',
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: isDark ? Colors.white54 : Colors.grey.shade600,
+          height: 1.2,
+        ),
+      ),
+    );
+  }
+}
+
+/// Tiny icon button used inline on tree rows (e.g. hover-revealed "+ note"
+/// and "+ folder" actions on folder rows). Stops the tap from bubbling up
+/// to the row's `onTap` so it doesn't also select the folder.
+class _MiniIconButton extends StatefulWidget {
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback onTap;
+
+  const _MiniIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onTap,
+  });
+
+  @override
+  State<_MiniIconButton> createState() => _MiniIconButtonState();
+}
+
+class _MiniIconButtonState extends State<_MiniIconButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: widget.tooltip,
+      waitDuration: const Duration(milliseconds: 400),
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _hover = true),
+        onExit: (_) => setState(() => _hover = false),
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 100),
+            padding: const EdgeInsets.all(3),
+            decoration: BoxDecoration(
+              color: _hover
+                  ? widget.color.withValues(alpha: 0.18)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 13,
+              color: _hover
+                  ? widget.color.withValues(alpha: 1.0)
+                  : widget.color,
+            ),
+          ),
+        ),
       ),
     );
   }

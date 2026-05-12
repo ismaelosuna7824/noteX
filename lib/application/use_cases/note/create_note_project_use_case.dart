@@ -11,11 +11,13 @@ class CreateNoteProjectUseCase {
     required String id,
     required String name,
     required int colorValue,
+    String? parentId,
   }) async {
     final project = NoteProject.create(
       id: id,
       name: name,
       colorValue: colorValue,
+      parentId: parentId,
     );
     await _repository.save(project);
     return project;

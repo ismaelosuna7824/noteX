@@ -28,6 +28,23 @@ class UpdateNoteUseCase {
     final existing = await _repository.getById(noteId);
     if (existing == null) return null;
 
+    // Skip the write when nothing actually changes. Without this, force-saves
+    // triggered by side effects (e.g. clicking another note in the list flushes
+    // the previously-watched one) would bump `updatedAt` and reorder the list.
+    final isNoOp =
+        (title == null || title == existing.title) &&
+        (content == null || content == existing.content) &&
+        (backgroundImage == null || backgroundImage == existing.backgroundImage) &&
+        (themeId == null || themeId == existing.themeId) &&
+        (color is _Unset || color == existing.color) &&
+        (projectId is _Unset || projectId == existing.projectId) &&
+        (shareToken is _Unset || shareToken == existing.shareToken) &&
+        (sharedAt is _Unset || sharedAt == existing.sharedAt) &&
+        (isPinned == null || isPinned == existing.isPinned) &&
+        (isEphemeral == null || isEphemeral == existing.isEphemeral) &&
+        (isLocked == null || isLocked == existing.isLocked);
+    if (isNoOp) return existing;
+
     // Ephemeral notes always stay localOnly.
     final effectiveEphemeral = isEphemeral ?? existing.isEphemeral;
     final newSyncStatus = effectiveEphemeral

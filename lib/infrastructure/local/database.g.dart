@@ -3649,6 +3649,17 @@ class $NoteProjectEntriesTable extends NoteProjectEntries
     type: DriftSqlType.int,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _parentIdMeta = const VerificationMeta(
+    'parentId',
+  );
+  @override
+  late final GeneratedColumn<String> parentId = GeneratedColumn<String>(
+    'parent_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3720,6 +3731,7 @@ class $NoteProjectEntriesTable extends NoteProjectEntries
     id,
     name,
     colorValue,
+    parentId,
     createdAt,
     updatedAt,
     version,
@@ -3759,6 +3771,12 @@ class $NoteProjectEntriesTable extends NoteProjectEntries
       );
     } else if (isInserting) {
       context.missing(_colorValueMeta);
+    }
+    if (data.containsKey('parent_id')) {
+      context.handle(
+        _parentIdMeta,
+        parentId.isAcceptableOrUnknown(data['parent_id']!, _parentIdMeta),
+      );
     }
     if (data.containsKey('created_at')) {
       context.handle(
@@ -3821,6 +3839,10 @@ class $NoteProjectEntriesTable extends NoteProjectEntries
         DriftSqlType.int,
         data['${effectivePrefix}color_value'],
       )!,
+      parentId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}parent_id'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3858,6 +3880,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
   final String id;
   final String name;
   final int colorValue;
+  final String? parentId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -3868,6 +3891,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
     required this.id,
     required this.name,
     required this.colorValue,
+    this.parentId,
     required this.createdAt,
     required this.updatedAt,
     required this.version,
@@ -3881,6 +3905,9 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
     map['id'] = Variable<String>(id);
     map['name'] = Variable<String>(name);
     map['color_value'] = Variable<int>(colorValue);
+    if (!nullToAbsent || parentId != null) {
+      map['parent_id'] = Variable<String>(parentId);
+    }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
     map['version'] = Variable<int>(version);
@@ -3899,6 +3926,9 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
       id: Value(id),
       name: Value(name),
       colorValue: Value(colorValue),
+      parentId: parentId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(parentId),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
       version: Value(version),
@@ -3921,6 +3951,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
       id: serializer.fromJson<String>(json['id']),
       name: serializer.fromJson<String>(json['name']),
       colorValue: serializer.fromJson<int>(json['colorValue']),
+      parentId: serializer.fromJson<String?>(json['parentId']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
       version: serializer.fromJson<int>(json['version']),
@@ -3936,6 +3967,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
       'id': serializer.toJson<String>(id),
       'name': serializer.toJson<String>(name),
       'colorValue': serializer.toJson<int>(colorValue),
+      'parentId': serializer.toJson<String?>(parentId),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
       'version': serializer.toJson<int>(version),
@@ -3949,6 +3981,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
     String? id,
     String? name,
     int? colorValue,
+    Value<String?> parentId = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
     int? version,
@@ -3959,6 +3992,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
     id: id ?? this.id,
     name: name ?? this.name,
     colorValue: colorValue ?? this.colorValue,
+    parentId: parentId.present ? parentId.value : this.parentId,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
     version: version ?? this.version,
@@ -3973,6 +4007,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
       colorValue: data.colorValue.present
           ? data.colorValue.value
           : this.colorValue,
+      parentId: data.parentId.present ? data.parentId.value : this.parentId,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
       version: data.version.present ? data.version.value : this.version,
@@ -3990,6 +4025,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
+          ..write('parentId: $parentId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -4005,6 +4041,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
     id,
     name,
     colorValue,
+    parentId,
     createdAt,
     updatedAt,
     version,
@@ -4019,6 +4056,7 @@ class NoteProjectRow extends DataClass implements Insertable<NoteProjectRow> {
           other.id == this.id &&
           other.name == this.name &&
           other.colorValue == this.colorValue &&
+          other.parentId == this.parentId &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt &&
           other.version == this.version &&
@@ -4031,6 +4069,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
   final Value<String> id;
   final Value<String> name;
   final Value<int> colorValue;
+  final Value<String?> parentId;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> version;
@@ -4042,6 +4081,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
     this.id = const Value.absent(),
     this.name = const Value.absent(),
     this.colorValue = const Value.absent(),
+    this.parentId = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.version = const Value.absent(),
@@ -4054,6 +4094,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
     required String id,
     required String name,
     required int colorValue,
+    this.parentId = const Value.absent(),
     required DateTime createdAt,
     required DateTime updatedAt,
     this.version = const Value.absent(),
@@ -4070,6 +4111,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
     Expression<String>? id,
     Expression<String>? name,
     Expression<int>? colorValue,
+    Expression<String>? parentId,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? version,
@@ -4082,6 +4124,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
       if (id != null) 'id': id,
       if (name != null) 'name': name,
       if (colorValue != null) 'color_value': colorValue,
+      if (parentId != null) 'parent_id': parentId,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (version != null) 'version': version,
@@ -4096,6 +4139,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
     Value<String>? id,
     Value<String>? name,
     Value<int>? colorValue,
+    Value<String?>? parentId,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? version,
@@ -4108,6 +4152,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
       id: id ?? this.id,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
+      parentId: parentId ?? this.parentId,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -4129,6 +4174,9 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
     }
     if (colorValue.present) {
       map['color_value'] = Variable<int>(colorValue.value);
+    }
+    if (parentId.present) {
+      map['parent_id'] = Variable<String>(parentId.value);
     }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
@@ -4160,6 +4208,7 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
           ..write('id: $id, ')
           ..write('name: $name, ')
           ..write('colorValue: $colorValue, ')
+          ..write('parentId: $parentId, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('version: $version, ')
@@ -6700,6 +6749,7 @@ typedef $$NoteProjectEntriesTableCreateCompanionBuilder =
       required String id,
       required String name,
       required int colorValue,
+      Value<String?> parentId,
       required DateTime createdAt,
       required DateTime updatedAt,
       Value<int> version,
@@ -6713,6 +6763,7 @@ typedef $$NoteProjectEntriesTableUpdateCompanionBuilder =
       Value<String> id,
       Value<String> name,
       Value<int> colorValue,
+      Value<String?> parentId,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> version,
@@ -6743,6 +6794,11 @@ class $$NoteProjectEntriesTableFilterComposer
 
   ColumnFilters<int> get colorValue => $composableBuilder(
     column: $table.colorValue,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get parentId => $composableBuilder(
+    column: $table.parentId,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -6801,6 +6857,11 @@ class $$NoteProjectEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get parentId => $composableBuilder(
+    column: $table.parentId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -6851,6 +6912,9 @@ class $$NoteProjectEntriesTableAnnotationComposer
     column: $table.colorValue,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get parentId =>
+      $composableBuilder(column: $table.parentId, builder: (column) => column);
 
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
@@ -6916,6 +6980,7 @@ class $$NoteProjectEntriesTableTableManager
                 Value<String> id = const Value.absent(),
                 Value<String> name = const Value.absent(),
                 Value<int> colorValue = const Value.absent(),
+                Value<String?> parentId = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> version = const Value.absent(),
@@ -6927,6 +6992,7 @@ class $$NoteProjectEntriesTableTableManager
                 id: id,
                 name: name,
                 colorValue: colorValue,
+                parentId: parentId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,
@@ -6940,6 +7006,7 @@ class $$NoteProjectEntriesTableTableManager
                 required String id,
                 required String name,
                 required int colorValue,
+                Value<String?> parentId = const Value.absent(),
                 required DateTime createdAt,
                 required DateTime updatedAt,
                 Value<int> version = const Value.absent(),
@@ -6951,6 +7018,7 @@ class $$NoteProjectEntriesTableTableManager
                 id: id,
                 name: name,
                 colorValue: colorValue,
+                parentId: parentId,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 version: version,

@@ -134,11 +134,13 @@ class MarkdownProjectEntries extends Table {
 }
 
 /// Drift table for note projects (folder groupings for notes).
+/// Supports nested folders via [parentId] (null = root level).
 @DataClassName('NoteProjectRow')
 class NoteProjectEntries extends Table {
   TextColumn get id => text()();
   TextColumn get name => text()();
   IntColumn get colorValue => integer()();
+  TextColumn get parentId => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime()();
   IntColumn get version => integer().withDefault(const Constant(1))();
@@ -213,7 +215,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 13;
+  int get schemaVersion => 14;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -334,6 +336,17 @@ class AppDatabase extends _$AppDatabase {
           }
         }
         await safeAddColumn(noteEntries, noteEntries.isLocked);
+      }
+      if (from < 14) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+        await safeAddColumn(noteProjectEntries, noteProjectEntries.parentId);
       }
     },
   );
@@ -545,6 +558,7 @@ class AppDatabase extends _$AppDatabase {
       id: row.id,
       name: row.name,
       colorValue: row.colorValue,
+      parentId: row.parentId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       version: row.version,
@@ -560,6 +574,7 @@ class AppDatabase extends _$AppDatabase {
       id: Value(p.id),
       name: Value(p.name),
       colorValue: Value(p.colorValue),
+      parentId: Value(p.parentId),
       createdAt: Value(p.createdAt),
       updatedAt: Value(p.updatedAt),
       version: Value(p.version),

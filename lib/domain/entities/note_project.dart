@@ -8,6 +8,7 @@ class NoteProject {
   final String id;
   final String name;
   final int colorValue;
+  final String? parentId;
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -19,6 +20,7 @@ class NoteProject {
     required this.id,
     required this.name,
     required this.colorValue,
+    this.parentId,
     required this.createdAt,
     required this.updatedAt,
     this.version = 1,
@@ -31,6 +33,7 @@ class NoteProject {
     required String id,
     required String name,
     required int colorValue,
+    String? parentId,
     String? userId,
   }) {
     final now = DateTime.now();
@@ -38,6 +41,7 @@ class NoteProject {
       id: id,
       name: name,
       colorValue: colorValue,
+      parentId: parentId,
       createdAt: now,
       updatedAt: now,
       version: 1,
@@ -48,10 +52,12 @@ class NoteProject {
 
   Color get color => Color(colorValue);
   bool get isDeleted => deletedAt != null;
+  bool get isRoot => parentId == null;
 
   NoteProject copyWith({
     String? name,
     int? colorValue,
+    Object? parentId = const _Unset(),
     DateTime? updatedAt,
     int? version,
     Object? deletedAt = const _Unset(),
@@ -62,6 +68,7 @@ class NoteProject {
       id: id,
       name: name ?? this.name,
       colorValue: colorValue ?? this.colorValue,
+      parentId: parentId is _Unset ? this.parentId : parentId as String?,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,

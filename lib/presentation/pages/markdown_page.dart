@@ -1,16 +1,17 @@
 import 'dart:async';
-import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/markdown_state.dart';
 import '../utils/platform_utils.dart';
 import '../widgets/editor_text_controls.dart';
+import '../widgets/folder_tree_widgets.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/animated_dialog.dart';
 
@@ -172,8 +173,6 @@ class _MarkdownPageState extends State<MarkdownPage> {
         children: [
           _buildListHeader(theme, accentColor, isDark),
           const SizedBox(height: 8),
-          _buildProjectFilter(theme, accentColor, isDark),
-          const SizedBox(height: 8),
           _buildSearchBar(accentColor, isDark),
           const SizedBox(height: 8),
           Expanded(
@@ -304,58 +303,212 @@ class _MarkdownPageState extends State<MarkdownPage> {
     );
   }
 
-  // ── Project Filter ──────────────────────────────────────────────────────
+  // ── Unified Tree (replaces horizontal project chips) ───────────────────
 
-  Widget _buildProjectFilter(ThemeData theme, Color accentColor, bool isDark) {
-    final selected = _mdState.selectedProjectId;
+  /// File-explorer-style vertical tree: an "All" pseudo-row, then each
+  /// project as an expandable folder containing its files, then root files
+  /// as leaves at depth 0. Matches the notes sidebar conventions
+  /// (L-bracket guides, single visible selection — file wins).
+  Widget _buildUnifiedTree(ThemeData theme, Color accentColor, bool isDark) {
+    final state = _mdState;
+    final currentFileId = state.currentFile?.id;
+    final selectedProjectId = state.selectedProjectId;
+    final hasOpenFile = currentFileId != null;
+    final rows = <Widget>[];
 
-    return SizedBox(
-      height: 30,
-      child: ScrollConfiguration(
-        behavior: ScrollConfiguration.of(context).copyWith(
-          dragDevices: {
-            PointerDeviceKind.touch,
-            PointerDeviceKind.mouse,
-          },
-        ),
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            _FilterChip(
-              label: 'All',
-              isSelected: selected == null,
-              accentColor: accentColor,
-              isDark: isDark,
-              onTap: () => _mdState.filterByProject(null),
-            ),
-            const SizedBox(width: 6),
-            _FilterChip(
-              label: 'Root',
-              isSelected: selected == '__root__',
-              accentColor: accentColor,
-              isDark: isDark,
-              onTap: () => _mdState.filterByProject('__root__'),
-            ),
-            for (final project in _mdState.projects) ...[
-              const SizedBox(width: 6),
-              GestureDetector(
-                onSecondaryTapUp: (details) =>
-                    _showProjectContextMenu(details.globalPosition, project),
-                child: _FilterChip(
-                  label: project.name,
-                  isSelected: selected == project.id,
-                  accentColor: accentColor,
-                  isDark: isDark,
-                  color: project.color,
-                  onTap: () => _mdState.filterByProject(project.id),
-                  onLongPress: () => _showDeleteProjectDialog(project),
+    // "All" pseudo-row at the top — click to clear the create-context, hover
+    // actions are pinned so users can add a root file or new project without
+    // hunting for a button.
+    rows.add(FolderTreeRow(
+      label: 'All',
+      guides: const [],
+      color: accentColor,
+      isDark: isDark,
+      isSelected: selectedProjectId == null && !hasOpenFile,
+      hasChildren: false,
+      isExpanded: false,
+      count: 0,
+      leadingIcon: Icons.inbox_rounded,
+      onTap: () => state.filterByProject(null),
+      onCreatePrimary: () async {
+        state.filterByProject(null);
+        await state.createFile(projectId: null);
+      },
+      createPrimaryTooltip: 'New file at root',
+      createPrimaryIcon: Icons.note_add_outlined,
+      onCreateSecondary: () => _showCreateProjectDialog(accentColor),
+      createSecondaryTooltip: 'New project',
+      createSecondaryIcon: Icons.create_new_folder_outlined,
+      alwaysShowActions: true,
+    ));
+
+    rows.add(Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+      child: Container(
+        height: 1,
+        color: isDark
+            ? Colors.white.withValues(alpha: 0.06)
+            : Colors.black.withValues(alpha: 0.06),
+      ),
+    ));
+
+    final projects = state.projects;
+    final rootFiles = state.filesInProject(null);
+
+    if (projects.isEmpty && rootFiles.isEmpty) {
+      rows.add(Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.article_outlined,
+                  size: 32, color: Colors.grey.shade400),
+              const SizedBox(height: 8),
+              Text(
+                'No markdown files',
+                style: TextStyle(
+                  color: isDark ? Colors.white70 : Colors.grey.shade500,
+                  fontSize: 13,
                 ),
               ),
             ],
-          ],
+          ),
         ),
+      ));
+    } else {
+      for (var i = 0; i < projects.length; i++) {
+        final p = projects[i];
+        final filesIn = state.filesInProject(p.id);
+        final hasChildren = filesIn.isNotEmpty;
+        final isExpanded = state.isProjectExpanded(p.id);
+
+        rows.add(GestureDetector(
+          onSecondaryTapUp: (details) =>
+              _showProjectContextMenu(details.globalPosition, p),
+          child: FolderTreeRow(
+            label: p.name,
+            guides: const [],
+            color: p.color,
+            isDark: isDark,
+            isSelected: selectedProjectId == p.id && !hasOpenFile,
+            hasChildren: hasChildren,
+            isExpanded: isExpanded,
+            count: filesIn.length,
+            leadingIcon: Icons.folder_rounded,
+            onTap: () {
+              state.filterByProject(p.id);
+              if (hasChildren && !isExpanded) {
+                state.toggleProjectExpanded(p.id);
+              }
+            },
+            onChevronTap: hasChildren
+                ? () => state.toggleProjectExpanded(p.id)
+                : null,
+            onLongPress: () => _showDeleteProjectDialog(p),
+            onCreatePrimary: () async {
+              state.filterByProject(p.id);
+              if (!state.isProjectExpanded(p.id)) {
+                state.toggleProjectExpanded(p.id);
+              }
+              await state.createFile(projectId: p.id);
+            },
+            createPrimaryTooltip: 'New file in this project',
+            createPrimaryIcon: Icons.note_add_outlined,
+          ),
+        ));
+
+        if (hasChildren && isExpanded) {
+          for (var j = 0; j < filesIn.length; j++) {
+            rows.add(_buildFileLeaf(
+              file: filesIn[j],
+              accentColor: accentColor,
+              isDark: isDark,
+              currentFileId: currentFileId,
+              guides: [
+                j == filesIn.length - 1 ? GuideKind.ell : GuideKind.tee,
+              ],
+            ));
+          }
+        }
+      }
+
+      // Root files: render as leaves at depth 0, after all projects.
+      for (final file in rootFiles) {
+        rows.add(_buildFileLeaf(
+          file: file,
+          accentColor: accentColor,
+          isDark: isDark,
+          currentFileId: currentFileId,
+          guides: const [],
+        ));
+      }
+    }
+
+    return SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
       ),
     );
+  }
+
+  Widget _buildFileLeaf({
+    required MarkdownFile file,
+    required Color accentColor,
+    required bool isDark,
+    required String? currentFileId,
+    required List<GuideKind> guides,
+  }) {
+    final title = file.title.trim().isEmpty ? 'Untitled' : file.title;
+    return GestureDetector(
+      onSecondaryTapUp: (details) =>
+          _showFileContextMenu(details.globalPosition, file),
+      child: LeafTreeRow(
+        label: title,
+        guides: guides,
+        isDark: isDark,
+        accentColor: accentColor,
+        isSelected: file.id == currentFileId,
+        onTap: () => _openFile(file),
+      ),
+    );
+  }
+
+  /// Open a file in the editor. Also nudges the project filter to match the
+  /// file's project so subsequent "new file" actions land in the same scope.
+  void _openFile(MarkdownFile file) {
+    _mdState.filterByProject(file.projectId ?? '__root__');
+    _mdState.selectFile(file);
+    _loadFile();
+    if (kIsMobile) {
+      setState(() => _mobileShowEditor = true);
+    }
+  }
+
+  Future<void> _showFileContextMenu(
+      Offset position, MarkdownFile file) async {
+    final result = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+          position.dx, position.dy, position.dx, position.dy),
+      items: const [
+        PopupMenuItem(
+          value: 'delete',
+          child: Row(
+            children: [
+              Icon(Icons.delete_rounded, size: 16, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Delete file',
+                  style: TextStyle(color: Colors.red, fontSize: 13)),
+            ],
+          ),
+        ),
+      ],
+    );
+    if (result == 'delete' && mounted) {
+      await _mdState.deleteFile(file.id);
+    }
   }
 
   // ── Search Bar ────────────────────────────────────────────────────────
@@ -412,23 +565,37 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
   // ── File List ───────────────────────────────────────────────────────────
 
+  /// During search, show a flat result list (project + date metadata helps
+  /// disambiguate matches across projects). Otherwise render the unified
+  /// tree so projects and files stay in their hierarchy.
   Widget _buildFileList(ThemeData theme, Color accentColor, bool isDark) {
-    final files = _mdState.filteredFiles;
+    if (_mdState.searchQuery.isNotEmpty) {
+      return _buildSearchResults(theme, accentColor, isDark);
+    }
+    return _buildUnifiedTree(theme, accentColor, isDark);
+  }
+
+  Widget _buildSearchResults(
+      ThemeData theme, Color accentColor, bool isDark) {
+    final q = _mdState.searchQuery.toLowerCase();
+    // Search ignores the project filter — show every file whose title or
+    // body matches, no matter where it lives.
+    final files = _mdState.files
+        .where((f) =>
+            f.title.toLowerCase().contains(q) ||
+            f.content.toLowerCase().contains(q))
+        .toList();
 
     if (files.isEmpty) {
-      final hasSearch = _mdState.searchQuery.isNotEmpty;
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              hasSearch ? Icons.search_off_rounded : Icons.article_outlined,
-              size: 40,
-              color: Colors.grey.shade300,
-            ),
+            Icon(Icons.search_off_rounded,
+                size: 40, color: Colors.grey.shade300),
             const SizedBox(height: 8),
             Text(
-              hasSearch ? 'No files found' : 'No markdown files',
+              'No files found',
               style: TextStyle(
                 color: isDark ? Colors.white70 : Colors.grey.shade400,
                 fontSize: 13,
@@ -441,120 +608,118 @@ class _MarkdownPageState extends State<MarkdownPage> {
 
     return ListView.builder(
       itemCount: files.length,
-      itemBuilder: (context, index) {
-        final file = files[index];
-        final isSelected = file.id == _mdState.currentFile?.id;
-        final project = _mdState.projectForId(file.projectId);
+      itemBuilder: (context, index) =>
+          _buildFlatFileCard(files[index], accentColor, isDark),
+    );
+  }
 
-        return Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: InkWell(
-            onTap: () {
-              _mdState.selectFile(file);
-              _loadFile();
-              if (kIsMobile) {
-                setState(() => _mobileShowEditor = true);
-              }
-            },
+  /// Rich card used in search results — keeps project + date metadata so
+  /// matches are easy to scan across projects.
+  Widget _buildFlatFileCard(
+      MarkdownFile file, Color accentColor, bool isDark) {
+    final isSelected = file.id == _mdState.currentFile?.id;
+    final project = _mdState.projectForId(file.projectId);
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: InkWell(
+        onTap: () => _openFile(file),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? accentColor.withValues(alpha: isDark ? 0.25 : 0.1)
+                : (isDark
+                    ? Colors.white.withValues(alpha: 0.05)
+                    : Colors.grey.shade50),
             borderRadius: BorderRadius.circular(12),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              decoration: BoxDecoration(
+            border: isSelected
+                ? Border.all(
+                    color: accentColor.withValues(alpha: 0.4), width: 1)
+                : null,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.description_rounded,
+                size: 18,
                 color: isSelected
-                    ? accentColor.withValues(alpha: isDark ? 0.25 : 0.1)
-                    : (isDark
-                        ? Colors.white.withValues(alpha: 0.05)
-                        : Colors.grey.shade50),
-                borderRadius: BorderRadius.circular(12),
-                border: isSelected
-                    ? Border.all(
-                        color: accentColor.withValues(alpha: 0.4), width: 1)
-                    : null,
+                    ? accentColor
+                    : (isDark ? Colors.white54 : Colors.grey.shade500),
               ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.description_rounded,
-                    size: 18,
-                    color: isSelected
-                        ? accentColor
-                        : (isDark ? Colors.white54 : Colors.grey.shade500),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      file.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight:
+                            isSelected ? FontWeight.w700 : FontWeight.w500,
+                        fontSize: 13,
+                        color: isSelected
+                            ? accentColor
+                            : widget.themeState.editorTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Row(
                       children: [
-                        Text(
-                          file.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontWeight:
-                                isSelected ? FontWeight.w700 : FontWeight.w500,
-                            fontSize: 13,
-                            color: isSelected
-                                ? accentColor
-                                : widget.themeState.editorTextColor,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            if (project != null) ...[
-                              Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(
-                                  color: project.color,
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                project.name,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark
-                                      ? Colors.white38
-                                      : Colors.grey.shade400,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                            ],
-                            Text(
-                              '${file.updatedAt.month}/${file.updatedAt.day}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: isDark
-                                    ? Colors.white38
-                                    : Colors.grey.shade400,
-                              ),
+                        if (project != null) ...[
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              color: project.color,
+                              shape: BoxShape.circle,
                             ),
-                          ],
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            project.name,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark
+                                  ? Colors.white38
+                                  : Colors.grey.shade400,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        Text(
+                          '${file.updatedAt.month}/${file.updatedAt.day}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: isDark
+                                ? Colors.white38
+                                : Colors.grey.shade400,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                  // Delete button
-                  InkWell(
-                    onTap: () => _mdState.deleteFile(file.id),
-                    borderRadius: BorderRadius.circular(6),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.close_rounded,
-                        size: 14,
-                        color: isDark ? Colors.white30 : Colors.grey.shade300,
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
-            ),
+              InkWell(
+                onTap: () => _mdState.deleteFile(file.id),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.close_rounded,
+                    size: 14,
+                    color: isDark ? Colors.white30 : Colors.grey.shade300,
+                  ),
+                ),
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1223,70 +1388,3 @@ class _IconBtn extends StatelessWidget {
   }
 }
 
-class _FilterChip extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final Color accentColor;
-  final bool isDark;
-  final Color? color;
-  final VoidCallback onTap;
-  final VoidCallback? onLongPress;
-
-  const _FilterChip({
-    required this.label,
-    required this.isSelected,
-    required this.accentColor,
-    required this.isDark,
-    this.color,
-    required this.onTap,
-    this.onLongPress,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? accentColor.withValues(alpha: isDark ? 0.3 : 0.12)
-              : (isDark
-                  ? Colors.white.withValues(alpha: 0.06)
-                  : Colors.grey.shade100),
-          borderRadius: BorderRadius.circular(16),
-          border: isSelected
-              ? Border.all(color: accentColor.withValues(alpha: 0.4))
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (color != null) ...[
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: color,
-                  shape: BoxShape.circle,
-                ),
-              ),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                color: isSelected
-                    ? accentColor
-                    : (isDark ? Colors.white54 : Colors.grey.shade500),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}

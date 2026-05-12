@@ -270,20 +270,7 @@ class _HomePageState extends State<HomePage>
                   children: [
                     _buildWritingStatsCard(context, theme, accentColor),
                     const SizedBox(height: 12),
-                    Expanded(
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Expanded(
-                            child: _buildPinnedNotesCard(context, theme, accentColor),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: _buildNowEditingCard(context, theme, accentColor),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _buildPinnedNotesCard(context, theme, accentColor),
                   ],
                 ),
               ),
@@ -1089,36 +1076,37 @@ class _HomePageState extends State<HomePage>
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '$pinnedCount',
-                      style: theme.textTheme.headlineLarge?.copyWith(
-                        fontWeight: FontWeight.w900,
-                        color: primaryText,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '$pinnedCount',
+                        style: theme.textTheme.headlineLarge?.copyWith(
+                          fontWeight: FontWeight.w900,
+                          color: primaryText,
+                        ),
                       ),
-                    ),
-                    Text(
-                      'Pinned Notes',
-                      style: theme.textTheme.bodySmall?.copyWith(
-                        color: secondaryText,
-                        fontWeight: FontWeight.w500,
+                      Text(
+                        'Pinned Notes',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: secondaryText,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const Spacer(),
                 Container(
-                  padding: const EdgeInsets.all(10),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     color: accentColor.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Icon(
                     Icons.push_pin_rounded,
                     color: accentColor,
-                    size: 20,
+                    size: 16,
                   ),
                 ),
               ],
@@ -1186,7 +1174,7 @@ class _HomePageState extends State<HomePage>
         color: themeState.editorBgColor,
         isDark: isDark,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 18, 22, 20),
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -1208,15 +1196,18 @@ class _HomePageState extends State<HomePage>
                       ],
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'NOW EDITING',
+                  const SizedBox(width: 6),
+                  Flexible(
+                    child: Text(
+                    'EDITING',
                     style: theme.textTheme.labelSmall?.copyWith(
                       color: secondaryText,
                       letterSpacing: 1.5,
                       fontWeight: FontWeight.w600,
                       fontSize: 9,
                     ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                   ),
                 ],
               ),

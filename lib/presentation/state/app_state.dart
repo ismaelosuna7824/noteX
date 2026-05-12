@@ -63,7 +63,14 @@ class AppState extends ChangeNotifier {
   ViewMode _viewMode = ViewMode.list;
   int _selectedPageIndex = 0;
   String _searchQuery = '';
-  String? _selectedNoteProjectId; // null = all, '__root__' = uncategorized
+  /// Current folder navigation. Acts as both filter and navigation scope.
+  /// `null` = root view (show all notes everywhere).
+  /// `'__root__'` = uncategorized virtual node (notes with no folder).
+  /// `folderId` = inside that folder (show notes in folder + all descendants).
+  String? _selectedNoteProjectId;
+
+  /// Folder ids whose subtree is currently expanded in the tree view.
+  final Set<String> _expandedFolderIds = <String>{};
   bool _isLoading = false;
   bool _showPinnedTab = false;
   String? _authErrorMessage;
@@ -193,17 +200,17 @@ class AppState extends ChangeNotifier {
   List<Note> get pinnedNotes => _notes.where((n) => n.isPinned).toList();
 
   /// Filtered notes for display (applies project filter + search query).
+  ///
+  /// When a folder is selected, notes from that folder AND all its
+  /// descendants are included (recursive scope).
   List<Note> get filteredNotes {
     var result = _notes;
-    // Filter by project
     if (_selectedNoteProjectId == '__root__') {
       result = result.where((n) => n.projectId == null).toList();
     } else if (_selectedNoteProjectId != null) {
-      result = result
-          .where((n) => n.projectId == _selectedNoteProjectId)
-          .toList();
+      final scope = _descendantProjectIds(_selectedNoteProjectId!);
+      result = result.where((n) => scope.contains(n.projectId)).toList();
     }
-    // Filter by search
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase();
       result = result
@@ -213,6 +220,72 @@ class AppState extends ChangeNotifier {
           .toList();
     }
     return result;
+  }
+
+  /// Collect [folderId] and every descendant folder id (BFS).
+  Set<String> _descendantProjectIds(String folderId) {
+    final result = <String>{folderId};
+    final queue = <String>[folderId];
+    while (queue.isNotEmpty) {
+      final current = queue.removeAt(0);
+      for (final p in _noteProjects) {
+        if (p.parentId == current && result.add(p.id)) {
+          queue.add(p.id);
+        }
+      }
+    }
+    return result;
+  }
+
+  /// Direct child folders of [parentId] (null = top-level).
+  List<NoteProject> childFoldersOf(String? parentId) =>
+      _noteProjects.where((p) => p.parentId == parentId).toList();
+
+  /// Notes whose direct parent is [folderId] (null = root / unfiled).
+  /// Sorted by pinned-first, then updatedAt descending.
+  List<Note> notesInFolder(String? folderId) {
+    final result = _notes.where((n) => n.projectId == folderId).toList();
+    result.sort((a, b) {
+      if (a.isPinned != b.isPinned) return a.isPinned ? -1 : 1;
+      return b.updatedAt.compareTo(a.updatedAt);
+    });
+    return result;
+  }
+
+  /// Whether the subtree under [folderId] is currently expanded.
+  bool isFolderExpanded(String folderId) =>
+      _expandedFolderIds.contains(folderId);
+
+  /// Toggle expand/collapse state for a folder subtree.
+  void toggleFolderExpanded(String folderId) {
+    if (!_expandedFolderIds.add(folderId)) {
+      _expandedFolderIds.remove(folderId);
+    }
+    notifyListeners();
+  }
+
+  /// Add [folderId] and every ancestor up to the root to the expanded set,
+  /// so a row deep in the tree becomes visible without clicking each parent.
+  void _expandAncestors(String folderId) {
+    String? cursor = folderId;
+    final visited = <String>{};
+    while (cursor != null && visited.add(cursor)) {
+      _expandedFolderIds.add(cursor);
+      final project = noteProjectForId(cursor);
+      cursor = project?.parentId;
+    }
+  }
+
+  /// Number of notes inside [folderId] and all its descendant folders.
+  /// Pass `'__root__'` to count notes with no folder, or `null` for the
+  /// total note count.
+  int noteCountInScope(String? folderId) {
+    if (folderId == null) return _notes.length;
+    if (folderId == '__root__') {
+      return _notes.where((n) => n.projectId == null).length;
+    }
+    final scope = _descendantProjectIds(folderId);
+    return _notes.where((n) => scope.contains(n.projectId)).length;
   }
 
   /// Pre-load notes from DB without cleanup. Used to resolve tiling IDs
@@ -469,6 +542,7 @@ class AppState extends ChangeNotifier {
     await refreshNotes();
     _currentNote = note;
     _selectedPageIndex = 2; // Navigate to editor
+    if (effectiveProjectId != null) _expandAncestors(effectiveProjectId);
     notifyListeners();
     return note;
   }
@@ -682,28 +756,46 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Create a new note project.
+  /// Create a new note project. Pass [parentId] to nest it under a folder;
+  /// otherwise the currently-selected folder (if any) is used as the parent.
   Future<NoteProject> createNoteProject({
     required String name,
     required int colorValue,
+    String? parentId,
   }) async {
+    final effectiveParentId = parentId ??
+        ((_selectedNoteProjectId != null &&
+                _selectedNoteProjectId != '__root__')
+            ? _selectedNoteProjectId
+            : null);
     final p = await _createNoteProject.execute(
       id: const Uuid().v4(),
       name: name,
       colorValue: colorValue,
+      parentId: effectiveParentId,
     );
     _noteProjects = await _getNoteProjects.getAll();
+    if (effectiveParentId != null) _expandAncestors(effectiveParentId);
     notifyListeners();
     return p;
   }
 
-  /// Delete a note project and its notes.
+  /// Delete a note project (and recursively its descendants + their notes).
   Future<void> deleteNoteProject(String projectId) async {
+    // Capture descendants BEFORE deletion so we can detect if the user is
+    // currently inside one of them and navigate up.
+    final wipedScope = _descendantProjectIds(projectId);
+
     await _deleteNoteProject.execute(projectId);
     _noteProjects = await _getNoteProjects.getAll();
     _notes = await _getNotes.getAll();
-    if (_selectedNoteProjectId == projectId) _selectedNoteProjectId = null;
-    if (_currentNote?.projectId == projectId) {
+
+    if (_selectedNoteProjectId != null &&
+        wipedScope.contains(_selectedNoteProjectId)) {
+      _selectedNoteProjectId = null;
+    }
+    if (_currentNote?.projectId != null &&
+        wipedScope.contains(_currentNote!.projectId)) {
       _currentNote = _notes.isNotEmpty ? _notes.first : null;
     }
     notifyListeners();

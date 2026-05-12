@@ -31,6 +31,9 @@ class MarkdownState extends ChangeNotifier {
   String _searchQuery = '';
   bool _isLoading = false;
   bool _isPreviewMode = false;
+  // Set of project IDs whose tree node is currently expanded in the sidebar.
+  // Lives in-memory only — expansion resets on app restart.
+  final Set<String> _expandedProjects = {};
 
   MarkdownState({
     required CreateMarkdownFileUseCase createFile,
@@ -59,6 +62,29 @@ class MarkdownState extends ChangeNotifier {
   String get searchQuery => _searchQuery;
   bool get isLoading => _isLoading;
   bool get isPreviewMode => _isPreviewMode;
+
+  /// Files directly in [projectId], or root files when [projectId] is null.
+  /// Used by the unified tree view to render each project's leaves.
+  List<MarkdownFile> filesInProject(String? projectId) {
+    return _files.where((f) => f.projectId == projectId).toList();
+  }
+
+  /// Number of files directly inside [projectId] (or root if null). Drives
+  /// the count pill shown next to a folder row.
+  int fileCountInProject(String? projectId) {
+    var n = 0;
+    for (final f in _files) {
+      if (f.projectId == projectId) n++;
+    }
+    return n;
+  }
+
+  bool isProjectExpanded(String id) => _expandedProjects.contains(id);
+
+  void toggleProjectExpanded(String id) {
+    if (!_expandedProjects.remove(id)) _expandedProjects.add(id);
+    notifyListeners();
+  }
 
   List<MarkdownFile> get filteredFiles {
     var result = _files;
