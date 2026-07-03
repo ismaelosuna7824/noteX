@@ -1,14 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 import 'package:get_it/get_it.dart';
 import '../../application/use_cases/update_note_use_case.dart';
 import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/tiling_state.dart';
+import 'note_markdown_editor.dart';
 
 /// A self-contained editor panel for one note inside the tiling layout.
 ///
@@ -37,7 +36,6 @@ class TilingEditorPanel extends StatefulWidget {
 }
 
 class _TilingEditorPanelState extends State<TilingEditorPanel> {
-  QuillController? _quillController;
   TextEditingController? _titleController;
   String? _loadedNoteId;
   Timer? _debounce;
@@ -45,11 +43,15 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
   bool _isDirty = false;
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
 
-  static final _controllerConfig = QuillControllerConfig(
-    clipboardConfig: QuillClipboardConfig(
-      enableExternalRichPaste: false,
-    ),
-  );
+  /// The latest Markdown emitted by the editor for the loaded note. Seeded with
+  /// the raw stored content (the editor converts it for display) and replaced on
+  /// every real edit; this snapshot is what gets persisted.
+  String _latestMarkdown = '';
+
+  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
+  /// rebuilds with fresh content — both when switching notes and when the same
+  /// note's content is refreshed externally.
+  int _reloadCount = 0;
 
   @override
   void initState() {
@@ -74,14 +76,13 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
     _hideTimer?.cancel();
     // Don't unregister saver here — flushAll needs it to still work
     // if dispose races with flush. Save one last time if dirty.
-    if (_isDirty && _loadedNoteId != null && _quillController != null) {
+    if (_isDirty && _loadedNoteId != null) {
       GetIt.instance<UpdateNoteUseCase>().execute(
         noteId: _loadedNoteId!,
         title: _titleController!.text,
-        content: _serializeContent(),
+        content: _latestMarkdown,
       );
     }
-    _quillController?.dispose();
     _titleController?.dispose();
     _saveStatus.dispose();
     super.dispose();
@@ -92,27 +93,20 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
     if (_isDirty) _awaitableSave();
 
     _debounce?.cancel();
-    _quillController?.dispose();
     _titleController?.dispose();
 
     _loadedNoteId = note.id;
     _titleController = TextEditingController(text: note.title);
     _titleController!.addListener(_onEdit);
 
-    try {
-      final delta = Document.fromJson(jsonDecode(note.content));
-      _quillController = QuillController(
-        document: delta,
-        selection: const TextSelection.collapsed(offset: 0),
-        config: _controllerConfig,
-      );
-    } catch (_) {
-      _quillController = QuillController.basic(config: _controllerConfig);
-    }
+    // The editor converts raw stored content (Delta or Markdown) for display;
+    // seed the latest-Markdown snapshot with the raw content until the first
+    // real edit replaces it. Bump the reload token so the editor remounts with
+    // the new content (note switch or external refresh).
+    _latestMarkdown = note.content;
+    _reloadCount++;
 
     _isDirty = false;
-    // Listen for content changes (event-driven, no polling)
-    _quillController!.document.changes.listen((_) => _onEdit());
 
     // Register saver so TilingState.flushAll() can save this panel
     widget.tiling.registerSaver(note.id, _awaitableSave);
@@ -126,16 +120,13 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
     _debounce = Timer(const Duration(seconds: 2), _forceSave);
   }
 
-  String _serializeContent() =>
-      jsonEncode(_quillController!.document.toDelta().toJson());
-
   /// Always saves current content to DB. Used by flushAll before exit.
   Future<void> _awaitableSave() async {
-    if (_loadedNoteId == null || _quillController == null) return;
+    if (_loadedNoteId == null) return;
     _debounce?.cancel();
     _isDirty = false;
     final title = _titleController!.text;
-    final content = _serializeContent();
+    final content = _latestMarkdown;
     await GetIt.instance<UpdateNoteUseCase>().execute(
       noteId: _loadedNoteId!,
       title: title,
@@ -191,7 +182,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
         ? (editorBg.computeLuminance() > 0.5 ? Colors.black87 : Colors.white)
         : (isDark ? Colors.white : Colors.black87);
 
-    if (_quillController == null) return const SizedBox.shrink();
+    if (_loadedNoteId == null) return const SizedBox.shrink();
 
     return Listener(
       onPointerDown: (e) {
@@ -225,37 +216,9 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
               child: Row(
                 children: [
-                  Expanded(
-                    child: Focus(
-                      canRequestFocus: false,
-                      descendantsAreFocusable: false,
-                      child: QuillSimpleToolbar(
-                        controller: _quillController!,
-                        config: QuillSimpleToolbarConfig(
-                    showAlignmentButtons: false,
-                    showBackgroundColorButton: false,
-                    showClearFormat: false,
-                    showFontFamily: false,
-                    showFontSize: false,
-                    showSearchButton: false,
-                    showInlineCode: false,
-                    showCodeBlock: false,
-                    showLink: false,
-                    showClipboardCut: false,
-                    showClipboardCopy: false,
-                    showClipboardPaste: false,
-                    showQuote: false,
-                    showStrikeThrough: false,
-                    showSubscript: false,
-                    showSuperscript: false,
-                    showColorButton: false,
-                    showSmallButton: false,
-                    multiRowsDisplay: false,
-                    decoration: const BoxDecoration(),
-                  ),
-                ),
-              ),
-                  ),
+                  // Formatting controls now live inside the NoteMarkdownEditor
+                  // below; this row keeps only the save indicator and close.
+                  const Spacer(),
                   // Save indicator
                   ValueListenableBuilder<String>(
                     valueListenable: _saveStatus,
@@ -297,29 +260,17 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(6),
-                child: QuillEditor.basic(
-                  controller: _quillController!,
-                  config: QuillEditorConfig(
-                    placeholder: 'Start writing...',
-                    padding: const EdgeInsets.all(6),
-                    expands: true,
-                    textSelectionThemeData: TextSelectionThemeData(
-                      cursorColor: widget.accentColor,
-                    ),
-                    customStyles: DefaultStyles(
-                      paragraph: DefaultTextBlockStyle(
-                        TextStyle(
-                          fontSize: widget.themeState.editorFontSize,
-                          height: widget.themeState.editorLineHeight,
-                          color: textColor,
-                        ),
-                        const HorizontalSpacing(0, 0),
-                        const VerticalSpacing(4, 4),
-                        const VerticalSpacing(0, 0),
-                        null,
-                      ),
-                    ),
-                  ),
+                child: NoteMarkdownEditor(
+                  key: ValueKey('${widget.note.id}#$_reloadCount'),
+                  initialContent: widget.note.content,
+                  toolbar: EditorToolbarProfile.minimal,
+                  fontSize: widget.themeState.editorFontSize,
+                  lineHeight: widget.themeState.editorLineHeight,
+                  textColor: textColor,
+                  onChanged: (markdown) {
+                    _latestMarkdown = markdown;
+                    _onEdit();
+                  },
                 ),
               ),
             ),

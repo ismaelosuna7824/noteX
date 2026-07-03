@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.49.0+1
+version: 1.50.0+1
 
 environment:
   sdk: ^3.11.0
@@ -21,7 +21,7 @@ dependencies:
   # Rich text editor
   flutter_quill: ^11.1.0
 
-  # Markdown rendering
+  # Markdown rendering + source-mode preview
   flutter_markdown_plus: ^1.0.7
 
   # DI

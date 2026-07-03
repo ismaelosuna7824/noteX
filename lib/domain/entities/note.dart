@@ -9,7 +9,7 @@ import '../value_objects/sync_status.dart';
 class Note {
   final String id;
   final String title;
-  final String content; // Quill Delta JSON string
+  final String content; // Markdown (legacy notes may still be Quill Delta JSON until migrated)
   final DateTime createdAt;
   final DateTime updatedAt;
   final SyncStatus syncStatus;
@@ -72,7 +72,7 @@ class Note {
     return Note(
       id: id,
       title: _defaultTitleForDate(targetDate),
-      content: '[]', // Empty Quill Delta
+      content: '', // Empty Markdown body (legacy empty was the Delta '[]')
       createdAt: targetDate,
       updatedAt: targetDate,
       syncStatus: SyncStatus.localOnly,
@@ -95,54 +95,68 @@ class Note {
 
   /// Whether this note has no meaningful content in the editor.
   ///
-  /// A note is considered empty when the Quill Delta is `'[]'` or contains
-  /// only whitespace / newline operations like `[{"insert":"\n"}]`.
+  /// Tolerates BOTH content formats during the Delta→Markdown migration:
+  /// - Legacy Quill Delta: empty when the string is `'[]'` or contains only
+  ///   whitespace / newline operations like `[{"insert":"\n"}]`.
+  /// - Markdown: empty when its stripped plaintext has no real text.
   /// The title is irrelevant — even a custom title with no body is empty.
+  ///
+  /// DATA SAFETY: this biases HARD toward NOT-empty. A false "empty" would let
+  /// [CleanupEmptyNotesUseCase] hard-delete a note, so on any doubt we return
+  /// `false`. A false "not-empty" merely skips cleanup, which is harmless.
   bool get isEmpty {
     if (content == '[]') return true;
-    try {
-      final decoded = jsonDecode(content);
-      if (decoded is! List || decoded.isEmpty) return true;
-      if (decoded.length == 1) {
-        final op = decoded[0];
+    if (content.trim().isEmpty) return true;
+
+    final delta = _tryDecodeDelta(content);
+    if (delta != null) {
+      // Legacy Quill Delta path (unchanged heuristic).
+      if (delta.isEmpty) return true;
+      if (delta.length == 1) {
+        final op = delta[0];
         if (op is Map && op.length == 1 && op.containsKey('insert')) {
           final insert = op['insert'];
           if (insert is String && insert.trim().isEmpty) return true;
         }
       }
       return false;
+    }
+
+    // Markdown path: empty only when the stripped plaintext is blank.
+    try {
+      return _stripMarkdown(content).trim().isEmpty;
     } catch (_) {
-      return true;
+      // Never let a stripping failure delete a note.
+      return false;
     }
   }
 
-  /// Total word count from the Quill Delta JSON content.
+  /// Total word count of the note body. Tolerates both formats; never throws.
   int get wordCount {
-    try {
-      final decoded = jsonDecode(content);
-      if (decoded is! List) return 0;
+    final delta = _tryDecodeDelta(content);
+    if (delta != null) {
       final buffer = StringBuffer();
-      for (final op in decoded) {
+      for (final op in delta) {
         if (op is Map && op['insert'] is String) {
           buffer.write(op['insert']);
         }
       }
-      final text = buffer.toString().trim();
-      if (text.isEmpty) return 0;
-      return text.split(RegExp(r'\s+')).length;
+      return _countWords(buffer.toString());
+    }
+    try {
+      return _countWords(_stripMarkdown(content));
     } catch (_) {
       return 0;
     }
   }
 
-  /// Extracts a plain-text preview from the Quill Delta JSON content.
-  /// Returns the first ~200 characters, skipping embeds.
+  /// Extracts a plain-text preview from the note body (first ~200 chars).
+  /// Tolerates both formats; never throws.
   String get plainTextPreview {
-    try {
-      final decoded = jsonDecode(content);
-      if (decoded is! List) return '';
+    final delta = _tryDecodeDelta(content);
+    if (delta != null) {
       final buffer = StringBuffer();
-      for (final op in decoded) {
+      for (final op in delta) {
         if (op is Map && op['insert'] is String) {
           buffer.write(op['insert']);
           if (buffer.length > 200) break;
@@ -150,6 +164,11 @@ class Note {
       }
       final text = buffer.toString().trim();
       return text.length > 200 ? text.substring(0, 200) : text;
+    }
+    try {
+      final stripped =
+          _stripMarkdown(content).replaceAll(RegExp(r'\s+'), ' ').trim();
+      return stripped.length > 200 ? stripped.substring(0, 200) : stripped;
     } catch (_) {
       return '';
     }
@@ -260,4 +279,79 @@ class Note {
 // Private sentinel for nullable copyWith fields.
 class _Unset {
   const _Unset();
+}
+
+// --- Pure content helpers -------------------------------------------------
+//
+// Lightweight, dependency-free format handling kept INSIDE the domain so the
+// entity never has to import an infrastructure converter (which would invert
+// the Hexagonal dependency direction). Detection mirrors the read-path rule:
+// a legacy Quill Delta document is a JSON array of ops; everything else is
+// treated as Markdown.
+
+/// Attempts to decode [content] as a legacy Quill Delta document.
+///
+/// Returns the decoded op list when [content] is a JSON array (Delta), or
+/// `null` when it is not and should be treated as Markdown. Never throws.
+List<dynamic>? _tryDecodeDelta(String content) {
+  final trimmed = content.trim();
+  if (!trimmed.startsWith('[')) return null;
+  try {
+    final decoded = jsonDecode(trimmed);
+    return decoded is List ? decoded : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/// Counts whitespace-separated words in [text]. Empty/blank → 0.
+int _countWords(String text) {
+  final trimmed = text.trim();
+  if (trimmed.isEmpty) return 0;
+  return trimmed.split(RegExp(r'\s+')).length;
+}
+
+/// Approximates the plain text of a Markdown string by stripping common
+/// syntax markers while KEEPING the underlying words. This is intentionally
+/// forgiving: it is used to decide emptiness and build previews, not to render
+/// content, so leftover punctuation only biases toward "has text" (the safe
+/// direction for cleanup). Pure string logic — no dependencies, never throws.
+String _stripMarkdown(String markdown) {
+  var text = markdown;
+  // Fenced code-block markers (``` or ```lang) — keep the code text.
+  text = text.replaceAll(RegExp(r'```[^\n]*'), '');
+  // Images: ![alt](url) -> alt
+  text = text.replaceAllMapped(
+    RegExp(r'!\[([^\]]*)\]\([^)]*\)'),
+    (m) => m.group(1) ?? '',
+  );
+  // Links: [text](url) -> text
+  text = text.replaceAllMapped(
+    RegExp(r'\[([^\]]*)\]\([^)]*\)'),
+    (m) => m.group(1) ?? '',
+  );
+  // Task-list checkboxes: "- [ ] " / "- [x] " markers at line start.
+  text = text.replaceAll(
+    RegExp(r'^\s*[-*+]\s+\[[ xX]\]\s*', multiLine: true),
+    '',
+  );
+  // Bullet / ordered list markers at line start.
+  text = text.replaceAll(
+    RegExp(r'^\s*(?:[-*+]|\d+\.)\s+', multiLine: true),
+    '',
+  );
+  // Blockquote markers at line start.
+  text = text.replaceAll(RegExp(r'^\s*>+\s?', multiLine: true), '');
+  // ATX headers at line start.
+  text = text.replaceAll(RegExp(r'^\s*#{1,6}\s*', multiLine: true), '');
+  // Horizontal rules (---, ***, ___).
+  text = text.replaceAll(
+    RegExp(r'^\s*([-*_])(?:\s*\1){2,}\s*$', multiLine: true),
+    '',
+  );
+  // Emphasis / bold / strikethrough markers.
+  text = text.replaceAll(RegExp(r'\*\*\*|\*\*|\*|___|__|_|~~'), '');
+  // Inline code backticks.
+  text = text.replaceAll('`', '');
+  return text;
 }

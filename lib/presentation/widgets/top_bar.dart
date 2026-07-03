@@ -189,14 +189,6 @@ class _TopBarState extends State<TopBar>
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          '${note.updatedAt.month}/${note.updatedAt.day}/${note.updatedAt.year}',
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: isDark ? Colors.white54 : Colors.grey.shade500,
-                                          ),
-                                        ),
                                       ],
                                     ),
                                   ),

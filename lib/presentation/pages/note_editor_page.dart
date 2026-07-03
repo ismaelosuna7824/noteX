@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
@@ -11,22 +9,22 @@ import '../state/theme_state.dart';
 import '../state/security_state.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/editor_text_controls.dart';
-import '../widgets/mention_overlay.dart';
+import '../widgets/note_markdown_editor.dart';
 import '../state/tiling_state.dart';
 import '../widgets/tiling_layout.dart';
 
 /// Rich text note editor with auto-save.
 ///
-/// Save indicator logic:
-///   1. A 500 ms poller compares the current editor content against the
-///      previous snapshot.  If different → user edited → show "Saving…".
-///   2. A 3 s debounce fires after the last detected edit → [forceSave].
-///   3. On success → show "Saved" for 2 s → hide.
+/// Built on the shared [NoteMarkdownEditor]. Content is held as
+/// a [String] Markdown snapshot ([_latestMarkdown]) that the editor emits on
+/// every real edit; no polling is needed because the shared widget only fires
+/// `onChanged` for genuine document changes (its listener is attached after the
+/// initial programmatic load).
 ///
-/// Why polling instead of `document.changes`?
-///   QuillEditor emits phantom change events on widget rebuilds triggered by
-///   `notifyListeners()`.  Polling is immune to that — it only reacts when the
-///   serialized content actually differs.
+/// Save indicator logic:
+///   1. Any real edit (editor content or title) → [_onUserEdit] → show "Saving…".
+///   2. A 2 s debounce fires after the last detected edit → [_save].
+///   3. On success → show "Saved" for 2 s → hide.
 class NoteEditorPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
@@ -44,53 +42,39 @@ class NoteEditorPage extends StatefulWidget {
 }
 
 class _NoteEditorPageState extends State<NoteEditorPage> {
-  late QuillController _quillController;
   late TextEditingController _titleController;
-  late FocusNode _editorFocusNode;
   String? _loadedNoteId;
 
   // ── Tiling state (singleton, persisted to disk) ─────────────────────
   TilingState get _tiling => GetIt.instance<TilingState>();
 
-
-  // ignore: experimental_member_use
-  static final _controllerConfig = QuillControllerConfig(
-    // ignore: experimental_member_use
-    clipboardConfig: QuillClipboardConfig(
-      // ignore: experimental_member_use
-      enableExternalRichPaste: false,
-    ),
-  );
-
   // ── Save indicator ────────────────────────────────────────────────────
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
   Timer? _debounce;
   Timer? _hideTimer;
-  Timer? _editPoller;
 
-  // Snapshots for polling-based edit detection.
-  // Why polling instead of document.changes?
-  //   QuillEditor emits phantom change events on widget rebuilds triggered
-  //   by notifyListeners(). Polling is immune to that — it only reacts
-  //   when the serialized content actually differs.
+  /// The latest Markdown emitted by the shared editor for the loaded note.
+  /// Seeded with the raw stored content (the editor converts it for display)
+  /// and replaced on every real edit; this snapshot is what gets persisted.
+  String _latestMarkdown = '';
+
+  /// Last content known for the loaded note, used by [didUpdateWidget] to
+  /// detect an EXTERNAL change (e.g. the note edited in the notes-list preview
+  /// while this page is open) and force a reload. Seeded on load with the raw
+  /// stored content and advanced to the saved Markdown after each save so a
+  /// self-triggered refresh does not look like an external edit.
   String _prevContent = '';
-  String _prevTitle = '';
-  int _prevDocLength = 0;
 
-  // ── @mention overlay ───────────────────────────────────────────────
-  OverlayEntry? _mentionOverlay;
-  final GlobalKey _mentionKey = GlobalKey();
-  String _mentionQuery = '';
-  int _mentionStartOffset = -1;
+  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
+  /// remounts with fresh content — both on note switch and external refresh.
+  int _reloadCount = 0;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
   @override
   void initState() {
     super.initState();
-    _editorFocusNode = FocusNode();
     _titleController = TextEditingController();
-    _quillController = QuillController.basic(config: _controllerConfig);
     _loadNote();
     // Register save callback so navigateToPage can flush before switching
     widget.appState.editorSaveCallback = _saveCurrentNote;
@@ -115,22 +99,18 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   void dispose() {
     _debounce?.cancel();
     _hideTimer?.cancel();
-    _editPoller?.cancel();
 
     final note = widget.appState.currentNote;
     if (note != null && !_tiling.isActive) {
       widget.appState.autoSaveService.forceSave(
         noteId: note.id,
         title: _titleController.text,
-        content: _serializeContent(),
+        content: _latestMarkdown,
       );
     }
     widget.appState.editorSaveCallback = null;
     widget.appState.autoSaveService.unwatch();
-    _dismissMention();
-    _quillController.dispose();
     _titleController.dispose();
-    _editorFocusNode.dispose();
     _saveStatus.dispose();
     _lockPinController.dispose();
     _lockErrorNotifier.dispose();
@@ -147,43 +127,23 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     _debounce?.cancel();
     _hideTimer?.cancel();
-    _editPoller?.cancel();
     _saveStatus.value = '';
 
     _titleController.text = note.title;
 
-    _quillController.removeListener(_checkForMention);
-    _quillController.dispose();
-
-    try {
-      final delta = Document.fromJson(jsonDecode(note.content));
-      _quillController = QuillController(
-        document: delta,
-        selection: const TextSelection.collapsed(offset: 0),
-        config: _controllerConfig,
-      );
-    } catch (_) {
-      _quillController = QuillController.basic(config: _controllerConfig);
-    }
-
-    _quillController.addListener(_checkForMention);
-
-    // Initialize snapshots
-    _prevContent = _serializeContent();
-    _prevTitle = _titleController.text;
-    _prevDocLength = _quillController.document.length;
+    // The shared editor converts raw stored content (Delta or Markdown) for
+    // display; seed the latest-Markdown snapshot with the raw content until the
+    // first real edit replaces it. Bump the reload token so the editor remounts
+    // with the new content (note switch or external refresh).
+    _latestMarkdown = note.content;
+    _prevContent = note.content;
+    _reloadCount++;
 
     // Register for auto-save service safety net
     widget.appState.autoSaveService.watch(
       noteId: note.id,
       getTitle: () => _titleController.text,
-      getContent: _serializeContent,
-    );
-
-    // Polling-based edit detection (immune to phantom QuillEditor events)
-    _editPoller = Timer.periodic(
-      const Duration(milliseconds: 1500),
-      (_) => _pollForEdits(),
+      getContent: () => _latestMarkdown,
     );
   }
 
@@ -197,34 +157,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     await widget.appState.autoSaveService.forceSave(
       noteId: note.id,
       title: _titleController.text,
-      content: _serializeContent(),
+      content: _latestMarkdown,
     );
   }
 
   // ── Edit detection & save ─────────────────────────────────────────────
 
-  String _serializeContent() =>
-      jsonEncode(_quillController.document.toDelta().toJson());
-
-  /// Called every 1.5 s — compares current state against previous snapshot.
-  void _pollForEdits() {
-    final title = _titleController.text;
-    final doc = _quillController.document;
-
-    if (title == _prevTitle && doc.length == _prevDocLength) return;
-
-    final content = _serializeContent();
-    if (content == _prevContent && title == _prevTitle) {
-      _prevDocLength = doc.length;
-      return;
-    }
-    _prevContent = content;
-    _prevTitle = title;
-    _prevDocLength = doc.length;
-    _onUserEdit();
-  }
-
-  /// Called when a real edit is detected (by poller or title onChanged).
+  /// Called when a real edit is detected (editor onChanged or title onChanged).
   void _onUserEdit() {
     _hideTimer?.cancel();
     _saveStatus.value = '';
@@ -239,7 +178,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     final note = widget.appState.currentNote;
     if (note == null) return;
 
-    final content = _serializeContent();
+    final content = _latestMarkdown;
     final title = _titleController.text;
 
     final ok = await widget.appState.autoSaveService.forceSave(
@@ -250,8 +189,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
     if (!mounted) return;
     if (ok) {
+      // Advance the external-change baseline to what we just saved so the
+      // follow-up currentNote refresh isn't mistaken for an external edit.
       _prevContent = content;
-      _prevTitle = title;
       _saveStatus.value = 'saved';
       _hideTimer?.cancel();
       _hideTimer = Timer(const Duration(seconds: 2), () {
@@ -260,168 +200,41 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  // ── @mention helpers ──────────────────────────────────────────────────
+  // ── @mention (DEFERRED) ────────────────────────────────────────────────
+  //
+  // TODO(super_editor migration): reimplement @mention detection + insertion.
+  // The former Quill implementation (an `@` back-scan listener on the
+  // QuillController, a floating `MentionOverlay`, and rich insertion of a
+  // `LinkAttribute('notex://<id>')` at the caret) was Quill-specific and could
+  // not be ported verbatim. It has been removed here rather than left as dead
+  // code (dead private members would trip analyzer unused_element warnings).
+  //
+  // The `MentionOverlay` widget (lib/presentation/widgets/mention_overlay.dart)
+  // is intentionally kept on disk for reuse by the reimplementation.
+  //
+  // Proper reimplementation plan (super_editor 0.3.0-dev.39) — see engram note
+  // 'notex/super-editor-migration/mentions-plan':
+  //   * Use super_editor's `StableTagPlugin` (userTagRule, trigger '@') added to
+  //     the SuperEditor's `plugins` set; watch `StableTagIndex.composingStableTag`
+  //     (ValueListenable<ComposingStableTag?>) for the live query token.
+  //   * On picker selection, do NOT use the stock FillInComposingStableTagRequest
+  //     (it applies CommittedStableTagAttribution, not a LinkAttribution). Instead
+  //     delete the composing `@query` range and insert display text carrying
+  //     `LinkAttribution('notex://<id>')` so the existing notex:// link routing
+  //     (_NoteLinkTapDelegate) keeps working.
+  //   * The shared NoteMarkdownEditor must expose: (a) a plugins/enable hook,
+  //     (b) an onMentionComposing(query) callback, and (c) a commitMention(noteId,
+  //     display) entry point that runs on its private editor/composer.
 
-  /// Called on every selection/content change to detect `@` mention trigger.
-  void _checkForMention() {
-    final sel = _quillController.selection;
-    if (!sel.isCollapsed) {
-      _dismissMention();
-      return;
+  /// Navigate to the note targeted by a `notex://<id>` internal link tap.
+  void _openInternalNote(String noteId) {
+    final note = widget.appState.notes.cast<Note?>().firstWhere(
+          (n) => n?.id == noteId,
+          orElse: () => null,
+        );
+    if (note != null) {
+      widget.appState.selectNote(note);
     }
-
-    final offset = sel.baseOffset;
-    if (offset <= 0) {
-      _dismissMention();
-      return;
-    }
-
-    // Check if cursor is inside an existing link — if so, skip
-    final style = _quillController.getSelectionStyle();
-    if (style.attributes.containsKey(Attribute.link.key)) {
-      _dismissMention();
-      return;
-    }
-
-    final text = _quillController.document.toPlainText();
-
-    // Search backwards from cursor for `@`
-    int atPos = -1;
-    for (int i = offset - 1; i >= 0; i--) {
-      final ch = text[i];
-      if (ch == '@') {
-        atPos = i;
-        break;
-      }
-      if (ch == '\n' || ch == ' ') {
-        break;
-      }
-    }
-
-    if (atPos < 0) {
-      _dismissMention();
-      return;
-    }
-
-    // Check if the `@` itself is part of an existing link
-    final atStyle = _quillController.document.collectStyle(atPos, 0);
-    if (atStyle.attributes.containsKey(Attribute.link.key)) {
-      _dismissMention();
-      return;
-    }
-
-    // Must be at start of line or preceded by whitespace
-    if (atPos > 0 && text[atPos - 1] != '\n' && text[atPos - 1] != ' ') {
-      _dismissMention();
-      return;
-    }
-
-    final query = text.substring(atPos + 1, offset);
-    _mentionStartOffset = atPos;
-    _mentionQuery = query;
-    _showMentionOverlay();
-  }
-
-  void _showMentionOverlay() {
-    _mentionOverlay?.remove();
-
-    final overlay = Overlay.of(context);
-    final editorBox = context.findRenderObject() as RenderBox?;
-    if (editorBox == null) return;
-
-    // Position overlay near the top of the editor area
-    final editorPos = editorBox.localToGlobal(Offset.zero);
-
-    _mentionOverlay = OverlayEntry(
-      builder: (_) => Positioned(
-        left: editorPos.dx + 40,
-        top: editorPos.dy + 80,
-        child: MentionOverlay(
-          key: _mentionKey,
-          notes: widget.appState.notes
-              .where((n) => n.id != widget.appState.currentNote?.id)
-              .toList(),
-          query: _mentionQuery,
-          onSelect: _onMentionSelected,
-          onDismiss: _dismissMention,
-          accentColor: widget.themeState.accentColor,
-          bgColor: widget.themeState.editorBgColor,
-          borderColor: widget.themeState.editorBorderColor,
-          textColor: widget.themeState.editorTextColor,
-          mutedColor: widget.themeState.editorMutedTextColor,
-        ),
-      ),
-    );
-
-    overlay.insert(_mentionOverlay!);
-  }
-
-  void _onMentionSelected(Note note) {
-    final title = note.title.isEmpty ? 'Untitled' : note.title;
-    final ctrl = _quillController;
-    final linkText = '@$title';
-    final startOffset = _mentionStartOffset;
-    final cursorOffset = ctrl.selection.baseOffset;
-
-    // Dismiss overlay first (but we already saved the offsets above)
-    _mentionOverlay?.remove();
-    _mentionOverlay = null;
-    _mentionStartOffset = -1;
-    _mentionQuery = '';
-
-    if (startOffset < 0 || cursorOffset < startOffset) return;
-
-    // Remove listener temporarily to avoid re-triggering mention detection
-    ctrl.removeListener(_checkForMention);
-
-    try {
-      // Delete the `@query` text
-      final deleteLength = cursorOffset - startOffset;
-      if (deleteLength > 0) {
-        ctrl.replaceText(startOffset, deleteLength, '', null);
-      }
-
-      // Insert the linked text
-      ctrl.document.insert(startOffset, linkText);
-      ctrl.document.format(
-        startOffset,
-        linkText.length,
-        LinkAttribute('notex://${note.id}'),
-      );
-
-      // Insert a trailing space (unlinked)
-      ctrl.document.insert(startOffset + linkText.length, ' ');
-
-      // Move cursor after the space
-      ctrl.updateSelection(
-        TextSelection.collapsed(offset: startOffset + linkText.length + 1),
-        ChangeSource.local,
-      );
-    } finally {
-      ctrl.addListener(_checkForMention);
-    }
-  }
-
-  void _dismissMention() {
-    _mentionOverlay?.remove();
-    _mentionOverlay = null;
-    _mentionStartOffset = -1;
-    _mentionQuery = '';
-  }
-
-  /// Handle `notex://` link taps — navigate to the linked note.
-  void _handleLinkTap(String url) {
-    if (url.startsWith('notex://')) {
-      final noteId = url.substring('notex://'.length);
-      final note = widget.appState.notes.cast<Note?>().firstWhere(
-            (n) => n?.id == noteId,
-            orElse: () => null,
-          );
-      if (note != null) {
-        widget.appState.selectNote(note);
-      }
-    }
-    // Normal URLs are handled by Quill's default launcher
   }
 
   // ── Build ─────────────────────────────────────────────────────────────
@@ -543,231 +356,62 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       }
                     },
                   )
-                : Stack(
-              children: [
-                Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    children: [
-                      // Quill toolbar — compact mode shows only essentials.
-                      Container(
-                        decoration: BoxDecoration(
-                          color: editorBg.withValues(
-                            alpha: hasNoteColor ? 0.90 : 0.92,
+                : Container(
+                    decoration: BoxDecoration(
+                      color: editorBg.withValues(alpha: bgAlpha),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: chipBorder, width: 1),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(
+                            alpha: isDark ? 0.25 : 0.05,
                           ),
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(20),
-                            topRight: const Radius.circular(20),
-                            bottomLeft: Radius.zero,
-                            bottomRight: Radius.zero,
-                          ),
-                          border: Border.all(color: chipBorder, width: 1),
+                          blurRadius: 20,
+                          offset: const Offset(0, 4),
                         ),
-                        padding: EdgeInsets.symmetric(
-                          horizontal: isCompact ? 4 : 8,
-                          vertical: isCompact ? 2 : 4,
-                        ),
-                        child: Focus(
-                          canRequestFocus: false,
-                          descendantsAreFocusable: false,
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: QuillSimpleToolbar(
-                                  controller: _quillController,
-                                  config: QuillSimpleToolbarConfig(
-                                    showAlignmentButtons: !isCompact,
-                                    showBackgroundColorButton: false,
-                                    showClearFormat: false,
-                                    showFontFamily: false,
-                                    showFontSize: false,
-                                    showInlineCode: !isCompact,
-                                    showCodeBlock: !isCompact,
-                                    showListCheck: true,
-                                    showQuote: !isCompact,
-                                    showLink: !isCompact,
-                                    showStrikeThrough: !isCompact,
-                                    showSearchButton: !isCompact,
-                                    showSubscript: !isCompact,
-                                    showSuperscript: !isCompact,
-                                    showColorButton: !isCompact,
-                                    showSmallButton: !isCompact,
-                                    multiRowsDisplay: false,
-                                    decoration: const BoxDecoration(),
-                                    buttonOptions:
-                                        QuillSimpleToolbarButtonOptions(
-                                          base: QuillToolbarBaseButtonOptions(
-                                            iconTheme: QuillIconTheme(
-                                              iconButtonSelectedData:
-                                                  IconButtonData(
-                                                    color: hasNoteColor
-                                                        ? iconColor
-                                                        : accentColor,
-                                                  ),
-                                              iconButtonUnselectedData:
-                                                  IconButtonData(
-                                                    color: hasNoteColor
-                                                        ? iconColor.withValues(
-                                                            alpha: 0.60,
-                                                          )
-                                                        : widget
-                                                              .themeState
-                                                              .editorTextColor
-                                                              .withValues(
-                                                                alpha: 0.70,
-                                                              ),
-                                                  ),
-                                            ),
-                                          ),
-                                        ),
-                                  ),
-                                ),
-                              ),
-                              if (!isCompact) ...[
-                                EditorTextControls(
-                                  themeState: widget.themeState,
-                                  noteColor: noteColor,
-                                ),
-                                const SizedBox(width: 4),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
-
-                      // Editor content
-                      // Listener ensures keyboard focus transfers on any
-                      // pointer interaction so Ctrl+C / Ctrl+V works on the
-                      // first try (desktop platforms may lose editor focus
-                      // after toolbar clicks or other UI interactions).
-                      Expanded(
-                        child: Listener(
-                          onPointerDown: (_) {
-                            if (!_editorFocusNode.hasFocus) {
-                              _editorFocusNode.requestFocus();
-                            }
-                          },
-                          child: Container(
-                          decoration: BoxDecoration(
-                            color: editorBg.withValues(alpha: bgAlpha),
-                            borderRadius: const BorderRadius.only(
-                              bottomLeft: Radius.circular(20),
-                              bottomRight: Radius.circular(20),
+                      ],
+                    ),
+                    // Tight top padding: the font-size / line-height controls
+                    // moved into the editor toolbar row (via `trailing`), so no
+                    // extra top chrome is needed above the editor.
+                    padding: EdgeInsets.fromLTRB(
+                      isZen ? 32 : (isCompact ? 8 : 24),
+                      isZen ? 16 : (isCompact ? 4 : 8),
+                      isZen ? 32 : (isCompact ? 8 : 24),
+                      isZen ? 32 : (isCompact ? 8 : 24),
+                    ),
+                    // Shared markdown editor widget: renders its own toolbar
+                    // (full, or minimal in compact mode) + the editor. The
+                    // font-size / line-height controls ride in the toolbar row
+                    // via `trailing` (hidden in compact mode, as before).
+                    child: NoteMarkdownEditor(
+                      key: ValueKey('${note.id}#$_reloadCount'),
+                      initialContent: note.content,
+                      initiallyPreview: true,
+                      toolbar: isCompact
+                          ? EditorToolbarProfile.minimal
+                          : EditorToolbarProfile.full,
+                      fontSize: widget.themeState.editorFontSize,
+                      lineHeight: widget.themeState.editorLineHeight,
+                      textColor: noteColor != null
+                          ? (noteColor.computeLuminance() > 0.5
+                              ? Colors.black87
+                              : Colors.white)
+                          : widget.themeState.editorTextColor,
+                      trailing: isCompact
+                          ? null
+                          : EditorTextControls(
+                              themeState: widget.themeState,
+                              noteColor: noteColor,
                             ),
-                            border: Border(
-                              left: BorderSide(color: chipBorder, width: 1),
-                              right: BorderSide(color: chipBorder, width: 1),
-                              bottom: BorderSide(color: chipBorder, width: 1),
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(
-                                  alpha: isDark ? 0.25 : 0.05,
-                                ),
-                                blurRadius: 20,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          padding: EdgeInsets.all(isZen ? 32 : (isCompact ? 8 : 24)),
-                          child: Focus(
-                            onKeyEvent: (node, event) {
-                              // Let mention overlay handle keys first
-                              if (_mentionOverlay != null) {
-                                final mentionState = _mentionKey.currentState
-                                    as MentionOverlayState?;
-                                if (mentionState != null &&
-                                    mentionState.handleKey(event)) {
-                                  return KeyEventResult.handled;
-                                }
-                              }
-
-                              if (event is! KeyDownEvent &&
-                                  event is! KeyRepeatEvent) {
-                                return KeyEventResult.ignored;
-                              }
-                              if (event.logicalKey !=
-                                  LogicalKeyboardKey.backspace) {
-                                return KeyEventResult.ignored;
-                              }
-                              final ctrl = _quillController;
-                              final sel = ctrl.selection;
-                              if (!sel.isCollapsed) {
-                                return KeyEventResult.ignored;
-                              }
-                              final offset = sel.baseOffset;
-                              final style = ctrl.getSelectionStyle();
-                              final indentAttr =
-                                  style.attributes[Attribute.indent.key];
-                              if (indentAttr == null) {
-                                return KeyEventResult.ignored;
-                              }
-                              // Find start of current line
-                              final text = ctrl.document.toPlainText();
-                              int lineStart = offset;
-                              while (lineStart > 0 &&
-                                  text[lineStart - 1] != '\n') {
-                                lineStart--;
-                              }
-                              if (offset != lineStart) {
-                                return KeyEventResult.ignored;
-                              }
-                              // Cursor at start of indented line → decrease indent
-                              final currentLevel = indentAttr.value as int;
-                              if (currentLevel <= 1) {
-                                ctrl.formatSelection(
-                                    Attribute.clone(Attribute.indentL1, null));
-                              } else {
-                                ctrl.formatSelection(
-                                    Attribute.getIndentLevel(currentLevel - 1));
-                              }
-                              return KeyEventResult.handled;
-                            },
-                            child: QuillEditor.basic(
-                              controller: _quillController,
-                              focusNode: _editorFocusNode,
-                              config: QuillEditorConfig(
-                                placeholder: 'Start writing your thoughts...',
-                                padding: EdgeInsets.all(isCompact ? 4 : 8),
-                                expands: true,
-                                enableAlwaysIndentOnTab: true,
-                                textSelectionThemeData: TextSelectionThemeData(
-                                  cursorColor: accentColor,
-                                ),
-                                customStyles: _buildQuillStyles(
-                                  isDark,
-                                  noteColor: noteColor,
-                                ),
-                                customLinkPrefixes: const ['notex://'],
-                                onLaunchUrl: (url) {
-                                  if (url.startsWith('notex://')) {
-                                    _handleLinkTap(url);
-                                    return;
-                                  }
-                                  launchUrl(Uri.parse(url));
-                                },
-                                linkActionPickerDelegate: (context, link, node) async {
-                                  if (link.startsWith('notex://')) {
-                                    _handleLinkTap(link);
-                                    return LinkMenuAction.none;
-                                  }
-                                  return defaultLinkActionPickerDelegate(context, link, node);
-                                },
-                              ),
-                            ),
-                          ),
-                        ),
-                        ),
-                      ),
-                    ],
+                      onChanged: (markdown) {
+                        _latestMarkdown = markdown;
+                        _onUserEdit();
+                      },
+                      onInternalLink: _openInternalNote,
+                      onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                    ),
                   ),
-                ),
-              ],
-            ),
-
-              ],
-            ),
           ),
         ],
       ),
@@ -872,10 +516,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   height: 38,
                   child: TextField(
                     controller: _titleController,
-                    onChanged: (_) {
-                      _prevTitle = _titleController.text;
-                      _onUserEdit();
-                    },
+                    onChanged: (_) => _onUserEdit(),
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
                       fontSize: 14,
@@ -906,6 +547,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         color: iconColor.withValues(alpha: 0.6),
                         size: 18,
                       ),
+                      // Save-status icon lives INSIDE the title input, at the end.
+                      suffixIcon: Icon(
+                        _getSyncIcon(note.syncStatus.name),
+                        color: iconColor,
+                        size: 16,
+                      ),
+                      suffixIconConstraints: const BoxConstraints(
+                        minWidth: 36,
+                        minHeight: 36,
+                      ),
                       hintStyle: TextStyle(
                         color: widget.themeState.editorMutedTextColor,
                         fontWeight: FontWeight.w500,
@@ -916,15 +567,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                 ),
               ),
               const SizedBox(width: 8),
-              // Date
-              Text(
-                '${note.updatedAt.month}/${note.updatedAt.day}/${note.updatedAt.year}',
-                style: TextStyle(fontSize: 12, color: chipText),
-              ),
-              const SizedBox(width: 8),
-              // Sync
-              Icon(_getSyncIcon(note.syncStatus.name), size: 14, color: iconColor),
-              const SizedBox(width: 6),
               // Color
               _buildColorButton(
                 note, accentColor, iconColor, chipBg, chipBorder,
@@ -990,7 +632,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     await widget.appState.autoSaveService.forceSave(
                       noteId: note.id,
                       title: _titleController.text,
-                      content: _serializeContent(),
+                      content: _latestMarkdown,
                     );
                     await widget.appState.refreshNotes();
                     if (!mounted) return;
@@ -1112,57 +754,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
-
-  DefaultStyles _buildQuillStyles(bool isDark, {Color? noteColor}) {
-    final fontSize = widget.themeState.editorFontSize;
-    final lh = widget.themeState.editorLineHeight;
-
-    // When a note color is set, adapt text color for contrast.
-    final textColor = noteColor != null
-        ? (noteColor.computeLuminance() > 0.5 ? Colors.black87 : Colors.white)
-        : widget.themeState.editorTextColor;
-    final mutedColor = noteColor != null
-        ? textColor.withValues(alpha: 0.5)
-        : widget.themeState.editorMutedTextColor;
-
-    return DefaultStyles(
-      placeHolder: DefaultTextBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: mutedColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(6, 6),
-        const VerticalSpacing(0, 0),
-        null,
-      ),
-      paragraph: DefaultTextBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: textColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(6, 6),
-        const VerticalSpacing(0, 0),
-        null,
-      ),
-      lists: DefaultListBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: textColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(6, 6),
-        const VerticalSpacing(0, 0),
-        null,
-        null,
-      ),
-      leading: DefaultTextBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: textColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(0, 0),
-        const VerticalSpacing(0, 0),
-        null,
-      ),
-      link: TextStyle(
-        color: widget.themeState.accentColor,
-        decoration: TextDecoration.underline,
-        decorationColor: widget.themeState.accentColor.withValues(alpha: 0.4),
-        decorationStyle: TextDecorationStyle.solid,
-      ),
-    );
-  }
 
   // Reusable controllers for the locked overlay to avoid leaks.
   final _lockPinController = TextEditingController();

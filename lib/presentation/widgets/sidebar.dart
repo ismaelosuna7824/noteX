@@ -13,6 +13,9 @@ class Sidebar extends StatelessWidget {
   final Color heroTextColor;
   final List<Shadow> heroShadows;
 
+  /// Base tint applied to idle/hovered nav icons (from theme settings).
+  final Color baseIconColor;
+
   const Sidebar({
     super.key,
     required this.selectedIndex,
@@ -21,6 +24,7 @@ class Sidebar extends StatelessWidget {
     required this.editorBgColor,
     required this.heroTextColor,
     required this.heroShadows,
+    required this.baseIconColor,
   });
 
   static const _navItems = [
@@ -71,6 +75,7 @@ class Sidebar extends StatelessWidget {
                         item: item,
                         isSelected: selectedIndex == pageIndex,
                         accentColor: accentColor,
+                        baseIconColor: baseIconColor,
                         isDark: isDark,
                         onTap: () => onItemSelected(pageIndex),
                       ),
@@ -91,6 +96,7 @@ class _NavIcon extends StatefulWidget {
   final _SidebarItem item;
   final bool isSelected;
   final Color accentColor;
+  final Color baseIconColor;
   final bool isDark;
   final VoidCallback onTap;
 
@@ -98,6 +104,7 @@ class _NavIcon extends StatefulWidget {
     required this.item,
     required this.isSelected,
     required this.accentColor,
+    required this.baseIconColor,
     required this.isDark,
     required this.onTap,
   });
@@ -114,14 +121,18 @@ class _NavIconState extends State<_NavIcon> {
     final isSelected = widget.isSelected;
     final accent = widget.accentColor;
     final isDark = widget.isDark;
+    final base = widget.baseIconColor;
 
     final Color iconColor;
     if (isSelected) {
+      // Icon sits on the accent-colored background — keep it high-contrast.
       iconColor = Colors.white;
     } else if (_hovered) {
-      iconColor = isDark ? Colors.white70 : Colors.black54;
+      // Hover cue: the chosen color at full emphasis.
+      iconColor = base;
     } else {
-      iconColor = isDark ? Colors.white38 : Colors.black26;
+      // Idle: the chosen color, slightly dimmed so hover stays distinct.
+      iconColor = base.withValues(alpha: 0.7);
     }
 
     final Color bgColor;

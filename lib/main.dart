@@ -13,6 +13,8 @@ import 'package:window_manager/window_manager.dart';
 
 import 'injection.dart';
 import 'infrastructure/config/app_config.dart';
+import 'infrastructure/local/database.dart';
+import 'infrastructure/local/note_markdown_migration.dart';
 import 'presentation/app.dart';
 import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
@@ -83,6 +85,12 @@ void main() async {
   // 4. Initialize auth (restore session)
   final authRepo = getIt<AuthRepository>();
   await authRepo.initialize();
+
+  // 4b. One-time content migration: convert legacy Quill Delta notes to
+  // Markdown. Runs once (guarded by a persisted flag), backs up the DB first,
+  // and updates ONLY the content column (no metadata bump) to avoid triggering
+  // a sync storm. Awaited so it completes BEFORE the first notes query below.
+  await NoteMarkdownMigration(getIt<AppDatabase>()).run();
 
   // 5. Initialize app state (load notes, create daily note)
   final appState = getIt<AppState>();

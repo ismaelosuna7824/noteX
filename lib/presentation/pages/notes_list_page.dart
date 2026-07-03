@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_staggered_grid_view/flutter_staggered_grid_view.dart';
 import '../../domain/entities/note.dart';
@@ -16,6 +13,7 @@ import '../utils/platform_utils.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_grid_card.dart';
+import '../widgets/note_markdown_editor.dart';
 
 /// Notes list view with inline edit panel.
 ///
@@ -35,29 +33,23 @@ class NotesListPage extends StatefulWidget {
 }
 
 class _NotesListPageState extends State<NotesListPage> {
-  QuillController? _quillController;
   late TextEditingController _titleController;
   String? _loadedNoteId;
 
-  final FocusNode _editorFocusNode = FocusNode();
+  /// The latest Markdown emitted by the editor for the loaded note. Seeded with
+  /// the raw stored content (the editor converts it for display) and replaced on
+  /// every real edit; this snapshot is what gets persisted.
+  String _latestMarkdown = '';
+
+  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
+  /// rebuilds with fresh content — both when switching notes and when the same
+  /// note's content is refreshed externally.
+  int _reloadCount = 0;
 
   // ── Auto-save state ──────────────────────────────────────────────────
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
   Timer? _debounce;
   Timer? _hideTimer;
-  Timer? _editPoller;
-  String _prevContent = '';
-  String _prevTitle = '';
-  int _prevDocLength = 0;
-
-  // ignore: experimental_member_use
-  static final _controllerConfig = QuillControllerConfig(
-    // ignore: experimental_member_use
-    clipboardConfig: QuillClipboardConfig(
-      // ignore: experimental_member_use
-      enableExternalRichPaste: false,
-    ),
-  );
 
   bool _isGridMode = false;
 
@@ -72,23 +64,20 @@ class _NotesListPageState extends State<NotesListPage> {
   void dispose() {
     _debounce?.cancel();
     _hideTimer?.cancel();
-    _editPoller?.cancel();
 
     // Force-save the note that is actually loaded in the editor (not
     // necessarily currentNote, which may already point to a different note
     // if e.g. compact mode was triggered from another card).
-    if (_loadedNoteId != null && _quillController != null) {
+    if (_loadedNoteId != null) {
       widget.appState.autoSaveService.forceSave(
         noteId: _loadedNoteId!,
         title: _titleController.text,
-        content: _serializeContent(),
+        content: _latestMarkdown,
       );
     }
     widget.appState.autoSaveService.unwatch();
 
-    _quillController?.dispose();
     _titleController.dispose();
-    _editorFocusNode.dispose();
     _saveStatus.dispose();
     super.dispose();
   }
@@ -100,77 +89,40 @@ class _NotesListPageState extends State<NotesListPage> {
     if (note == null || note.id == _loadedNoteId) return;
 
     // Force-save previous note before switching.
-    if (_loadedNoteId != null && _quillController != null) {
+    if (_loadedNoteId != null) {
       final prevId = _loadedNoteId!;
       widget.appState.autoSaveService.forceSave(
         noteId: prevId,
         title: _titleController.text,
-        content: _serializeContent(),
+        content: _latestMarkdown,
       );
     }
 
     _debounce?.cancel();
     _hideTimer?.cancel();
-    _editPoller?.cancel();
     _saveStatus.value = '';
     widget.appState.autoSaveService.unwatch();
 
     _loadedNoteId = note.id;
     _titleController.text = note.title;
 
-    _quillController?.dispose();
-    try {
-      final delta = Document.fromJson(jsonDecode(note.content));
-      _quillController = QuillController(
-        document: delta,
-        selection: const TextSelection.collapsed(offset: 0),
-        config: _controllerConfig,
-      );
-    } catch (_) {
-      _quillController = QuillController.basic(config: _controllerConfig);
-    }
+    // The editor converts raw stored content (Delta or Markdown) for display;
+    // seed the latest-Markdown snapshot with the raw content until the first
+    // real edit replaces it. Bump the reload token so the editor remounts with
+    // the new content (note switch or external refresh).
+    _latestMarkdown = note.content;
+    _reloadCount++;
 
-    // Initialize snapshots for edit detection.
-    _prevContent = _serializeContent();
-    _prevTitle = _titleController.text;
-    _prevDocLength = _quillController!.document.length;
-
-    // Register with auto-save service.
+    // Register with auto-save service. The lazy content getter returns the
+    // latest Markdown emitted by the editor.
     widget.appState.autoSaveService.watch(
       noteId: note.id,
       getTitle: () => _titleController.text,
-      getContent: _serializeContent,
-    );
-
-    // Start polling for edits.
-    _editPoller = Timer.periodic(
-      const Duration(milliseconds: 1500),
-      (_) => _pollForEdits(),
+      getContent: () => _latestMarkdown,
     );
   }
 
   // ── Edit detection & save ────────────────────────────────────────────
-
-  String _serializeContent() =>
-      jsonEncode(_quillController!.document.toDelta().toJson());
-
-  void _pollForEdits() {
-    if (!mounted || _quillController == null) return;
-    final title = _titleController.text;
-    final doc = _quillController!.document;
-
-    if (title == _prevTitle && doc.length == _prevDocLength) return;
-
-    final content = _serializeContent();
-    if (content == _prevContent && title == _prevTitle) {
-      _prevDocLength = doc.length;
-      return;
-    }
-    _prevContent = content;
-    _prevTitle = title;
-    _prevDocLength = doc.length;
-    _onUserEdit();
-  }
 
   void _onUserEdit() {
     if (!mounted) return;
@@ -184,9 +136,9 @@ class _NotesListPageState extends State<NotesListPage> {
   Future<void> _save() async {
     if (!mounted) return;
     final noteId = _loadedNoteId;
-    if (noteId == null || _quillController == null) return;
+    if (noteId == null) return;
 
-    final content = _serializeContent();
+    final content = _latestMarkdown;
     final title = _titleController.text;
 
     final ok = await widget.appState.autoSaveService.forceSave(
@@ -196,8 +148,6 @@ class _NotesListPageState extends State<NotesListPage> {
     );
 
     if (!mounted) return;
-    _prevContent = content;
-    _prevTitle = title;
     if (ok) {
       _saveStatus.value = 'saved';
       _hideTimer?.cancel();
@@ -209,11 +159,11 @@ class _NotesListPageState extends State<NotesListPage> {
 
   void _toggleViewMode() {
     // Force-save current note before switching modes.
-    if (_loadedNoteId != null && _quillController != null) {
+    if (_loadedNoteId != null) {
       widget.appState.autoSaveService.forceSave(
         noteId: _loadedNoteId!,
         title: _titleController.text,
-        content: _serializeContent(),
+        content: _latestMarkdown,
       );
     }
     setState(() {
@@ -1289,45 +1239,6 @@ class _NotesListPageState extends State<NotesListPage> {
     );
   }
 
-  DefaultStyles _buildQuillStyles(ThemeData theme, {Color? noteColor}) {
-    final fontSize = widget.themeState.editorFontSize;
-    final lh = widget.themeState.editorLineHeight;
-    final textColor = noteColor != null ? Colors.white : widget.themeState.editorTextColor;
-    final mutedColor = noteColor != null ? Colors.white60 : widget.themeState.editorMutedTextColor;
-
-    return DefaultStyles(
-      placeHolder: DefaultTextBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: mutedColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(4, 4),
-        const VerticalSpacing(0, 0),
-        null,
-      ),
-      paragraph: DefaultTextBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: textColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(4, 4),
-        const VerticalSpacing(0, 0),
-        null,
-      ),
-      lists: DefaultListBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: textColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(4, 4),
-        const VerticalSpacing(0, 0),
-        null,
-        null,
-      ),
-      leading: DefaultTextBlockStyle(
-        TextStyle(fontSize: fontSize, height: lh, color: textColor),
-        const HorizontalSpacing(0, 0),
-        const VerticalSpacing(0, 0),
-        const VerticalSpacing(0, 0),
-        null,
-      ),
-    );
-  }
-
   Widget _buildEditorPanel(
     BuildContext context,
     ThemeData theme,
@@ -1371,7 +1282,7 @@ class _NotesListPageState extends State<NotesListPage> {
       );
     }
 
-    if (note == null || _quillController == null) {
+    if (note == null) {
       return GlassmorphicContainer(
         borderRadius: 20,
         color: widget.themeState.editorBgColor,
@@ -1420,7 +1331,6 @@ class _NotesListPageState extends State<NotesListPage> {
                     child: TextField(
                       controller: _titleController,
                       onChanged: (_) {
-                        _prevTitle = _titleController.text;
                         _onUserEdit();
                       },
                       style: TextStyle(
@@ -1561,104 +1471,35 @@ class _NotesListPageState extends State<NotesListPage> {
           Divider(color: theme.dividerColor.withValues(alpha: 0.1), height: 1),
 
           // Editable content
-          // Listener ensures keyboard focus transfers on any pointer
-          // interaction so Cmd+C / Ctrl+C works on the first try
-          // (macOS requires explicit focus for shortcuts).
           Expanded(
-            child: Listener(
-              onPointerDown: (_) {
-                if (!_editorFocusNode.hasFocus) {
-                  _editorFocusNode.requestFocus();
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Focus(
-                  onKeyEvent: (node, event) {
-                    if (event is! KeyDownEvent &&
-                        event is! KeyRepeatEvent) {
-                      return KeyEventResult.ignored;
-                    }
-                    if (event.logicalKey !=
-                        LogicalKeyboardKey.backspace) {
-                      return KeyEventResult.ignored;
-                    }
-                    final ctrl = _quillController!;
-                    final sel = ctrl.selection;
-                    if (!sel.isCollapsed) {
-                      return KeyEventResult.ignored;
-                    }
-                    final offset = sel.baseOffset;
-                    final style = ctrl.getSelectionStyle();
-                    final indentAttr =
-                        style.attributes[Attribute.indent.key];
-                    if (indentAttr == null) {
-                      return KeyEventResult.ignored;
-                    }
-                    final text = ctrl.document.toPlainText();
-                    int lineStart = offset;
-                    while (lineStart > 0 &&
-                        text[lineStart - 1] != '\n') {
-                      lineStart--;
-                    }
-                    if (offset != lineStart) {
-                      return KeyEventResult.ignored;
-                    }
-                    final currentLevel = indentAttr.value as int;
-                    if (currentLevel <= 1) {
-                      ctrl.formatSelection(
-                          Attribute.clone(Attribute.indentL1, null));
-                    } else {
-                      ctrl.formatSelection(
-                          Attribute.getIndentLevel(currentLevel - 1));
-                    }
-                    return KeyEventResult.handled;
-                  },
-                  child: QuillEditor.basic(
-                    controller: _quillController!,
-                    focusNode: _editorFocusNode,
-                    config: QuillEditorConfig(
-                      placeholder: 'Start writing...',
-                      padding: const EdgeInsets.all(8),
-                      expands: true,
-                      enableAlwaysIndentOnTab: true,
-                      textSelectionThemeData: TextSelectionThemeData(
-                        cursorColor: accentColor,
-                        selectionColor: accentColor.withValues(alpha: 0.3),
-                      ),
-                      customStyles: _buildQuillStyles(theme, noteColor: noteColor),
-                      customLinkPrefixes: const ['notex://'],
-                      onLaunchUrl: (url) {
-                        if (url.startsWith('notex://')) {
-                          final noteId = url.substring('notex://'.length);
-                          final target = widget.appState.notes.cast<Note?>().firstWhere(
-                                (n) => n?.id == noteId,
-                                orElse: () => null,
-                              );
-                          if (target != null) {
-                            widget.appState.selectNote(target);
-                          }
-                          return;
-                        }
-                        launchUrl(Uri.parse(url));
-                      },
-                      linkActionPickerDelegate: (context, link, node) async {
-                        if (link.startsWith('notex://')) {
-                          final noteId = link.substring('notex://'.length);
-                          final target = widget.appState.notes.cast<Note?>().firstWhere(
-                                (n) => n?.id == noteId,
-                                orElse: () => null,
-                              );
-                          if (target != null) {
-                            widget.appState.selectNote(target);
-                          }
-                          return LinkMenuAction.none;
-                        }
-                        return defaultLinkActionPickerDelegate(context, link, node);
-                      },
-                    ),
-                  ),
-                ),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: NoteMarkdownEditor(
+                // Key includes the reload token so the editor remounts with
+                // fresh content on note switch AND on external content refresh.
+                key: ValueKey('${note.id}#$_reloadCount'),
+                initialContent: note.content,
+                initiallyPreview: true,
+                toolbar: EditorToolbarProfile.none,
+                fontSize: widget.themeState.editorFontSize,
+                lineHeight: widget.themeState.editorLineHeight,
+                textColor: noteColor != null
+                    ? Colors.white
+                    : widget.themeState.editorTextColor,
+                onChanged: (markdown) {
+                  _latestMarkdown = markdown;
+                  _onUserEdit();
+                },
+                onInternalLink: (noteId) {
+                  final target = widget.appState.notes.cast<Note?>().firstWhere(
+                        (n) => n?.id == noteId,
+                        orElse: () => null,
+                      );
+                  if (target != null) {
+                    widget.appState.selectNote(target);
+                  }
+                },
+                onExternalLink: (url) => launchUrl(Uri.parse(url)),
               ),
             ),
           ),

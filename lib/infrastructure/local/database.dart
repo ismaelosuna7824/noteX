@@ -180,6 +180,23 @@ class ReminderEntries extends Table {
   String get tableName => 'reminders';
 }
 
+/// Simple key/value store for app-level flags and one-time markers.
+///
+/// Used by data migrations (e.g. the legacy Delta→Markdown content migration)
+/// to persist a run-once flag transactionally alongside the data it guards,
+/// so the marker and the migrated content always live in the same file.
+@DataClassName('AppMetadataRow')
+class AppMetadataEntries extends Table {
+  TextColumn get key => text()();
+  TextColumn get value => text()();
+
+  @override
+  Set<Column> get primaryKey => {key};
+
+  @override
+  String get tableName => 'app_metadata';
+}
+
 /// Tracks last sync timestamp per entity type per user.
 @DataClassName('SyncMetadataRow')
 class SyncMetadataEntries extends Table {
@@ -207,6 +224,7 @@ class SyncMetadataEntries extends Table {
   MarkdownProjectEntries,
   NoteProjectEntries,
   ReminderEntries,
+  AppMetadataEntries,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -215,7 +233,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 14;
+  int get schemaVersion => 15;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -348,8 +366,33 @@ class AppDatabase extends _$AppDatabase {
         }
         await safeAddColumn(noteProjectEntries, noteProjectEntries.parentId);
       }
+      if (from < 15) {
+        // Key/value store for app-level flags (e.g. one-time migration markers).
+        try {
+          await m.createTable(appMetadataEntries);
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
+      }
     },
   );
+
+  // ── App metadata (key/value flags) ──────────────────────────────────────
+
+  /// Reads a single app-metadata value by [key], or `null` when absent.
+  Future<String?> getMetadata(String key) async {
+    final row = await (select(appMetadataEntries)
+          ..where((t) => t.key.equals(key)))
+        .getSingleOrNull();
+    return row?.value;
+  }
+
+  /// Upserts an app-metadata [key]/[value] pair.
+  Future<void> setMetadata(String key, String value) async {
+    await into(appMetadataEntries).insertOnConflictUpdate(
+      AppMetadataEntriesCompanion(key: Value(key), value: Value(value)),
+    );
+  }
 
   // ── Clear all data (user switch) ─────────────────────────────────────────
 

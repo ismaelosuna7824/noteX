@@ -457,6 +457,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                   editorBgColor: widget.themeState.editorBgColor,
                   heroTextColor: widget.themeState.heroTextColor,
                   heroShadows: _buildHeroShadows(widget.themeState),
+                  baseIconColor: widget.themeState.sidebarIconColor,
                 ),
               ),
               Expanded(
