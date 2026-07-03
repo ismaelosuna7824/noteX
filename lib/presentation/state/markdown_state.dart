@@ -132,7 +132,10 @@ class MarkdownState extends ChangeNotifier {
 
   void selectFile(MarkdownFile file) {
     _currentFile = file;
-    _isPreviewMode = false;
+    // Open a file WITH content in preview (rendered, looks nice); an empty file
+    // opens in edit so the user can start typing immediately. Mirrors the note
+    // editor's rule. Switching files re-evaluates this every time.
+    _isPreviewMode = file.content.trim().isNotEmpty;
     notifyListeners();
   }
 

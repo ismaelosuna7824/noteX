@@ -221,6 +221,32 @@ void main() {
     expect(find.byType(TextField), findsNothing);
   });
 
+  testWidgets('renders a fenced code block as a full-width box in preview',
+      (tester) async {
+    const withCodeBlock = 'Intro line\n\n```\nconst x = 1;\n```';
+
+    await mountEditor(
+      tester,
+      NoteMarkdownEditor(
+        initialContent: withCodeBlock,
+        readOnly: true,
+        toolbar: EditorToolbarProfile.none,
+        onChanged: (_) {},
+      ),
+    );
+
+    // The custom `pre` builder renders the code text (trailing newline stripped)
+    // inside a Container whose width fills the available preview width.
+    final codeFinder = find.text('const x = 1;');
+    expect(codeFinder, findsOneWidget);
+
+    final box = tester.getSize(
+      find.ancestor(of: codeFinder, matching: find.byType(Container)).first,
+    );
+    // 800px shell minus the preview's 16px padding on each side.
+    expect(box.width, 800 - 32);
+  });
+
   testWidgets(
       'readOnly renders preview only — no TextField, no toolbar, no onChanged',
       (tester) async {

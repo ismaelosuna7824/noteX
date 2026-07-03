@@ -14,6 +14,7 @@ import '../widgets/editor_text_controls.dart';
 import '../widgets/folder_tree_widgets.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/markdown_code_block_builder.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Preset colors for new markdown projects
@@ -1101,18 +1102,14 @@ class _MarkdownPageState extends State<MarkdownPage> {
               final mutedTextColor = widget.themeState.editorMutedTextColor;
               final accentColor = widget.themeState.accentColor;
 
-              final inlineCodeColor = isDark
-                  ? const Color(0xFFFFB38A) // soft peach
-                  : const Color(0xFFB3261E); // warm red
-              final inlineCodeBg = isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : const Color(0xFFF4ECE6);
-              final codeBlockBg = isDark
-                  ? Colors.white.withValues(alpha: 0.05)
-                  : const Color(0xFFF7F7F9);
-              final codeBlockBorder = isDark
-                  ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.black.withValues(alpha: 0.06);
+              // Code (inline + block) renders in the current text color with a
+              // subtle full-width box and NO per-span highlight — shared with
+              // the note editor's preview via [MarkdownCodeStyles].
+              final codeStyles = MarkdownCodeStyles.from(
+                isDark: isDark,
+                baseFont: baseFontSize,
+                color: textColor,
+              );
               final tableBorderColor = isDark
                   ? Colors.white.withValues(alpha: 0.1)
                   : Colors.black.withValues(alpha: 0.1);
@@ -1120,10 +1117,20 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   ? accentColor.withValues(alpha: 0.06)
                   : accentColor.withValues(alpha: 0.04);
 
-              return Markdown(
+              return SelectionArea(
+                child: Markdown(
               data: content,
-              selectable: true,
+              // Selection is handled by the SelectionArea wrapper so prose AND
+              // the custom code-block widgets are selectable together.
+              selectable: false,
+              softLineBreak: true,
               onTapLink: (text, href, title) {},
+              builders: {
+                'pre': CodeBlockBuilder(
+                  textStyle: codeStyles.textStyle,
+                  decoration: codeStyles.decoration,
+                ),
+              },
               styleSheet: MarkdownStyleSheet(
                 p: TextStyle(
                   fontSize: baseFontSize,
@@ -1150,16 +1157,13 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   decoration: TextDecoration.underline,
                   decorationColor: accentColor.withValues(alpha: 0.5),
                 ),
-                code: GoogleFonts.sourceCodePro(
-                  fontSize: (13 * scale).roundToDouble(),
-                  color: inlineCodeColor,
-                  backgroundColor: inlineCodeBg,
-                ),
-                codeblockDecoration: BoxDecoration(
-                  color: codeBlockBg,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: codeBlockBorder, width: 1),
-                ),
+                // Inline code: monospace, current text color, no highlight.
+                code: codeStyles.textStyle,
+                // Fenced code blocks are drawn full-width by the custom `pre`
+                // builder above. flutter_markdown_plus still wraps every `pre`
+                // builder's output in an outer Container using this decoration,
+                // so it is neutralised to avoid a double box.
+                codeblockDecoration: const BoxDecoration(),
                 blockquote: TextStyle(
                   fontSize: baseFontSize,
                   height: lineHeight,
@@ -1206,7 +1210,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   ),
                 ),
               ),
-            );
+            ));
             }),
     );
   }

@@ -1,7 +1,7 @@
 name: notex
 description: "NoteX - A professional desktop notes app with Hexagonal Architecture & DDD"
 publish_to: 'none'
-version: 1.50.0+1
+version: 1.51.0+1
 
 environment:
   sdk: ^3.11.0
@@ -20,6 +20,10 @@ dependencies:
 
   # Markdown rendering + source-mode preview
   flutter_markdown_plus: ^1.0.7
+  # Direct dep (already resolved transitively via flutter_markdown_plus) so the
+  # `pre` MarkdownElementBuilder can import the AST `Element` type without the
+  # depend_on_referenced_packages lint. Pinned to the resolved version.
+  markdown: 7.3.0
 
   # DI
   get_it: ^8.0.3
