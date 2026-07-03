@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_quill/flutter_quill.dart';
 
 import 'pages/app_shell.dart';
 import 'pages/mobile_app_shell.dart';
@@ -56,7 +55,6 @@ class _NoteXAppState extends State<NoteXApp> {
             GlobalMaterialLocalizations.delegate,
             GlobalCupertinoLocalizations.delegate,
             GlobalWidgetsLocalizations.delegate,
-            FlutterQuillLocalizations.delegate,
           ],
           supportedLocales: const [
             Locale('en'),

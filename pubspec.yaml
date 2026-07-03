@@ -18,9 +18,6 @@ dependencies:
   path_provider: ^2.1.5
   path: ^1.9.1
 
-  # Rich text editor
-  flutter_quill: ^11.1.0
-
   # Markdown rendering + source-mode preview
   flutter_markdown_plus: ^1.0.7
 
