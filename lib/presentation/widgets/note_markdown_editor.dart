@@ -13,6 +13,13 @@ import 'markdown_code_block_builder.dart';
 /// * [none] — the notes list preview (no toolbar at all).
 enum EditorToolbarProfile { full, minimal, none }
 
+/// Which surface(s) the editor shows for a single note.
+/// * [edit] — the source Markdown [TextField] only.
+/// * [preview] — the rendered Markdown only.
+/// * [split] — the field and the live preview side by side (editing the field
+///   refreshes the preview as you type).
+enum EditorViewMode { edit, preview, split }
+
 /// A reusable source-mode Markdown editor shared by every editor surface.
 ///
 /// The user edits raw Markdown in a plain [TextField] and can flip to a
@@ -133,8 +140,11 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// toggle itself is delivered globally, not through this node.
   final FocusNode _previewFocusNode = FocusNode();
 
-  /// Whether the preview (rendered Markdown) is showing instead of the editor.
-  bool _showPreview = false;
+  /// Which surface(s) this editor currently shows (edit / preview / split).
+  EditorViewMode _viewMode = EditorViewMode.edit;
+
+  /// The source field is visible in both edit and split modes.
+  bool get _editVisible => _viewMode != EditorViewMode.preview;
 
   @override
   void initState() {
@@ -147,7 +157,14 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     _controller = TextEditingController(text: markdown);
     // Open a note WITH content in preview (rendered, looks nice); an EMPTY/new
     // note opens in the editor so the user can start typing immediately.
-    _showPreview = widget.initiallyPreview && markdown.trim().isNotEmpty;
+    _viewMode = widget.initiallyPreview && markdown.trim().isNotEmpty
+        ? EditorViewMode.preview
+        : EditorViewMode.edit;
+    // In split mode the preview reads _controller.text directly, but user typing
+    // fires TextField.onChanged (the host callback) — not setState here. So the
+    // preview would go stale. Listen to the controller and rebuild live, but
+    // ONLY in split mode where both surfaces are on screen at once.
+    _controller.addListener(_handleControllerChange);
 
     // Claim the active-toggle slot when nothing else holds it, so a single
     // mounted editor always receives Cmd/Ctrl+E. Read-only surfaces have no
@@ -172,6 +189,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     }
     _editFocusNode.removeListener(_handleFocusChange);
     _previewFocusNode.removeListener(_handleFocusChange);
+    _controller.removeListener(_handleControllerChange);
     _controller.dispose();
     _editFocusNode.dispose();
     _previewFocusNode.dispose();
@@ -188,19 +206,50 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     }
   }
 
+  /// Rebuilds the live preview as the user types, but only in split mode where
+  /// the field and preview are on screen together. In edit/preview mode the two
+  /// surfaces are never visible at once, so a per-keystroke rebuild would be
+  /// wasted work (and re-parse the whole document needlessly).
+  void _handleControllerChange() {
+    if (_viewMode == EditorViewMode.split && mounted) {
+      setState(() {});
+    }
+  }
+
   /// Flips between edit and preview and moves focus so the target mode is
   /// immediately usable: the [TextField] regains focus when returning to edit,
   /// the preview subtree takes focus (which re-claims the active-toggle slot).
+  /// From split, this collapses to a single full-width preview.
   void _togglePreview() {
     _activeInstance = this;
-    setState(() => _showPreview = !_showPreview);
+    setState(() {
+      _viewMode = _viewMode == EditorViewMode.preview
+          ? EditorViewMode.edit
+          : EditorViewMode.preview;
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      if (_showPreview) {
+      if (_viewMode == EditorViewMode.preview) {
         _previewFocusNode.requestFocus();
       } else {
         _editFocusNode.requestFocus();
       }
+    });
+  }
+
+  /// Toggles the side-by-side split view. Leaving split returns to the plain
+  /// editor; entering it puts focus in the field so typing updates the live
+  /// preview immediately.
+  void _toggleSplit() {
+    _activeInstance = this;
+    setState(() {
+      _viewMode = _viewMode == EditorViewMode.split
+          ? EditorViewMode.edit
+          : EditorViewMode.split;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _editFocusNode.requestFocus();
     });
   }
 
@@ -366,7 +415,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       return _buildPreview(context);
     }
 
-    final toolbarButtons = _showPreview ? null : _toolbarButtons();
+    final toolbarButtons = _editVisible ? _toolbarButtons() : null;
     // The Cmd/Ctrl+E toggle is delivered globally via [_globalKeyHandler], so no
     // Focus wrapper is needed here to catch it. The preview subtree still takes
     // focus (below) so this editor claims the active-toggle slot when shown.
@@ -381,17 +430,40 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
               ? Colors.white.withValues(alpha: 0.10)
               : Colors.black.withValues(alpha: 0.06),
         ),
-        Expanded(
-          child: _showPreview
-              ? Focus(
-                  focusNode: _previewFocusNode,
-                  autofocus: true,
-                  child: _buildPreview(context),
-                )
-              : _buildEditField(context),
-        ),
+        Expanded(child: _buildBody(context)),
       ],
     );
+  }
+
+  /// Renders the active surface(s) for [_viewMode]. Split lays the field and
+  /// the live preview side by side, sharing the same [_controller] so both read
+  /// and write the one source of truth.
+  Widget _buildBody(BuildContext context) {
+    switch (_viewMode) {
+      case EditorViewMode.edit:
+        return _buildEditField(context);
+      case EditorViewMode.preview:
+        return Focus(
+          focusNode: _previewFocusNode,
+          autofocus: true,
+          child: _buildPreview(context),
+        );
+      case EditorViewMode.split:
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: _buildEditField(context)),
+            VerticalDivider(
+              width: 1,
+              thickness: 1,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            Expanded(child: _buildPreview(context)),
+          ],
+        );
+    }
   }
 
   /// The row holding the edit-mode insert toolbar (when applicable) and the
@@ -414,8 +486,22 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
           ),
           if (widget.trailing != null) widget.trailing!,
           IconButton(
-            tooltip: _showPreview ? 'Edit' : 'Preview',
-            icon: Icon(_showPreview ? Icons.edit : Icons.visibility),
+            tooltip:
+                _viewMode == EditorViewMode.split ? 'Exit split' : 'Split view',
+            icon: Icon(
+              _viewMode == EditorViewMode.split
+                  ? Icons.splitscreen
+                  : Icons.vertical_split_outlined,
+            ),
+            onPressed: _toggleSplit,
+          ),
+          IconButton(
+            tooltip: _viewMode == EditorViewMode.preview ? 'Edit' : 'Preview',
+            icon: Icon(
+              _viewMode == EditorViewMode.preview
+                  ? Icons.edit
+                  : Icons.visibility,
+            ),
             onPressed: _togglePreview,
           ),
         ],
