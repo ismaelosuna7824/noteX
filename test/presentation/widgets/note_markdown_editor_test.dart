@@ -213,7 +213,7 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(MarkdownBody), findsNothing);
 
-    await tester.tap(find.byTooltip('Preview'));
+    await tester.tap(find.byIcon(Icons.visibility));
     await tester.pumpAndSettle();
 
     // Preview mode: rendered Markdown present, TextField gone.
@@ -358,6 +358,121 @@ void main() {
 
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(MarkdownBody), findsNothing);
+  });
+
+  testWidgets('Ctrl+Shift+E toggles the side-by-side split view',
+      (tester) async {
+    await mountEditor(
+      tester,
+      NoteMarkdownEditor(
+        initialContent: markdown,
+        toolbar: EditorToolbarProfile.full,
+        onChanged: (_) {},
+      ),
+    );
+
+    // Start in edit mode: field only, no live preview.
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(MarkdownBody), findsNothing);
+
+    // Ctrl+Shift+E: edit -> split. Both surfaces are on screen at once.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(MarkdownBody), findsOneWidget);
+
+    // Ctrl+Shift+E again: split -> edit, collapsing back to the field only.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(MarkdownBody), findsNothing);
+  });
+
+  testWidgets('initialViewMode: split opens directly in the split view',
+      (tester) async {
+    await mountEditor(
+      tester,
+      NoteMarkdownEditor(
+        initialContent: markdown,
+        initialViewMode: EditorViewMode.split,
+        toolbar: EditorToolbarProfile.full,
+        onChanged: (_) {},
+      ),
+    );
+
+    // Both surfaces are on screen at once — the editor restored the split mode
+    // instead of the edit/preview default.
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(MarkdownBody), findsOneWidget);
+  });
+
+  testWidgets('initialViewMode: preview downgrades to edit on an empty note',
+      (tester) async {
+    await mountEditor(
+      tester,
+      NoteMarkdownEditor(
+        initialContent: '',
+        initialViewMode: EditorViewMode.preview,
+        toolbar: EditorToolbarProfile.full,
+        onChanged: (_) {},
+      ),
+    );
+
+    // A new/empty note must stay typable even when preview was requested.
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.byType(MarkdownBody), findsNothing);
+  });
+
+  testWidgets('onViewModeChanged fires with the new mode on every toggle',
+      (tester) async {
+    final modes = <EditorViewMode>[];
+    await mountEditor(
+      tester,
+      NoteMarkdownEditor(
+        initialContent: markdown,
+        toolbar: EditorToolbarProfile.full,
+        onChanged: (_) {},
+        onViewModeChanged: modes.add,
+      ),
+    );
+
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
+
+    // Ctrl+Shift+E: edit -> split.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pumpAndSettle();
+
+    // Ctrl+E: split -> preview.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pumpAndSettle();
+
+    expect(modes, [EditorViewMode.split, EditorViewMode.preview]);
+  });
+
+  testWidgets('EditorViewModeName.fromName round-trips and guards bad input',
+      (tester) async {
+    for (final mode in EditorViewMode.values) {
+      expect(EditorViewModeName.fromName(mode.name), mode);
+    }
+    expect(EditorViewModeName.fromName('garbage'), EditorViewMode.edit);
+    expect(EditorViewModeName.fromName(null), EditorViewMode.edit);
   });
 
   testWidgets(

@@ -387,7 +387,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     child: NoteMarkdownEditor(
                       key: ValueKey('${note.id}#$_reloadCount'),
                       initialContent: note.content,
-                      initiallyPreview: true,
+                      initialViewMode: EditorViewModeName.fromName(
+                        widget.themeState.editorViewMode,
+                      ),
+                      onViewModeChanged: (mode) =>
+                          widget.themeState.setEditorViewMode(mode.name),
                       toolbar: isCompact
                           ? EditorToolbarProfile.minimal
                           : EditorToolbarProfile.full,

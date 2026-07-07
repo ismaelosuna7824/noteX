@@ -59,6 +59,12 @@ class ThemeState extends ChangeNotifier {
   /// Notes display mode: 'list' or 'grid'.
   String _notesDisplayMode = 'list';
 
+  /// Last-used editor view mode: 'edit', 'preview', or 'split'. Restored so the
+  /// editor reopens in the surface the user left it in. Defaults to 'preview'
+  /// so a fresh install keeps the historical open-a-note-in-preview behavior
+  /// (an empty note still opens editable — the editor downgrades preview→edit).
+  String _editorViewMode = 'preview';
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -123,6 +129,9 @@ class ThemeState extends ChangeNotifier {
 
   /// Notes display mode ('list' or 'grid').
   String get notesDisplayMode => _notesDisplayMode;
+
+  /// Last-used editor view mode ('edit', 'preview', or 'split').
+  String get editorViewMode => _editorViewMode;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -331,6 +340,7 @@ class ThemeState extends ChangeNotifier {
       if (sidebarIconValue != null) _sidebarIconColor = Color(sidebarIconValue);
 
       _notesDisplayMode = json['notesDisplayMode'] as String? ?? 'list';
+      _editorViewMode = json['editorViewMode'] as String? ?? 'preview';
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -370,6 +380,7 @@ class ThemeState extends ChangeNotifier {
         'lightEditorBgColor': _lightEditorBgColor?.toARGB32(),
         'sidebarIconColor': _sidebarIconColor?.toARGB32(),
         'notesDisplayMode': _notesDisplayMode,
+        'editorViewMode': _editorViewMode,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -383,6 +394,18 @@ class ThemeState extends ChangeNotifier {
     _notesDisplayMode = mode;
     _saveToDisk();
     notifyListeners();
+  }
+
+  /// Persist the last-used editor view mode ('edit', 'preview', or 'split').
+  ///
+  /// Does not call [notifyListeners]: this is written as a side effect of the
+  /// user toggling the editor surface, and the editor already owns that visual
+  /// state locally — a rebuild here would be redundant. The value is only read
+  /// on the next editor open.
+  void setEditorViewMode(String mode) {
+    if (_editorViewMode == mode) return;
+    _editorViewMode = mode;
+    _saveToDisk();
   }
 
   /// Change the font family and persist.

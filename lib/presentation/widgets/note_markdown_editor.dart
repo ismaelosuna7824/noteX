@@ -20,6 +20,18 @@ enum EditorToolbarProfile { full, minimal, none }
 ///   refreshes the preview as you type).
 enum EditorViewMode { edit, preview, split }
 
+/// Serialization helpers so hosts can persist and restore the view mode by name.
+extension EditorViewModeName on EditorViewMode {
+  /// Parses a persisted [EditorViewMode.name], falling back to [edit] for any
+  /// unknown or corrupt value so a bad stored setting never crashes the editor.
+  static EditorViewMode fromName(String? name) {
+    for (final mode in EditorViewMode.values) {
+      if (mode.name == name) return mode;
+    }
+    return EditorViewMode.edit;
+  }
+}
+
 /// A reusable source-mode Markdown editor shared by every editor surface.
 ///
 /// The user edits raw Markdown in a plain [TextField] and can flip to a
@@ -48,6 +60,8 @@ class NoteMarkdownEditor extends StatefulWidget {
     this.toolbar = EditorToolbarProfile.full,
     this.readOnly = false,
     this.initiallyPreview = false,
+    this.initialViewMode,
+    this.onViewModeChanged,
     this.onInternalLink,
     this.onExternalLink,
     this.fontSize,
@@ -78,6 +92,19 @@ class NoteMarkdownEditor extends StatefulWidget {
   /// Markdown. An empty/new note always opens in the editor so the user can
   /// start typing immediately. Ignored when [readOnly] is true.
   final bool initiallyPreview;
+
+  /// The view mode the editor should open in, taking precedence over
+  /// [initiallyPreview]. Used to restore a persisted last-used surface (e.g.
+  /// reopen in split). When null, [initiallyPreview] decides. A [preview]
+  /// request on an empty note still falls back to edit so a new note is
+  /// immediately typable.
+  final EditorViewMode? initialViewMode;
+
+  /// Called whenever the user switches the view mode via the toolbar toggles or
+  /// the keyboard shortcut, with the new mode. Lets the host persist the
+  /// last-used surface. Never fired for read-only surfaces (they have no
+  /// toggles) nor during initial seeding.
+  final ValueChanged<EditorViewMode>? onViewModeChanged;
 
   /// Called when the user taps a `notex://<id>` link in the preview, with the
   /// `<id>` portion. When null, internal-link taps are ignored.
@@ -155,11 +182,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     // do.
     final markdown = NoteContentFormat.ensureMarkdown(widget.initialContent);
     _controller = TextEditingController(text: markdown);
-    // Open a note WITH content in preview (rendered, looks nice); an EMPTY/new
-    // note opens in the editor so the user can start typing immediately.
-    _viewMode = widget.initiallyPreview && markdown.trim().isNotEmpty
-        ? EditorViewMode.preview
-        : EditorViewMode.edit;
+    _viewMode = _resolveInitialViewMode(markdown);
     // In split mode the preview reads _controller.text directly, but user typing
     // fires TextField.onChanged (the host callback) — not setState here. So the
     // preview would go stale. Listen to the controller and rebuild live, but
@@ -196,6 +219,21 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     super.dispose();
   }
 
+  /// Decides which surface the editor opens in. [initialViewMode] wins when
+  /// provided (restoring a persisted mode), otherwise [initiallyPreview] does.
+  /// A [preview] request on an empty note is downgraded to edit so a new note
+  /// is immediately typable; split keeps its editable field, so it survives.
+  EditorViewMode _resolveInitialViewMode(String markdown) {
+    final requested = widget.initialViewMode ??
+        (widget.initiallyPreview
+            ? EditorViewMode.preview
+            : EditorViewMode.edit);
+    if (requested == EditorViewMode.preview && markdown.trim().isEmpty) {
+      return EditorViewMode.edit;
+    }
+    return requested;
+  }
+
   /// Claims the active-toggle slot for this editor when its field or preview
   /// takes focus. Never clears the slot on focus loss — that would break the
   /// focus-independence the global handler exists to provide.
@@ -227,6 +265,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
           ? EditorViewMode.edit
           : EditorViewMode.preview;
     });
+    widget.onViewModeChanged?.call(_viewMode);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       if (_viewMode == EditorViewMode.preview) {
@@ -247,13 +286,16 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
           ? EditorViewMode.edit
           : EditorViewMode.split;
     });
+    widget.onViewModeChanged?.call(_viewMode);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       _editFocusNode.requestFocus();
     });
   }
 
-  /// Global Cmd+E (macOS) / Ctrl+E (Windows/Linux) preview⇄edit toggle.
+  /// Global keyboard toggles on the Cmd (macOS) / Ctrl (Windows/Linux) + E key:
+  /// * without Shift — preview⇄edit;
+  /// * with Shift — the side-by-side split view.
   ///
   /// Registered on [HardwareKeyboard] so it fires regardless of where focus is,
   /// as long as this editor is mounted and owns the active-toggle slot (see
@@ -267,7 +309,11 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     final hasModifier = HardwareKeyboard.instance.isMetaPressed ||
         HardwareKeyboard.instance.isControlPressed;
     if (!hasModifier) return false;
-    _togglePreview();
+    if (HardwareKeyboard.instance.isShiftPressed) {
+      _toggleSplit();
+    } else {
+      _togglePreview();
+    }
     return true;
   }
 
@@ -469,6 +515,9 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// The row holding the edit-mode insert toolbar (when applicable) and the
   /// edit⇄preview toggle. The toggle is always present outside read-only mode.
   Widget _buildControlBar(BuildContext context, List<Widget>? toolbarButtons) {
+    // The modifier key differs by platform: Cmd on macOS, Ctrl elsewhere.
+    final mod =
+        Theme.of(context).platform == TargetPlatform.macOS ? 'Cmd' : 'Ctrl';
     return Material(
       color: Colors.transparent,
       child: Row(
@@ -487,7 +536,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
           if (widget.trailing != null) widget.trailing!,
           IconButton(
             tooltip:
-                _viewMode == EditorViewMode.split ? 'Exit split' : 'Split view',
+                '${_viewMode == EditorViewMode.split ? 'Exit split' : 'Split view'} ($mod+Shift+E)',
             icon: Icon(
               _viewMode == EditorViewMode.split
                   ? Icons.splitscreen
@@ -496,7 +545,8 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
             onPressed: _toggleSplit,
           ),
           IconButton(
-            tooltip: _viewMode == EditorViewMode.preview ? 'Edit' : 'Preview',
+            tooltip:
+                '${_viewMode == EditorViewMode.preview ? 'Edit' : 'Preview'} ($mod+E)',
             icon: Icon(
               _viewMode == EditorViewMode.preview
                   ? Icons.edit
