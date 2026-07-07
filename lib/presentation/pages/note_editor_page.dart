@@ -392,6 +392,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       ),
                       onViewModeChanged: (mode) =>
                           widget.themeState.setEditorViewMode(mode.name),
+                      autofocus: true,
                       toolbar: isCompact
                           ? EditorToolbarProfile.minimal
                           : EditorToolbarProfile.full,

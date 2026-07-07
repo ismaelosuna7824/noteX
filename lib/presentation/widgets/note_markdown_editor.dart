@@ -62,6 +62,7 @@ class NoteMarkdownEditor extends StatefulWidget {
     this.initiallyPreview = false,
     this.initialViewMode,
     this.onViewModeChanged,
+    this.autofocus = false,
     this.onInternalLink,
     this.onExternalLink,
     this.fontSize,
@@ -105,6 +106,14 @@ class NoteMarkdownEditor extends StatefulWidget {
   /// last-used surface. Never fired for read-only surfaces (they have no
   /// toggles) nor during initial seeding.
   final ValueChanged<EditorViewMode>? onViewModeChanged;
+
+  /// When true, this editor grabs focus and the global Cmd/Ctrl+E toggle slot
+  /// as soon as it mounts, so the shortcut works immediately without a click —
+  /// in any [initialViewMode], not just the auto-focused preview. Set this only
+  /// for the primary editor surface: leaving it false keeps multiple mounted
+  /// editors (tiling panels, the list preview) from fighting over focus.
+  /// Ignored when [readOnly] is true.
+  final bool autofocus;
 
   /// Called when the user taps a `notex://<id>` link in the preview, with the
   /// `<id>` portion. When null, internal-link taps are ignored.
@@ -194,6 +203,22 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     // toggle, so they never claim it.
     if (!widget.readOnly && _activeInstance == null) {
       _activeInstance = this;
+    }
+    // The primary editor takes over the toggle slot AND focus on mount, so the
+    // shortcut works immediately without a click — even when it opens in edit
+    // or split, which (unlike preview) do not auto-focus a surface. Force the
+    // claim past any editor that already holds it (e.g. the list preview still
+    // mounted behind this page).
+    if (widget.autofocus && !widget.readOnly) {
+      _activeInstance = this;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (_viewMode == EditorViewMode.preview) {
+          _previewFocusNode.requestFocus();
+        } else {
+          _editFocusNode.requestFocus();
+        }
+      });
     }
     // Re-claim the slot whenever this editor's field or preview gains focus, so
     // the last-interacted editor wins when several are mounted.

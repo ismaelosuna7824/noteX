@@ -476,6 +476,58 @@ void main() {
   });
 
   testWidgets(
+      'autofocus editor claims the toggle slot on mount even when another '
+      'editor already holds it', (tester) async {
+    // Regression: opening the main editor in edit/split (which do not
+    // auto-focus a surface) must still grab Cmd/Ctrl+E without a click, even
+    // though the list-preview editor mounted first already holds the slot.
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Column(
+            children: [
+              // First editor claims the slot on mount (slot was null).
+              Expanded(
+                child: NoteMarkdownEditor(
+                  initialContent: 'AAA first',
+                  onChanged: (_) {},
+                ),
+              ),
+              // Primary editor: mounts second, opens in edit, and must steal
+              // the slot via autofocus despite the first editor holding it.
+              Expanded(
+                child: NoteMarkdownEditor(
+                  initialContent: 'BBB second',
+                  initialViewMode: EditorViewMode.edit,
+                  autofocus: true,
+                  onChanged: (_) {},
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Both editors start in edit → two fields, no rendered preview.
+    expect(find.byType(TextField), findsNWidgets(2));
+    expect(find.byType(MarkdownBody), findsNothing);
+
+    // Ctrl+E WITHOUT tapping anything: only the autofocus editor should flip
+    // (edit -> preview), proving it owns the slot. Its field is replaced by a
+    // MarkdownBody; the first editor's field stays put.
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+    await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TextField), findsOneWidget);
+    expect(find.text('AAA first'), findsOneWidget);
+    expect(find.byType(MarkdownBody), findsOneWidget);
+  });
+
+  testWidgets(
       'Ctrl+E toggles even when no editor node is focused (global handler)',
       (tester) async {
     await mountEditor(
