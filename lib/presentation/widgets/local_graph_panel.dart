@@ -33,7 +33,14 @@ class LocalGraphPanel extends StatefulWidget {
 }
 
 class _LocalGraphPanelState extends State<LocalGraphPanel> {
-  static const _layoutSize = Size(600, 460);
+  /// Space the neighbourhood is solved in. Wider than the panel so the
+  /// simulation has room to spread before the view fits it back down —
+  /// solving into a narrow box crams the nodes together.
+  static const _layoutSize = Size(700, 520);
+
+  /// Panel width. At 300 the graph was a postage stamp with labels running
+  /// into each other; this leaves room for a title beside a node.
+  static const _panelWidth = 380.0;
 
   late NoteGraph _graph;
   late Map<String, LayoutPoint> _positions;
@@ -81,7 +88,7 @@ class _LocalGraphPanelState extends State<LocalGraphPanel> {
     final linkCount = _graph.nodes.length - 1;
 
     return Container(
-      width: 300,
+      width: _panelWidth,
       margin: const EdgeInsets.only(left: 12),
       decoration: BoxDecoration(
         // Opaque like the full graph view: thin lines and small dots are the

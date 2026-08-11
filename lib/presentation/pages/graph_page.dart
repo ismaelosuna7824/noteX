@@ -96,12 +96,17 @@ class _GraphPageState extends State<GraphPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // This heading sits on the wallpaper, not on a panel, so it uses
+              // heroTextColor — the colour the app computes by WCAG contrast
+              // against whatever image is behind it. Theme colours know about
+              // light and dark mode and nothing about the photo.
               Row(
                 children: [
                   Text(
                     'Graph',
-                    style: theme.textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.w700,
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w800,
+                      color: widget.themeState.heroTextColor,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -109,7 +114,11 @@ class _GraphPageState extends State<GraphPage> {
                     '${_graph.nodes.length} notes · ${_graph.edges.length} links',
                     style: TextStyle(
                       fontSize: 13,
-                      color: isDark ? Colors.white54 : Colors.grey.shade600,
+                      // Held at 0.7 rather than a light grey: this is small
+                      // text over an image, and grey-on-photo is how a label
+                      // disappears.
+                      color: widget.themeState.heroTextColor
+                          .withValues(alpha: 0.7),
                     ),
                   ),
                 ],
