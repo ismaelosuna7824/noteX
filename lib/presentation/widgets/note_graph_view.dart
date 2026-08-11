@@ -19,6 +19,11 @@ class NoteGraphView extends StatefulWidget {
   final Map<String, LayoutPoint> positions;
 
   final Color accentColor;
+
+  /// Colour of the panel behind the graph. Used to rim the nodes, so a node
+  /// overlapping another reads as separate rather than as one blob.
+  final Color surfaceColor;
+
   final ValueChanged<String> onOpenNote;
 
   const NoteGraphView({
@@ -26,6 +31,7 @@ class NoteGraphView extends StatefulWidget {
     required this.graph,
     required this.positions,
     required this.accentColor,
+    required this.surfaceColor,
     required this.onOpenNote,
   });
 
@@ -238,6 +244,7 @@ class _NoteGraphViewState extends State<NoteGraphView> {
                     highlighted: highlighted,
                     neighbours: neighbours,
                     accentColor: widget.accentColor,
+                    surfaceColor: widget.surfaceColor,
                     radiusOf: _radiusOf,
                     isDark: Theme.of(context).brightness == Brightness.dark,
                   ),
@@ -270,6 +277,7 @@ class _GraphPainter extends CustomPainter {
   final String? highlighted;
   final Set<String> neighbours;
   final Color accentColor;
+  final Color surfaceColor;
   final double Function(GraphNode) radiusOf;
   final bool isDark;
 
@@ -281,6 +289,7 @@ class _GraphPainter extends CustomPainter {
     required this.highlighted,
     required this.neighbours,
     required this.accentColor,
+    required this.surfaceColor,
     required this.radiusOf,
     required this.isDark,
   });
@@ -308,14 +317,29 @@ class _GraphPainter extends CustomPainter {
       final touchesHighlight =
           highlighted != null && (edge.sourceId == highlighted || edge.targetId == highlighted);
 
-      canvas.drawLine(
-        from,
-        to,
+      // A gentle arc rather than a straight line. Straight edges between
+      // scattered points read as a diagram; a slight curve reads as something
+      // grown, and it also separates the two lines of a pair that would
+      // otherwise overlap exactly.
+      final middle = (from + to) / 2;
+      final along = to - from;
+      final perpendicular = Offset(-along.dy, along.dx);
+      final length = along.distance;
+      final control = length < 0.01
+          ? middle
+          : middle + perpendicular / length * (length * 0.12);
+
+      canvas.drawPath(
+        Path()
+          ..moveTo(from.dx, from.dy)
+          ..quadraticBezierTo(control.dx, control.dy, to.dx, to.dy),
         Paint()
+          ..style = PaintingStyle.stroke
           ..color = touchesHighlight
               ? accentColor.withValues(alpha: 0.9)
-              : baseLine.withValues(alpha: lit ? 0.22 : 0.06)
-          ..strokeWidth = (touchesHighlight ? 1.6 : 0.9) / zoom
+              : baseLine.withValues(alpha: lit ? 0.24 : 0.06)
+          ..strokeWidth = (touchesHighlight ? 1.8 : 1.1) / zoom
+          ..strokeCap = StrokeCap.round
           ..isAntiAlias = true,
       );
     }
@@ -328,28 +352,53 @@ class _GraphPainter extends CustomPainter {
       final isFocus = node.id == highlighted;
       final radius = radiusOf(node);
 
-      // A halo marks the focused node without moving or resizing it, so the
-      // graph does not jump when the pointer crosses a node.
-      if (isFocus) {
+      final connectedness = math.min(node.degree, 6) / 6;
+
+      // A soft bloom underneath, fading to nothing. It gives each node a
+      // little depth against a flat panel, and it is what stops a well-linked
+      // note from reading as just a bigger dot.
+      final glowColor = isFocus ? accentColor : baseLine;
+      final glowStrength = isFocus ? 0.34 : (0.05 + connectedness * 0.16);
+      if (lit && glowStrength > 0.02) {
+        final glowRadius = radius * (isFocus ? 3.4 : 2.6);
         canvas.drawCircle(
           position,
-          radius + 6,
-          Paint()..color = accentColor.withValues(alpha: 0.22),
+          glowRadius,
+          Paint()
+            ..shader = RadialGradient(
+              colors: [
+                glowColor.withValues(alpha: glowStrength),
+                glowColor.withValues(alpha: 0),
+              ],
+            ).createShader(Rect.fromCircle(center: position, radius: glowRadius)),
         );
       }
 
       // Neutral fills, brightening with how connected a note is. Size and
       // value carry the hierarchy; the accent is spent only on what is
       // focused, so it still means something when it appears.
-      final connectedness = math.min(node.degree, 6) / 6;
       final restColor = baseLine.withValues(
-        alpha: (0.32 + connectedness * 0.55) * (lit ? 1 : 0.22),
+        alpha: (0.34 + connectedness * 0.55) * (lit ? 1 : 0.2),
       );
 
       canvas.drawCircle(
         position,
         radius,
-        Paint()..color = isFocus ? accentColor : restColor,
+        Paint()
+          ..color = isFocus ? accentColor : restColor
+          ..isAntiAlias = true,
+      );
+
+      // A rim in the panel's own colour, which reads as a gap rather than an
+      // outline: where two nodes overlap you can still tell them apart.
+      canvas.drawCircle(
+        position,
+        radius,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.5 / zoom
+          ..color = surfaceColor.withValues(alpha: lit ? 0.85 : 0.4)
+          ..isAntiAlias = true,
       );
 
       // Labels are earned, not given. Forty of them at once is a wall of text
@@ -390,7 +439,13 @@ class _GraphPainter extends CustomPainter {
       old.pan != pan ||
       old.zoom != zoom ||
       old.highlighted != highlighted ||
-      old.graph != graph;
+      old.graph != graph ||
+      // Colours are compared too: they are painted, not just read. Without
+      // this, switching accent or theme rebuilds the widget but leaves the
+      // canvas showing the previous palette until something else moves.
+      old.accentColor != accentColor ||
+      old.surfaceColor != surfaceColor ||
+      old.isDark != isDark;
 }
 
 class _Controls extends StatelessWidget {

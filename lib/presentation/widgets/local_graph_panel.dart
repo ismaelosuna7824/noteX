@@ -143,6 +143,7 @@ class _LocalGraphPanelState extends State<LocalGraphPanel> {
                     graph: _graph,
                     positions: _positions,
                     accentColor: widget.accentColor,
+                    surfaceColor: widget.surfaceColor,
                     onOpenNote: widget.onOpenNote,
                   ),
           ),

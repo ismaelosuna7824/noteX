@@ -151,6 +151,7 @@ class _GraphPageState extends State<GraphPage> {
                               graph: _graph,
                               positions: _positions,
                               accentColor: accentColor,
+                              surfaceColor: widget.themeState.editorBgColor,
                               onOpenNote: _openNote,
                             ),
 
