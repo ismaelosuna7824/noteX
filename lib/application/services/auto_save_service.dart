@@ -141,7 +141,7 @@ class AutoSaveService {
   /// Silent tick — persists data without calling [onSaved].
   ///
   /// [onSaved] triggers `notifyListeners()` → widget rebuilds, which can
-  /// cause phantom dirty-marks from QuillEditor.  Only [forceSave] (called
+  /// cause phantom dirty-marks from the editor.  Only [forceSave] (called
   /// by the editor's debounce) invokes [onSaved] to refresh the UI list.
   ///
   /// Guards against overlapping saves with [_isSaving]. On failure,

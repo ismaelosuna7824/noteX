@@ -11,7 +11,7 @@ import 'note_markdown_editor.dart';
 
 /// A self-contained editor panel for one note inside the tiling layout.
 ///
-/// Each panel manages its own [QuillController], auto-save polling, and
+/// Each panel manages its own [NoteMarkdownEditor], auto-save polling, and
 /// title editing — identical to the former `_SplitEditorPanel`.
 class TilingEditorPanel extends StatefulWidget {
   final Note note;
@@ -148,7 +148,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
 
   void _claimFocus() {
     if (widget.tiling.focusedNoteId != widget.note.id) {
-      // Defer so we don't interfere with QuillEditor's pointer handling
+      // Defer so we don't interfere with the editor's pointer handling
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.tiling.focusedNoteId = widget.note.id;
       });
@@ -202,7 +202,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
           ),
       child: Column(
           children: [
-            // Toolbar row: quill toolbar + save indicator + close
+            // Toolbar row: editor toolbar + save indicator + close
             Container(
               decoration: BoxDecoration(
                 color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),

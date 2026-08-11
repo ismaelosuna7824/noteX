@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../state/theme_state.dart';
 
 /// Compact font-size and line-height controls styled to blend with
-/// the Quill toolbar — flat icon buttons, same color scheme, no backgrounds.
+/// the editor toolbar — flat icon buttons, same color scheme, no backgrounds.
 ///
 /// Set [isMarkdown] to use the markdown-specific settings instead of
 /// the notes editor settings.

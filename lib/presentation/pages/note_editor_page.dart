@@ -202,7 +202,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   // ── @mention (DEFERRED) ────────────────────────────────────────────────
   //
-  // TODO(super_editor migration): reimplement @mention detection + insertion.
+  // TODO(mentions): reimplement @mention detection + insertion.
   // The former Quill implementation (an `@` back-scan listener on the
   // QuillController, a floating `MentionOverlay`, and rich insertion of a
   // `LinkAttribute('notex://<id>')` at the caret) was Quill-specific and could
@@ -212,19 +212,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   // The `MentionOverlay` widget (lib/presentation/widgets/mention_overlay.dart)
   // is intentionally kept on disk for reuse by the reimplementation.
   //
-  // Proper reimplementation plan (super_editor 0.3.0-dev.39) — see engram note
-  // 'notex/super-editor-migration/mentions-plan':
-  //   * Use super_editor's `StableTagPlugin` (userTagRule, trigger '@') added to
-  //     the SuperEditor's `plugins` set; watch `StableTagIndex.composingStableTag`
-  //     (ValueListenable<ComposingStableTag?>) for the live query token.
-  //   * On picker selection, do NOT use the stock FillInComposingStableTagRequest
-  //     (it applies CommittedStableTagAttribution, not a LinkAttribution). Instead
-  //     delete the composing `@query` range and insert display text carrying
-  //     `LinkAttribution('notex://<id>')` so the existing notex:// link routing
-  //     (_NoteLinkTapDelegate) keeps working.
-  //   * The shared NoteMarkdownEditor must expose: (a) a plugins/enable hook,
-  //     (b) an onMentionComposing(query) callback, and (c) a commitMention(noteId,
-  //     display) entry point that runs on its private editor/composer.
+  // Reimplementation is simpler than the Quill original because the editor is
+  // now a plain [TextField]: NoteMarkdownEditor holds a [TextEditingController]
+  // whose text IS the stored Markdown (there is no attributed-document layer).
+  //   * Back-scan `controller.text` from `controller.selection.baseOffset` on
+  //     change to detect a composing `@query` token, and drive MentionOverlay
+  //     from it.
+  //   * On picker selection, replace the composing `@query` range with an
+  //     ordinary Markdown link `[display](notex://<id>)`. No custom attribution
+  //     is needed — the preview renderer already produces a tappable link and
+  //     the existing notex:// routing (_openInternalNote) keeps working.
 
   /// Navigate to the note targeted by a `notex://<id>` internal link tap.
   void _openInternalNote(String noteId) {

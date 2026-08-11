@@ -1,7 +1,7 @@
 # NoteX
 
 A beautiful, cross-platform desktop notes app built with Flutter.
-Rich text editing, Markdown support, daily notes, cloud sync via Supabase, and automatic update notifications — all packaged as a native app for **Windows**, **macOS**, and **Linux**.
+Markdown editing with live preview, daily notes, cloud sync via Supabase, and automatic update notifications — all packaged as a native app for **Windows**, **macOS**, and **Linux**.
 
 ---
 
@@ -9,8 +9,8 @@ Rich text editing, Markdown support, daily notes, cloud sync via Supabase, and a
 
 | Feature | Description |
 |---|---|
-| **Rich Text Editor** | Full WYSIWYG editing powered by Flutter Quill (bold, italic, headings, lists, code blocks…) |
-| **Markdown Editor** | Toggle to a side-by-side Markdown editor with live preview |
+| **Markdown Editor** | Write in plain Markdown source — there is no WYSIWYG layer, so what you type is exactly what is stored |
+| **Live Preview & Split View** | Toggle between edit, rendered preview, and side-by-side split with `Cmd`/`Ctrl` + `E`; the chosen mode is remembered |
 | **Daily Notes** | A note is automatically created each day and opened at startup |
 | **Projects / Folders** | Organise notes into colour-coded projects; filter from the sidebar |
 | **Pinned Notes** | Pin important notes to a dedicated tab for quick access |
@@ -44,7 +44,7 @@ Dependency injection is handled by **GetIt**; all wiring lives in `lib/injection
 
 ### Prerequisites
 
-- [Flutter SDK](https://docs.flutter.dev/get-started/install) (stable channel, ≥ 3.11)
+- [Flutter SDK](https://docs.flutter.dev/get-started/install) 3.44.9 (stable) — the version CI pins in `.github/workflows/`
 - A [Supabase](https://supabase.com) project (free tier works great)
 
 ### 1 — Clone
@@ -204,8 +204,7 @@ The app uses Row-Level Security (RLS) — each user only sees their own notes.
 
 | Package | Purpose |
 |---|---|
-| `flutter_quill` | Rich text editor |
-| `flutter_markdown` | Markdown rendering |
+| `flutter_markdown_plus` + `markdown` | Markdown parsing and rendering |
 | `drift` + `sqlite3_flutter_libs` | Local SQLite persistence |
 | `supabase_flutter` | Cloud sync & authentication |
 | `get_it` | Dependency injection |
