@@ -63,3 +63,13 @@ android/keystore-base64.txt
 assets/images/*.mp4
 assets/images/*.webm
 assets/images/*.mov
+
+# Xcode SPM resolution state — regenerated on every build
+**/xcshareddata/swiftpm/
+
+# Local agent/tooling scratch — not part of the project
+.atl/
+.loopops/
+.claude/settings.json
+tool/
+assets/images/*.mov

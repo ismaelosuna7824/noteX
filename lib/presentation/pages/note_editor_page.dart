@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../application/use_cases/export_single_note_use_case.dart';
+import '../../domain/services/note_export_plan.dart';
 import '../../domain/entities/note.dart';
+import '../widgets/mention_picker_host.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/security_state.dart';
@@ -41,9 +45,22 @@ class NoteEditorPage extends StatefulWidget {
   State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
 
-class _NoteEditorPageState extends State<NoteEditorPage> {
+class _NoteEditorPageState extends State<NoteEditorPage>
+    with MentionPickerHost {
   late TextEditingController _titleController;
   String? _loadedNoteId;
+
+  // ── @mention picker ───────────────────────────────────────────────────
+  /// Identity of the mounted editor.
+  ///
+  /// Replaced on every note (re)load, which is what remounts the editor with
+  /// fresh content — the job the old `ValueKey('$id#$reloadCount')` did. It is
+  /// held as a field rather than rebuilt per frame so the picker can reach the
+  /// editor's state through the exact same key instance.
+  GlobalKey<NoteMarkdownEditorState> _editorKey = GlobalKey();
+
+  @override
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
 
   // ── Tiling state (singleton, persisted to disk) ─────────────────────
   TilingState get _tiling => GetIt.instance<TilingState>();
@@ -64,10 +81,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   /// stored content and advanced to the saved Markdown after each save so a
   /// self-triggered refresh does not look like an external edit.
   String _prevContent = '';
-
-  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
-  /// remounts with fresh content — both on note switch and external refresh.
-  int _reloadCount = 0;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -137,7 +150,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     // with the new content (note switch or external refresh).
     _latestMarkdown = note.content;
     _prevContent = note.content;
-    _reloadCount++;
+    // New key ⇒ the editor remounts with this note's content.
+    _editorKey = GlobalKey();
 
     // Register for auto-save service safety net
     widget.appState.autoSaveService.watch(
@@ -200,38 +214,48 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  // ── @mention (DEFERRED) ────────────────────────────────────────────────
-  //
-  // TODO(super_editor migration): reimplement @mention detection + insertion.
-  // The former Quill implementation (an `@` back-scan listener on the
-  // QuillController, a floating `MentionOverlay`, and rich insertion of a
-  // `LinkAttribute('notex://<id>')` at the caret) was Quill-specific and could
-  // not be ported verbatim. It has been removed here rather than left as dead
-  // code (dead private members would trip analyzer unused_element warnings).
-  //
-  // The `MentionOverlay` widget (lib/presentation/widgets/mention_overlay.dart)
-  // is intentionally kept on disk for reuse by the reimplementation.
-  //
-  // Proper reimplementation plan (super_editor 0.3.0-dev.39) — see engram note
-  // 'notex/super-editor-migration/mentions-plan':
-  //   * Use super_editor's `StableTagPlugin` (userTagRule, trigger '@') added to
-  //     the SuperEditor's `plugins` set; watch `StableTagIndex.composingStableTag`
-  //     (ValueListenable<ComposingStableTag?>) for the live query token.
-  //   * On picker selection, do NOT use the stock FillInComposingStableTagRequest
-  //     (it applies CommittedStableTagAttribution, not a LinkAttribution). Instead
-  //     delete the composing `@query` range and insert display text carrying
-  //     `LinkAttribution('notex://<id>')` so the existing notex:// link routing
-  //     (_NoteLinkTapDelegate) keeps working.
-  //   * The shared NoteMarkdownEditor must expose: (a) a plugins/enable hook,
-  //     (b) an onMentionComposing(query) callback, and (c) a commitMention(noteId,
-  //     display) entry point that runs on its private editor/composer.
+  // ── Single-note export ────────────────────────────────────────────────
+
+  /// Saves [note] as a Markdown file wherever the user chooses.
+  Future<void> _exportThisNote(BuildContext context, Note note) async {
+    // Flush first: the debounce may still be holding the last few keystrokes,
+    // and exporting a stale body would be a quiet way to lose work.
+    await _saveCurrentNote();
+
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export note as Markdown',
+      fileName: NoteExportPlan.suggestedFileName(note.title),
+      type: FileType.custom,
+      allowedExtensions: const ['md'],
+    );
+    // Null means the user dismissed the dialog — not an error.
+    if (path == null) return;
+
+    try {
+      final written =
+          await GetIt.instance<ExportSingleNoteUseCase>(param1: path)
+              .execute(note.id);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(written ? 'Exported to $path' : 'That note is gone.'),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
 
   /// Navigate to the note targeted by a `notex://<id>` internal link tap.
   void _openInternalNote(String noteId) {
     final note = widget.appState.notes.cast<Note?>().firstWhere(
-          (n) => n?.id == noteId,
-          orElse: () => null,
-        );
+      (n) => n?.id == noteId,
+      orElse: () => null,
+    );
     if (note != null) {
       widget.appState.selectNote(note);
     }
@@ -248,9 +272,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     // In tiling mode, toolbar reflects the focused note
     final note = _tiling.isActive
         ? _tiling.tiledNotes.cast<Note?>().firstWhere(
-              (n) => n!.id == _tiling.focusedNoteId,
-              orElse: () => _tiling.tiledNotes.isNotEmpty ? _tiling.tiledNotes.first : currentNote,
-            )
+            (n) => n!.id == _tiling.focusedNoteId,
+            orElse: () => _tiling.tiledNotes.isNotEmpty
+                ? _tiling.tiledNotes.first
+                : currentNote,
+          )
         : currentNote;
 
     // In tiling mode, toolbar always uses default theme colors
@@ -323,18 +349,37 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       padding: isZen
           ? const EdgeInsets.all(24)
           : isCompact
-              ? const EdgeInsets.fromLTRB(4, 0, 4, 4)
-              : const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          ? const EdgeInsets.fromLTRB(4, 0, 4, 4)
+          : const EdgeInsets.fromLTRB(16, 0, 16, 16),
       child: Column(
         children: [
           // ── Static toolbar (top) — or Exit Zen button in zen mode ───
           if (!isZen)
-            _buildEditorToolbar(note, accentColor, editorBg, chipBg, chipBorder, chipText, iconColor, isDark, isCompact, hasNoteColor),
+            _buildEditorToolbar(
+              note,
+              accentColor,
+              editorBg,
+              chipBg,
+              chipBorder,
+              chipText,
+              iconColor,
+              isDark,
+              isCompact,
+              hasNoteColor,
+            ),
 
           // Main editor area
           Expanded(
-            child: note.isLocked && !GetIt.instance<SecurityState>().isNoteUnlocked(note.id)
-                ? _buildLockedOverlay(context, editorBg, chipBorder, accentColor, note.id)
+            child:
+                note.isLocked &&
+                    !GetIt.instance<SecurityState>().isNoteUnlocked(note.id)
+                ? _buildLockedOverlay(
+                    context,
+                    editorBg,
+                    chipBorder,
+                    accentColor,
+                    note.id,
+                  )
                 : _tiling.isActive
                 ? // Tiling mode: full tiling layout replaces the editor
                   TilingLayoutWidget(
@@ -384,37 +429,59 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     // (full, or minimal in compact mode) + the editor. The
                     // font-size / line-height controls ride in the toolbar row
                     // via `trailing` (hidden in compact mode, as before).
-                    child: NoteMarkdownEditor(
-                      key: ValueKey('${note.id}#$_reloadCount'),
-                      initialContent: note.content,
-                      initialViewMode: EditorViewModeName.fromName(
-                        widget.themeState.editorViewMode,
-                      ),
-                      onViewModeChanged: (mode) =>
-                          widget.themeState.setEditorViewMode(mode.name),
-                      autofocus: true,
-                      toolbar: isCompact
-                          ? EditorToolbarProfile.minimal
-                          : EditorToolbarProfile.full,
-                      fontSize: widget.themeState.editorFontSize,
-                      lineHeight: widget.themeState.editorLineHeight,
-                      textColor: noteColor != null
-                          ? (noteColor.computeLuminance() > 0.5
-                              ? Colors.black87
-                              : Colors.white)
-                          : widget.themeState.editorTextColor,
-                      trailing: isCompact
-                          ? null
-                          : EditorTextControls(
-                              themeState: widget.themeState,
-                              noteColor: noteColor,
-                            ),
-                      onChanged: (markdown) {
-                        _latestMarkdown = markdown;
-                        _onUserEdit();
-                      },
-                      onInternalLink: _openInternalNote,
-                      onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                    //
+                    // The Stack exists only to float the @mention picker over
+                    // the editor; with no mention open it adds a single child
+                    // and the layout is unchanged.
+                    child: Stack(
+                      children: [
+                        NoteMarkdownEditor(
+                          // GlobalObjectKey, not ValueKey: it keeps the same
+                          // per-note identity that forces a rebuild on note switch
+                          // AND exposes currentState so the picker can commit a
+                          // mention back into the editor.
+                          key: _editorKey,
+                          initialContent: note.content,
+                          initialViewMode: EditorViewModeName.fromName(
+                            widget.themeState.editorViewMode,
+                          ),
+                          onViewModeChanged: (mode) =>
+                              widget.themeState.setEditorViewMode(mode.name),
+                          autofocus: true,
+                          toolbar: isCompact
+                              ? EditorToolbarProfile.minimal
+                              : EditorToolbarProfile.full,
+                          fontSize: widget.themeState.editorFontSize,
+                          lineHeight: widget.themeState.editorLineHeight,
+                          textColor: noteColor != null
+                              ? (noteColor.computeLuminance() > 0.5
+                                    ? Colors.black87
+                                    : Colors.white)
+                              : widget.themeState.editorTextColor,
+                          trailing: isCompact
+                              ? null
+                              : EditorTextControls(
+                                  themeState: widget.themeState,
+                                  noteColor: noteColor,
+                                ),
+                          onChanged: (markdown) {
+                            _latestMarkdown = markdown;
+                            _onUserEdit();
+                          },
+                          onInternalLink: _openInternalNote,
+                          onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                          onMentionQuery: onMentionQuery,
+                        ),
+                        buildMentionOverlay(
+                          notes: widget.appState.notes,
+                          currentNoteId: note.id,
+                          accentColor: accentColor,
+                          bgColor: theme.colorScheme.surface,
+                          borderColor: chipBorder,
+                          textColor: theme.colorScheme.onSurface,
+                          mutedColor: theme.colorScheme.onSurfaceVariant,
+                        ),
+                      ],
                     ),
                   ),
           ),
@@ -422,7 +489,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       ),
     );
   }
-
 
   // ── Tiling note picker ─────────────────────────────────────────────
 
@@ -439,17 +505,22 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         final chipText = isDark ? Colors.white70 : Colors.grey.shade600;
 
         return SimpleDialog(
-          title: const Text('Add note to tiling',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          title: const Text(
+            'Add note to tiling',
+            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          ),
           children: [
             // Create new note option
             ListTile(
               leading: Icon(Icons.add_rounded, color: accentColor),
-              title: Text('Create new note',
-                  style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: accentColor)),
+              title: Text(
+                'Create new note',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: accentColor,
+                ),
+              ),
               onTap: () async {
                 final newNote = await widget.appState.createNewNote();
                 if (dialogCtx.mounted) {
@@ -461,9 +532,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             if (available.isEmpty)
               Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text('No existing notes available',
-                    style: TextStyle(fontSize: 13, color: chipText),
-                    textAlign: TextAlign.center),
+                child: Text(
+                  'No existing notes available',
+                  style: TextStyle(fontSize: 13, color: chipText),
+                  textAlign: TextAlign.center,
+                ),
               )
             else
               SizedBox(
@@ -499,9 +572,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   // ── Editor toolbar (static, top) ──────────────────────────────────────
 
   Widget _buildEditorToolbar(
-    Note note, Color accentColor, Color editorBg, Color chipBg,
-    Color chipBorder, Color chipText, Color iconColor, bool isDark,
-    bool isCompact, bool hasNoteColor,
+    Note note,
+    Color accentColor,
+    Color editorBg,
+    Color chipBg,
+    Color chipBorder,
+    Color chipText,
+    Color iconColor,
+    bool isDark,
+    bool isCompact,
+    bool hasNoteColor,
   ) {
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 8),
@@ -545,7 +625,8 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                         ),
                       ),
                       contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8,
+                        horizontal: 12,
+                        vertical: 8,
                       ),
                       prefixIcon: Icon(
                         Icons.edit_note_rounded,
@@ -574,13 +655,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               const SizedBox(width: 8),
               // Color
               _buildColorButton(
-                note, accentColor, iconColor, chipBg, chipBorder,
-                size: btnSize, radius: btnRadius,
+                note,
+                accentColor,
+                iconColor,
+                chipBg,
+                chipBorder,
+                size: btnSize,
+                radius: btnRadius,
               ),
               const SizedBox(width: 4),
               // Share
               _buildToolbarBtn(
-                icon: Icons.share_outlined, tooltip: 'Share note',
+                icon: Icons.share_outlined,
+                tooltip: 'Share note',
                 onTap: () async {
                   final url = await widget.appState.shareNote(note);
                   if (url != null && context.mounted) {
@@ -592,24 +679,53 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     }
                   }
                 },
-                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
-                iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
+                iconColor: iconColor,
+                chipBg: chipBg,
+                chipBorder: chipBorder,
+              ),
+              const SizedBox(width: 4),
+              // Export this note as a Markdown file
+              _buildToolbarBtn(
+                icon: Icons.file_download_outlined,
+                tooltip: 'Export as Markdown',
+                onTap: () => _exportThisNote(context, note),
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
+                iconColor: iconColor,
+                chipBg: chipBg,
+                chipBorder: chipBorder,
               ),
               const SizedBox(width: 4),
               // Ephemeral
               _buildToolbarBtn(
-                icon: note.isEphemeral ? Icons.bolt_rounded : Icons.bolt_outlined,
-                tooltip: note.isEphemeral ? 'Quick Note (24h)' : 'Make Quick Note',
+                icon: note.isEphemeral
+                    ? Icons.bolt_rounded
+                    : Icons.bolt_outlined,
+                tooltip: note.isEphemeral
+                    ? 'Quick Note (24h)'
+                    : 'Make Quick Note',
                 onTap: () => widget.appState.toggleEphemeral(note.id),
-                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
                 iconColor: note.isEphemeral ? Colors.amber.shade600 : iconColor,
-                chipBg: note.isEphemeral ? Colors.amber.withValues(alpha: 0.15) : chipBg,
-                chipBorder: note.isEphemeral ? Colors.amber.withValues(alpha: 0.4) : chipBorder,
+                chipBg: note.isEphemeral
+                    ? Colors.amber.withValues(alpha: 0.15)
+                    : chipBg,
+                chipBorder: note.isEphemeral
+                    ? Colors.amber.withValues(alpha: 0.4)
+                    : chipBorder,
               ),
               const SizedBox(width: 4),
               // Lock
               _buildToolbarBtn(
-                icon: note.isLocked ? Icons.lock_rounded : Icons.lock_open_rounded,
+                icon: note.isLocked
+                    ? Icons.lock_rounded
+                    : Icons.lock_open_rounded,
                 tooltip: note.isLocked ? 'Unlock' : 'Lock',
                 onTap: () {
                   final sec = GetIt.instance<SecurityState>();
@@ -619,10 +735,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     widget.appState.toggleLock(note.id);
                   }
                 },
-                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
                 iconColor: note.isLocked ? Colors.red.shade400 : iconColor,
-                chipBg: note.isLocked ? Colors.red.withValues(alpha: 0.15) : chipBg,
-                chipBorder: note.isLocked ? Colors.red.withValues(alpha: 0.4) : chipBorder,
+                chipBg: note.isLocked
+                    ? Colors.red.withValues(alpha: 0.15)
+                    : chipBg,
+                chipBorder: note.isLocked
+                    ? Colors.red.withValues(alpha: 0.4)
+                    : chipBorder,
               ),
               const SizedBox(width: 4),
               // Tiling
@@ -643,30 +765,44 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     if (!mounted) return;
                     // Use the fresh note from DB
                     final freshNote = widget.appState.currentNote ?? note;
-                    setState(() => _tiling.enterTiling(initialNotes: [freshNote]));
+                    setState(
+                      () => _tiling.enterTiling(initialNotes: [freshNote]),
+                    );
                     WidgetsBinding.instance.addPostFrameCallback((_) {
                       if (mounted) _showTilingNotePicker(context, accentColor);
                     });
                   }
                 },
-                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
                 iconColor: _tiling.isActive ? accentColor : iconColor,
-                chipBg: _tiling.isActive ? accentColor.withValues(alpha: 0.15) : chipBg,
-                chipBorder: _tiling.isActive ? accentColor.withValues(alpha: 0.4) : chipBorder,
+                chipBg: _tiling.isActive
+                    ? accentColor.withValues(alpha: 0.15)
+                    : chipBg,
+                chipBorder: _tiling.isActive
+                    ? accentColor.withValues(alpha: 0.4)
+                    : chipBorder,
               ),
               if (_tiling.isActive && _tiling.canAddTile) ...[
                 const SizedBox(width: 4),
                 _buildToolbarBtn(
-                  icon: Icons.add_rounded, tooltip: 'Add note',
+                  icon: Icons.add_rounded,
+                  tooltip: 'Add note',
                   onTap: () => _showTilingNotePicker(context, accentColor),
-                  size: btnSize, radius: btnRadius, iconSize: btnIconSize,
-                  iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                  size: btnSize,
+                  radius: btnRadius,
+                  iconSize: btnIconSize,
+                  iconColor: iconColor,
+                  chipBg: chipBg,
+                  chipBorder: chipBorder,
                 ),
               ],
               if (_tiling.isActive) ...[
                 const SizedBox(width: 4),
                 _buildToolbarBtn(
-                  icon: Icons.close_fullscreen_rounded, tooltip: 'Exit Tiling',
+                  icon: Icons.close_fullscreen_rounded,
+                  tooltip: 'Exit Tiling',
                   onTap: () async {
                     // Flush all panel edits BEFORE destroying them
                     await _tiling.flushAll();
@@ -679,29 +815,44 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                       setState(() {});
                     }
                   },
-                  size: btnSize, radius: btnRadius, iconSize: btnIconSize,
-                  iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                  size: btnSize,
+                  radius: btnRadius,
+                  iconSize: btnIconSize,
+                  iconColor: iconColor,
+                  chipBg: chipBg,
+                  chipBorder: chipBorder,
                 ),
               ],
               const SizedBox(width: 4),
               // Zen
               _buildToolbarBtn(
-                icon: Icons.spa_outlined, tooltip: 'Focus Mode',
+                icon: Icons.spa_outlined,
+                tooltip: 'Focus Mode',
                 onTap: () => widget.appState.enterZenMode(),
-                size: btnSize, radius: btnRadius, iconSize: btnIconSize,
-                iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
+                iconColor: iconColor,
+                chipBg: chipBg,
+                chipBorder: chipBorder,
               ),
               // Compact (disabled in tiling mode)
               if (!_tiling.isActive) ...[
                 const SizedBox(width: 4),
                 _buildToolbarBtn(
-                  icon: isCompact ? Icons.fullscreen_rounded : Icons.picture_in_picture_alt_outlined,
+                  icon: isCompact
+                      ? Icons.fullscreen_rounded
+                      : Icons.picture_in_picture_alt_outlined,
                   tooltip: isCompact ? 'Full size' : 'Compact',
                   onTap: () => isCompact
                       ? widget.appState.exitCompactMode()
                       : widget.appState.enterCompactMode(note),
-                  size: btnSize, radius: btnRadius, iconSize: btnIconSize,
-                  iconColor: iconColor, chipBg: chipBg, chipBorder: chipBorder,
+                  size: btnSize,
+                  radius: btnRadius,
+                  iconSize: btnIconSize,
+                  iconColor: iconColor,
+                  chipBg: chipBg,
+                  chipBorder: chipBorder,
                 ),
               ],
               // Save indicator
@@ -711,11 +862,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   if (status != 'saved') return const SizedBox.shrink();
                   return Padding(
                     padding: const EdgeInsets.only(left: 6),
-                    child: Icon(Icons.check_circle_outline_rounded,
-                        size: 14,
-                        color: isDark
-                            ? Colors.green.shade300
-                            : Colors.green.shade600),
+                    child: Icon(
+                      Icons.check_circle_outline_rounded,
+                      size: 14,
+                      color: isDark
+                          ? Colors.green.shade300
+                          : Colors.green.shade600,
+                    ),
                   );
                 },
               ),
@@ -789,16 +942,16 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
             const SizedBox(height: 16),
             Text(
               'This note is locked',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 8),
             Text(
               'Enter your PIN to view this note',
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade500,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodySmall?.copyWith(color: Colors.grey.shade500),
             ),
             const SizedBox(height: 24),
             SizedBox(
@@ -828,16 +981,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               builder: (_, error, __) => error != null
                   ? Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text(error,
-                          style: const TextStyle(
-                              color: Colors.red, fontSize: 12)),
+                      child: Text(
+                        error,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
                     )
                   : const SizedBox.shrink(),
             ),
             const SizedBox(height: 16),
             ElevatedButton(
               onPressed: () {
-                if (securityState.verifyAndUnlock(noteId, _lockPinController.text)) {
+                if (securityState.verifyAndUnlock(
+                  noteId,
+                  _lockPinController.text,
+                )) {
                   setState(() {});
                 } else {
                   _lockErrorNotifier.value = 'Incorrect PIN';
@@ -909,8 +1066,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                   ),
                 ),
               )
-            : Icon(Icons.palette_outlined,
-                size: size * 0.41, color: iconColor),
+            : Icon(Icons.palette_outlined, size: size * 0.41, color: iconColor),
       ),
     );
   }
@@ -1227,7 +1383,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Set a PIN to lock notes. You\'ll need this PIN to view locked notes.'),
+            const Text(
+              'Set a PIN to lock notes. You\'ll need this PIN to view locked notes.',
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: pinController,
@@ -1253,9 +1411,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
               builder: (_, error, __) => error != null
                   ? Padding(
                       padding: const EdgeInsets.only(top: 8),
-                      child: Text(error,
-                          style: const TextStyle(
-                              color: Colors.red, fontSize: 12)),
+                      child: Text(
+                        error,
+                        style: const TextStyle(color: Colors.red, fontSize: 12),
+                      ),
                     )
                   : const SizedBox.shrink(),
             ),
@@ -1289,4 +1448,3 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     );
   }
 }
-

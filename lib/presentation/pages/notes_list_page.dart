@@ -13,6 +13,7 @@ import '../utils/platform_utils.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_grid_card.dart';
+import '../widgets/mention_picker_host.dart';
 import '../widgets/note_markdown_editor.dart';
 
 /// Notes list view with inline edit panel.
@@ -32,7 +33,16 @@ class NotesListPage extends StatefulWidget {
   State<NotesListPage> createState() => _NotesListPageState();
 }
 
-class _NotesListPageState extends State<NotesListPage> {
+class _NotesListPageState extends State<NotesListPage>
+    with MentionPickerHost {
+  /// Identity of the inline preview editor. Replaced on every note (re)load,
+  /// which is what remounts it with fresh content, and held as a field so the
+  /// @mention picker can reach its state through the same key instance.
+  GlobalKey<NoteMarkdownEditorState> _editorKey = GlobalKey();
+
+  @override
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
+
   late TextEditingController _titleController;
   String? _loadedNoteId;
 
@@ -41,10 +51,6 @@ class _NotesListPageState extends State<NotesListPage> {
   /// every real edit; this snapshot is what gets persisted.
   String _latestMarkdown = '';
 
-  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
-  /// rebuilds with fresh content — both when switching notes and when the same
-  /// note's content is refreshed externally.
-  int _reloadCount = 0;
 
   // ── Auto-save state ──────────────────────────────────────────────────
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
@@ -108,10 +114,10 @@ class _NotesListPageState extends State<NotesListPage> {
 
     // The editor converts raw stored content (Delta or Markdown) for display;
     // seed the latest-Markdown snapshot with the raw content until the first
-    // real edit replaces it. Bump the reload token so the editor remounts with
-    // the new content (note switch or external refresh).
+    // real edit replaces it. A new key remounts the editor with the new content
+    // (note switch or external refresh).
     _latestMarkdown = note.content;
-    _reloadCount++;
+    _editorKey = GlobalKey();
 
     // Register with auto-save service. The lazy content getter returns the
     // latest Markdown emitted by the editor.
@@ -1474,10 +1480,13 @@ class _NotesListPageState extends State<NotesListPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: NoteMarkdownEditor(
-                // Key includes the reload token so the editor remounts with
-                // fresh content on note switch AND on external content refresh.
-                key: ValueKey('${note.id}#$_reloadCount'),
+              child: Stack(
+                children: [
+                  NoteMarkdownEditor(
+                // A fresh key on each load remounts the editor with new
+                // content, on note switch and on external refresh alike, and
+                // lets the @mention picker reach its state to commit a link.
+                key: _editorKey,
                 initialContent: note.content,
                 initiallyPreview: true,
                 toolbar: EditorToolbarProfile.none,
@@ -1500,6 +1509,18 @@ class _NotesListPageState extends State<NotesListPage> {
                   }
                 },
                 onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                onMentionQuery: onMentionQuery,
+                  ),
+                  buildMentionOverlay(
+                    notes: widget.appState.notes,
+                    currentNoteId: note.id,
+                    accentColor: widget.themeState.accentColor,
+                    bgColor: theme.colorScheme.surface,
+                    borderColor: theme.dividerColor.withValues(alpha: 0.2),
+                    textColor: theme.colorScheme.onSurface,
+                    mutedColor: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
               ),
             ),
           ),

@@ -4,8 +4,12 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
 import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
+import '../../domain/entities/note.dart';
+import '../../domain/services/note_link_parser.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/markdown_state.dart';
@@ -63,6 +67,46 @@ class _MarkdownPageState extends State<MarkdownPage> {
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
   Timer? _debounce;
   Timer? _hideTimer;
+
+  // ── Link handling ──────────────────────────────────────────────────
+
+  /// Index of the note editor page in the app shell, for `notex://` links.
+  static const _noteEditorPageIndex = 2;
+
+  /// Opens whatever a tapped link points at.
+  ///
+  /// Until now this was an empty callback, so every link in a Markdown file —
+  /// internal or external — silently did nothing when clicked.
+  void _handleTapLink(String text, String? href, String title) {
+    if (href == null || href.isEmpty) return;
+
+    // Resolved through NoteLinkParser, the same function the note editor and
+    // the link index use, so a `notex://` href means the same note everywhere.
+    final noteId = NoteLinkParser.noteIdFromHref(href);
+    if (noteId != null) {
+      _openLinkedNote(noteId);
+      return;
+    }
+
+    final uri = Uri.tryParse(href);
+    if (uri != null) launchUrl(uri);
+  }
+
+  /// Navigates to the note a `notex://<id>` link points at.
+  ///
+  /// Unlike the note surfaces, this page is not the notes page, so selecting
+  /// the note is not enough — it also has to switch pages. A link to a note
+  /// that no longer exists is ignored rather than navigating nowhere.
+  Future<void> _openLinkedNote(String noteId) async {
+    final note = widget.appState.notes.cast<Note?>().firstWhere(
+          (n) => n?.id == noteId,
+          orElse: () => null,
+        );
+    if (note == null) return;
+
+    await widget.appState.selectNote(note);
+    await widget.appState.navigateToPage(_noteEditorPageIndex);
+  }
 
   @override
   void initState() {
@@ -1124,7 +1168,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
               // the custom code-block widgets are selectable together.
               selectable: false,
               softLineBreak: true,
-              onTapLink: (text, href, title) {},
+              onTapLink: _handleTapLink,
               builders: {
                 'pre': CodeBlockBuilder(
                   textStyle: codeStyles.textStyle,

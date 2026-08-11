@@ -233,7 +233,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 17;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -373,6 +373,15 @@ class AppDatabase extends _$AppDatabase {
         } catch (e) {
           if (!e.toString().contains('already exists')) rethrow;
         }
+      }
+      // v16 created a `note_links` table for a backlinks feature that was
+      // dropped before release. There is deliberately no v16 step: v17 removes
+      // the table, so upgrading from v15 simply never creates it, and anyone
+      // who already ran v16 has it dropped below.
+      if (from < 17) {
+        // Derived data only — nothing here was ever authoritative, so the drop
+        // loses nothing that note bodies do not already contain.
+        await customStatement('DROP TABLE IF EXISTS note_links');
       }
     },
   );

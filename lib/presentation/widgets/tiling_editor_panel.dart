@@ -7,11 +7,12 @@ import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/tiling_state.dart';
+import 'mention_picker_host.dart';
 import 'note_markdown_editor.dart';
 
 /// A self-contained editor panel for one note inside the tiling layout.
 ///
-/// Each panel manages its own [QuillController], auto-save polling, and
+/// Each panel manages its own [NoteMarkdownEditor], auto-save polling, and
 /// title editing — identical to the former `_SplitEditorPanel`.
 class TilingEditorPanel extends StatefulWidget {
   final Note note;
@@ -35,7 +36,15 @@ class TilingEditorPanel extends StatefulWidget {
   State<TilingEditorPanel> createState() => _TilingEditorPanelState();
 }
 
-class _TilingEditorPanelState extends State<TilingEditorPanel> {
+class _TilingEditorPanelState extends State<TilingEditorPanel>
+    with MentionPickerHost {
+  /// Identity of this panel's editor. Held as a field so this tile's picker
+  /// commits here and never into a sibling tile.
+  GlobalKey<NoteMarkdownEditorState> _editorKey = GlobalKey();
+
+  @override
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
+
   TextEditingController? _titleController;
   String? _loadedNoteId;
   Timer? _debounce;
@@ -48,10 +57,6 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
   /// every real edit; this snapshot is what gets persisted.
   String _latestMarkdown = '';
 
-  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
-  /// rebuilds with fresh content — both when switching notes and when the same
-  /// note's content is refreshed externally.
-  int _reloadCount = 0;
 
   @override
   void initState() {
@@ -104,7 +109,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
     // real edit replaces it. Bump the reload token so the editor remounts with
     // the new content (note switch or external refresh).
     _latestMarkdown = note.content;
-    _reloadCount++;
+    _editorKey = GlobalKey();
 
     _isDirty = false;
 
@@ -148,7 +153,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
 
   void _claimFocus() {
     if (widget.tiling.focusedNoteId != widget.note.id) {
-      // Defer so we don't interfere with QuillEditor's pointer handling
+      // Defer so we don't interfere with the editor's pointer handling
       WidgetsBinding.instance.addPostFrameCallback((_) {
         widget.tiling.focusedNoteId = widget.note.id;
       });
@@ -202,7 +207,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
           ),
       child: Column(
           children: [
-            // Toolbar row: quill toolbar + save indicator + close
+            // Toolbar row: editor toolbar + save indicator + close
             Container(
               decoration: BoxDecoration(
                 color: editorBg.withValues(alpha: isDark ? 0.90 : 0.92),
@@ -260,17 +265,35 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(6),
-                child: NoteMarkdownEditor(
-                  key: ValueKey('${widget.note.id}#$_reloadCount'),
-                  initialContent: widget.note.content,
-                  toolbar: EditorToolbarProfile.minimal,
-                  fontSize: widget.themeState.editorFontSize,
-                  lineHeight: widget.themeState.editorLineHeight,
-                  textColor: textColor,
-                  onChanged: (markdown) {
-                    _latestMarkdown = markdown;
-                    _onEdit();
-                  },
+                child: Stack(
+                  children: [
+                    NoteMarkdownEditor(
+                      // A fresh key on each load remounts this tile's editor
+                      // and lets its own @mention picker commit here.
+                      key: _editorKey,
+                      initialContent: widget.note.content,
+                      toolbar: EditorToolbarProfile.minimal,
+                      fontSize: widget.themeState.editorFontSize,
+                      lineHeight: widget.themeState.editorLineHeight,
+                      textColor: textColor,
+                      onChanged: (markdown) {
+                        _latestMarkdown = markdown;
+                        _onEdit();
+                      },
+                      onMentionQuery: onMentionQuery,
+                    ),
+                    buildMentionOverlay(
+                      notes: widget.appState.notes,
+                      currentNoteId: widget.note.id,
+                      accentColor: widget.accentColor,
+                      bgColor: Theme.of(context).colorScheme.surface,
+                      borderColor: Theme.of(
+                        context,
+                      ).dividerColor.withValues(alpha: 0.2),
+                      textColor: Theme.of(context).colorScheme.onSurface,
+                      mutedColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ],
                 ),
               ),
             ),
