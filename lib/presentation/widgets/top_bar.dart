@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../state/app_state.dart';
+import '../state/markdown_state.dart';
 import '../state/theme_state.dart';
-import '../../domain/entities/note.dart';
+import '../../domain/services/unified_search.dart';
 
 /// Top navigation bar with search (floating dropdown), notifications, and user greeting.
 ///
@@ -35,7 +37,11 @@ class _TopBarState extends State<TopBar>
   final LayerLink _bellLayerLink = LayerLink();
   OverlayEntry? _overlayEntry;
   OverlayEntry? _updateOverlayEntry;
-  List<Note> _searchResults = [];
+  List<SearchHit> _searchResults = [];
+
+  /// Page indices the app shell uses, for opening a result where it lives.
+  static const _noteEditorPageIndex = 2;
+  static const _markdownPageIndex = 5;
 
   late final AnimationController _searchAnimController;
   late final CurvedAnimation _searchCurved;
@@ -72,8 +78,39 @@ class _TopBarState extends State<TopBar>
       return;
     }
 
-    _searchResults = widget.appState.filteredNotes;
+    // Deliberately reads appState.notes, NOT filteredNotes: that getter also
+    // applies the selected folder, which would silently scope a search that
+    // presents itself as global.
+    _searchResults = UnifiedSearch.run(
+      query: query,
+      notes: widget.appState.notes,
+      files: GetIt.instance<MarkdownState>().files,
+    );
     _showOverlay();
+  }
+
+  /// Opens a result in whichever library it belongs to.
+  Future<void> _openHit(SearchHit hit) async {
+    _searchController.clear();
+    widget.appState.search('');
+    _hideOverlay();
+    _searchFocusNode.unfocus();
+
+    switch (hit.source) {
+      case SearchSource.note:
+        final note =
+            widget.appState.notes.where((n) => n.id == hit.id).firstOrNull;
+        if (note == null) return;
+        await widget.appState.selectNote(note);
+        await widget.appState.navigateToPage(_noteEditorPageIndex);
+
+      case SearchSource.markdownFile:
+        final mdState = GetIt.instance<MarkdownState>();
+        final file = mdState.files.where((f) => f.id == hit.id).firstOrNull;
+        if (file == null) return;
+        mdState.selectFile(file);
+        await widget.appState.navigateToPage(_markdownPageIndex);
+    }
   }
 
   void _showOverlay() {
@@ -150,15 +187,10 @@ class _TopBarState extends State<TopBar>
                           color: isDark ? Colors.white10 : Colors.grey.shade100,
                         ),
                         itemBuilder: (context, index) {
-                          final note = _searchResults[index];
+                          final hit = _searchResults[index];
+                          final isNote = hit.source == SearchSource.note;
                           return InkWell(
-                            onTap: () {
-                              widget.appState.selectNote(note);
-                              _searchController.clear();
-                              widget.appState.search('');
-                              _hideOverlay();
-                              _searchFocusNode.unfocus();
-                            },
+                            onTap: () => _openHit(hit),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 16,
@@ -167,7 +199,9 @@ class _TopBarState extends State<TopBar>
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.note_alt_outlined,
+                                    isNote
+                                        ? Icons.note_alt_outlined
+                                        : Icons.description_outlined,
                                     size: 18,
                                     color: Colors.grey.shade400,
                                   ),
@@ -177,18 +211,50 @@ class _TopBarState extends State<TopBar>
                                       crossAxisAlignment:
                                           CrossAxisAlignment.start,
                                       children: [
-                                        Text(
-                                          note.title.isEmpty
-                                              ? 'Untitled'
-                                              : note.title,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                            fontSize: 14,
-                                            color: isDark ? Colors.white : Colors.black87,
-                                          ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                hit.title,
+                                                style: TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                  fontSize: 14,
+                                                  color: isDark
+                                                      ? Colors.white
+                                                      : Colors.black87,
+                                                ),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            // Says which library this came
+                                            // from, so two same-named items
+                                            // are never ambiguous.
+                                            Text(
+                                              isNote ? 'Note' : 'Markdown',
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.grey.shade400,
+                                              ),
+                                            ),
+                                          ],
                                         ),
+                                        if (hit.snippet.isNotEmpty) ...[
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            hit.snippet,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: isDark
+                                                  ? Colors.white54
+                                                  : Colors.grey.shade500,
+                                            ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ],
                                       ],
                                     ),
                                   ),
