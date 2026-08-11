@@ -211,6 +211,29 @@ class SyncMetadataEntries extends Table {
   String get tableName => 'sync_metadata';
 }
 
+/// Derived index of `notex://` links between notes.
+///
+/// Deliberately carries NONE of the sync columns every other table here has —
+/// no `userId`, no `version`, no `syncStatus`, no `deletedAt`. Rows are
+/// reproducible by re-parsing note bodies, so replicating them would sync
+/// derivable state and manufacture conflicts between devices that already
+/// agree on the content. The table is local, disposable, and rebuilt on demand.
+@DataClassName('NoteLinkRow')
+@TableIndex(name: 'idx_note_links_target', columns: {#targetNoteId})
+class NoteLinks extends Table {
+  TextColumn get sourceNoteId => text()();
+  TextColumn get targetNoteId => text()();
+  TextColumn get displayText => text().withDefault(const Constant(''))();
+
+  /// One edge per (source, target) pair — a note referencing another five
+  /// times is still a single edge in the graph.
+  @override
+  Set<Column> get primaryKey => {sourceNoteId, targetNoteId};
+
+  @override
+  String get tableName => 'note_links';
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Database
 // ─────────────────────────────────────────────────────────────────────────────
@@ -225,6 +248,7 @@ class SyncMetadataEntries extends Table {
   NoteProjectEntries,
   ReminderEntries,
   AppMetadataEntries,
+  NoteLinks,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openConnection());
@@ -233,7 +257,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 15;
+  int get schemaVersion => 16;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -370,6 +394,17 @@ class AppDatabase extends _$AppDatabase {
         // Key/value store for app-level flags (e.g. one-time migration markers).
         try {
           await m.createTable(appMetadataEntries);
+        } catch (e) {
+          if (!e.toString().contains('already exists')) rethrow;
+        }
+      }
+      if (from < 16) {
+        // Derived note-to-note link index. Created empty on purpose: it is
+        // populated by re-parsing note bodies, so there is nothing to backfill
+        // here and a failed rebuild costs nothing but a re-parse.
+        try {
+          await m.createTable(noteLinks);
+          await m.createIndex(idxNoteLinksTarget);
         } catch (e) {
           if (!e.toString().contains('already exists')) rethrow;
         }
