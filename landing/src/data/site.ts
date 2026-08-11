@@ -76,6 +76,36 @@ export const downloads: Download[] = [
   },
 ];
 
+/*
+  What the operating system says the first time you open an unsigned build.
+
+  Signing certificates are a paid subscription on both platforms — Apple's
+  Developer Program and a Windows code-signing certificate — so the releases
+  are built unsigned. That is a real cost to the person downloading, and the
+  honest thing is to say so before they meet a dialog whose most prominent
+  button is "Move to Trash".
+*/
+export const firstRun = [
+  {
+    platform: 'macOS',
+    warning: '"Apple could not verify NoteX.app is free of malware."',
+    steps: [
+      'Open System Settings → Privacy & Security.',
+      'Scroll to the Security section — it will name NoteX as blocked.',
+      'Click Open Anyway, then confirm.',
+    ],
+    // Worth stating outright: every guide still says to do this, and it has
+    // not worked since macOS 15.
+    note: 'On macOS 15 and later, right-clicking the app and choosing Open no longer works — Apple removed that route. The Privacy & Security panel is the way.',
+  },
+  {
+    platform: 'Windows',
+    warning: '"Windows protected your PC."',
+    steps: ['Click More info.', 'Click Run anyway.'],
+    note: null,
+  },
+] as const;
+
 export type Feature = {
   title: string;
   body: string;
@@ -154,6 +184,10 @@ export const faqs = [
   {
     q: 'Can I get my notes out?',
     a: 'Any time. Export the whole library to a folder of Markdown files, keeping your folder structure, or save a single note wherever you like. Notes are stored as Markdown already, so nothing is converted on the way out.',
+  },
+  {
+    q: 'Why does my Mac say NoteX cannot be verified?',
+    a: 'Because the build is not signed with a paid developer certificate, so macOS cannot check a receipt for it — it is not a finding about the code. To open it: System Settings → Privacy & Security → scroll to Security → Open Anyway. Note that on macOS 15 and later, right-clicking the app and choosing Open no longer works; Apple removed that route. Windows shows a comparable "Windows protected your PC" notice, where More info → Run anyway gets past it. The full source is public if you would rather read it or build it yourself.',
   },
   {
     q: 'Which platforms does it run on?',

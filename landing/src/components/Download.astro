@@ -1,5 +1,5 @@
 ---
-import { site, downloads } from '../data/site';
+import { site, downloads, firstRun } from '../data/site';
 
 /*
   Links point at the /latest/download/ path rather than a pinned tag, so a new
@@ -55,6 +55,56 @@ const icons: Record<string, string> = {
         ))
       }
     </ul>
+
+    {/*
+      A <details> rather than a banner: someone who has not hit the dialog yet
+      should not be met with a wall of troubleshooting, and someone who has
+      needs it on this page, not in a support thread. Closed by default, works
+      with no JavaScript, and the summary says enough to be found by search.
+    */}
+    <details class="group mt-10 rounded-2xl border border-white/10 bg-white/[0.02]">
+      <summary
+        class="flex cursor-pointer list-none items-center gap-3 px-6 py-5 text-sm font-medium text-white/70 transition duration-200 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-400"
+      >
+        <svg
+          class="h-4 w-4 shrink-0 text-clay-400 transition duration-200 group-open:rotate-90"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden="true"
+        >
+          <path d="M7.5 4.5 13 10l-5.5 5.5V4.5Z" />
+        </svg>
+        Your Mac or PC warns you the first time you open it — here is why
+      </summary>
+
+      <div class="px-6 pb-6 text-sm leading-relaxed text-white/55">
+        <p>
+          The releases are not signed with a developer certificate. Both Apple and Microsoft charge
+          a yearly subscription for one, and NoteX is free, so the builds go out unsigned and the
+          operating system says it cannot vouch for them. It is a statement about a receipt, not
+          about the code — which you can read, and build yourself, in full.
+        </p>
+
+        <dl class="mt-6 grid gap-6 sm:grid-cols-2">
+          {
+            firstRun.map((platform) => (
+              <div>
+                <dt class="font-semibold text-white/80">{platform.platform}</dt>
+                <dd class="mt-1">
+                  <p class="text-white/45">It says {platform.warning}</p>
+                  <ol class="mt-3 list-decimal space-y-1 pl-5 marker:text-white/30">
+                    {platform.steps.map((step) => (
+                      <li>{step}</li>
+                    ))}
+                  </ol>
+                  {platform.note && <p class="mt-3 text-white/40">{platform.note}</p>}
+                </dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+    </details>
 
     <p class="mt-10 text-sm text-white/45">
       Version {site.version} · MIT licensed ·
