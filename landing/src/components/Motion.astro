@@ -15,7 +15,26 @@
     // state. Set before first paint so nothing flashes in and back out.
     document.documentElement.classList.add('js-motion');
 
+    const revealAll = () => {
+      document
+        .querySelectorAll('[data-reveal], [data-reveal-stagger]')
+        .forEach((el) => el.classList.add('is-visible'));
+    };
+
+    // The class above hides the page the instant it is set, and only `start`
+    // below brings it back. Everything between those two moments is a blank
+    // dark page — normally imperceptible, but on a slow connection, or if
+    // anything throws before the observer is wired up, it is the whole visit.
+    //
+    // So: nothing may keep content hidden for longer than this. A decorative
+    // animation is never a good enough reason for a reader to see nothing.
+    let started = false;
+    setTimeout(() => {
+      if (!started) revealAll();
+    }, 2000);
+
     const start = () => {
+      started = true;
       const stillness = window.matchMedia('(prefers-reduced-motion: reduce)');
 
       const targets = document.querySelectorAll('[data-reveal], [data-reveal-stagger]');
@@ -52,10 +71,20 @@
       targets.forEach((el) => observer.observe(el));
     };
 
+    // Same reasoning as the timeout: if wiring up the animation fails, the
+    // page still has to be readable. The animation is the expendable half.
+    const guarded = () => {
+      try {
+        start();
+      } catch {
+        revealAll();
+      }
+    };
+
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', start, { once: true });
+      document.addEventListener('DOMContentLoaded', guarded, { once: true });
     } else {
-      start();
+      guarded();
     }
   })();
 </script>
