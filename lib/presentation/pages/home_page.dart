@@ -2376,12 +2376,17 @@ class _HeroNowEditing extends StatelessWidget {
     final title = note.title.isNotEmpty ? note.title : 'Untitled';
     final timeAgo = _formatTimeAgoStatic(note.updatedAt);
 
-    final titleColor = heroColor.withValues(alpha: 0.90);
-    final subtitleColor = heroColor.withValues(alpha: 0.60);
+    // This card floats over the wallpaper, so everything about it follows the
+    // wallpaper — never Theme.brightness, which describes the app's light/dark
+    // mode and says nothing about the photo behind this pixel. heroColor is
+    // already chosen by WCAG contrast against that background, so its
+    // luminance is the one honest answer to "is it dark back there".
+    final onDarkBackdrop = heroColor.computeLuminance() > 0.5;
 
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final primaryText = isDark ? Colors.white : Colors.black87;
-    final secondaryText = isDark ? Colors.white54 : Colors.grey.shade500;
+    final titleColor = heroColor.withValues(alpha: 0.95);
+    // Held well above the old 0.60: this line is small, and a timestamp that
+    // dissolves into a bright patch of wallpaper may as well not be drawn.
+    final subtitleColor = heroColor.withValues(alpha: 0.78);
 
     return _PressButton(
       onTap: onTap,
@@ -2392,14 +2397,16 @@ class _HeroNowEditing extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: isDark
-                  ? Colors.black.withValues(alpha: 0.30)
-                  : Colors.white.withValues(alpha: 0.45),
+              // Tinted against the text, and more opaque than before so the
+              // panel is a surface rather than a suggestion.
+              color: onDarkBackdrop
+                  ? Colors.black.withValues(alpha: 0.38)
+                  : Colors.white.withValues(alpha: 0.58),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.08)
-                    : Colors.white.withValues(alpha: 0.4),
+                color: onDarkBackdrop
+                    ? Colors.white.withValues(alpha: 0.14)
+                    : Colors.black.withValues(alpha: 0.08),
                 width: 0.5,
               ),
             ),
@@ -2424,15 +2431,21 @@ class _HeroNowEditing extends StatelessWidget {
                     Text(
                       title,
                       style: theme.textTheme.bodyMedium?.copyWith(
-                        color: primaryText,
+                        color: titleColor,
                         fontWeight: FontWeight.w700,
+                        // The same shadows the hero title uses. They were
+                        // already being passed in and simply never applied,
+                        // which is what left this text at the mercy of
+                        // whatever happened to be behind it.
+                        shadows: shadows,
                       ),
                     ),
                     Text(
                       timeAgo,
                       style: theme.textTheme.bodySmall?.copyWith(
-                        color: secondaryText,
+                        color: subtitleColor,
                         fontSize: 11,
+                        shadows: shadows,
                       ),
                     ),
                   ],
