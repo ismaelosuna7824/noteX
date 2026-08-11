@@ -176,6 +176,67 @@ flowchart TD
       expect(_renders(tester, 'void main()'), isTrue);
     });
 
+    testWidgets('the inline diagram never captures a drag', (tester) async {
+      // A pannable canvas inline would eat the drag meant to scroll the note,
+      // leaving a dead zone in the middle of the reader's own document. Zoom
+      // lives in the viewer precisely so this stays true.
+      await _pump(tester, '''
+```mermaid
+flowchart TD
+    A[Start] --> B[End]
+```
+''');
+
+      expect(
+        find.descendant(
+          of: find.byType(MermaidBlock),
+          matching: find.byType(InteractiveViewer),
+        ),
+        findsNothing,
+      );
+    });
+
+    testWidgets('the expand button opens a zoomable viewer', (tester) async {
+      await _pump(tester, '''
+```mermaid
+flowchart TD
+    A[Start] --> B[End]
+```
+''');
+
+      await tester.tap(find.byIcon(Icons.open_in_full_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(MermaidViewer), findsOneWidget);
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+      // Opens at 1:1, and says so.
+      expect(_renders(tester, '100%'), isTrue);
+    });
+
+    testWidgets('zooming in reports the new scale and enables reset',
+        (tester) async {
+      await _pump(tester, '''
+```mermaid
+flowchart TD
+    A[Start] --> B[End]
+```
+''');
+      await tester.tap(find.byIcon(Icons.open_in_full_rounded));
+      await tester.pumpAndSettle();
+
+      expect(_renders(tester, '100%'), isTrue);
+
+      await tester.tap(find.byIcon(Icons.add_rounded));
+      await tester.pumpAndSettle();
+
+      expect(_renders(tester, '130%'), isTrue);
+
+      await tester.tap(find.byIcon(Icons.fit_screen_rounded));
+      await tester.pumpAndSettle();
+
+      expect(_renders(tester, '100%'), isTrue);
+    });
+
     testWidgets('unparseable mermaid falls back to showing the source',
         (tester) async {
       // Someone typing a diagram is, for most keystrokes, holding something

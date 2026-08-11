@@ -189,6 +189,7 @@ class MermaidBlock extends StatefulWidget {
 
 class _MermaidBlockState extends State<MermaidBlock> {
   String? _error;
+  bool _hovering = false;
 
   @override
   void didUpdateWidget(covariant MermaidBlock old) {
@@ -202,23 +203,59 @@ class _MermaidBlockState extends State<MermaidBlock> {
   Widget build(BuildContext context) {
     if (_error != null) return _fallback();
 
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: widget.decoration,
-      child: DmMermaidView(
-        source: widget.source,
-        options: MermaidRenderOptions(
-          theme: widget.isDark ? MermaidTheme.dark : MermaidTheme.light,
+    final diagram = DmMermaidView(
+      source: widget.source,
+      options: MermaidRenderOptions(
+        theme: widget.isDark ? MermaidTheme.dark : MermaidTheme.light,
+      ),
+      // setState during layout would loop; defer to after the frame.
+      onError: (error) {
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _error = error.toString());
+        });
+      },
+    );
+
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(vertical: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: widget.decoration,
+        child: Stack(
+          children: [
+            // The diagram itself takes no gestures. It sits inside a scrolling
+            // note, and a pannable canvas here would swallow the drag that was
+            // meant to scroll the page — the reader would hit a dead zone in
+            // the middle of their own document. Zooming happens in the viewer.
+            diagram,
+            Positioned(
+              top: 0,
+              right: 0,
+              child: _ExpandButton(
+                color: widget.codeStyle.color ?? Colors.grey,
+                prominent: _hovering,
+                onPressed: _openViewer,
+              ),
+            ),
+          ],
         ),
-        // setState during layout would loop; defer to after the frame.
-        onError: (error) {
-          if (!mounted) return;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) setState(() => _error = error.toString());
-          });
-        },
+      ),
+    );
+  }
+
+  void _openViewer() {
+    showDialog<void>(
+      context: context,
+      // Barrier over a full-screen surface: the diagram is the task now, and
+      // the note behind it stays visible enough to keep your place.
+      barrierColor: Colors.black.withValues(alpha: 0.72),
+      builder: (_) => MermaidViewer(
+        source: widget.source,
+        isDark: widget.isDark,
       ),
     );
   }
@@ -264,4 +301,211 @@ bool isMermaidFence(md.Element element) {
   final first = element.children?.firstOrNull;
   if (first is! md.Element) return false;
   return first.attributes['class']?.split('-').last.toLowerCase() == 'mermaid';
+}
+
+/// The corner affordance that opens the viewer.
+///
+/// Faint at rest and brighter on hover, rather than hidden until hover: a
+/// control nobody can see is a control nobody uses, and this is the only way
+/// to read a diagram that got scaled down to fit.
+class _ExpandButton extends StatelessWidget {
+  const _ExpandButton({
+    required this.color,
+    required this.prominent,
+    required this.onPressed,
+  });
+
+  final Color color;
+  final bool prominent;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedOpacity(
+      opacity: prominent ? 1 : 0.35,
+      duration: const Duration(milliseconds: 150),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: const Icon(Icons.open_in_full_rounded, size: 15),
+        color: color,
+        visualDensity: VisualDensity.compact,
+        tooltip: 'Zoom diagram',
+      ),
+    );
+  }
+}
+
+/// A diagram on its own, where panning and zooming cost nothing.
+///
+/// This exists because the inline block deliberately takes no gestures: it
+/// lives inside a scrolling note, and a pannable canvas there would eat the
+/// drag meant to scroll the page. Here there is no page to scroll, so the
+/// canvas can have every gesture it wants.
+class MermaidViewer extends StatefulWidget {
+  const MermaidViewer({super.key, required this.source, required this.isDark});
+
+  final String source;
+  final bool isDark;
+
+  @override
+  State<MermaidViewer> createState() => _MermaidViewerState();
+}
+
+class _MermaidViewerState extends State<MermaidViewer> {
+  final _controller = TransformationController();
+
+  static const _minScale = 0.5;
+  static const _maxScale = 6.0;
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  double get _scale => _controller.value.getMaxScaleOnAxis();
+
+  /// Zooms about the centre of the viewport, which is where someone looking at
+  /// a diagram already is. Scaling about the origin would walk the drawing off
+  /// the top-left corner a step at a time.
+  void _zoomBy(double factor, Size viewport) {
+    final target = (_scale * factor).clamp(_minScale, _maxScale);
+    final applied = target / _scale;
+    if (applied == 1) return;
+
+    final centre = Offset(viewport.width / 2, viewport.height / 2);
+    _controller.value = Matrix4.copy(_controller.value)
+      ..translateByDouble(centre.dx, centre.dy, 0, 1)
+      ..scaleByDouble(applied, applied, 1, 1)
+      ..translateByDouble(-centre.dx, -centre.dy, 0, 1);
+    setState(() {});
+  }
+
+  void _reset() {
+    _controller.value = Matrix4.identity();
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = widget.isDark;
+    final surface = isDark ? const Color(0xFF16161B) : Colors.white;
+    final foreground = isDark ? Colors.white : Colors.black87;
+
+    return Dialog(
+      backgroundColor: surface,
+      insetPadding: const EdgeInsets.all(32),
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final viewport = Size(constraints.maxWidth, constraints.maxHeight);
+
+          return Stack(
+            children: [
+              Positioned.fill(
+                child: InteractiveViewer(
+                  transformationController: _controller,
+                  minScale: _minScale,
+                  maxScale: _maxScale,
+                  // Room to drag a zoomed diagram past the edges instead of
+                  // hitting an invisible wall mid-gesture.
+                  boundaryMargin: const EdgeInsets.all(600),
+                  onInteractionEnd: (_) => setState(() {}),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: DmMermaidView(
+                        source: widget.source,
+                        options: MermaidRenderOptions(
+                          theme:
+                              isDark ? MermaidTheme.dark : MermaidTheme.light,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              Positioned(
+                top: 10,
+                right: 10,
+                child: Row(
+                  children: [
+                    _ViewerButton(
+                      icon: Icons.remove_rounded,
+                      tooltip: 'Zoom out',
+                      color: foreground,
+                      onPressed: _scale > _minScale
+                          ? () => _zoomBy(1 / 1.3, viewport)
+                          : null,
+                    ),
+                    // Doubles as a readout: without it there is no way to tell
+                    // how far in you are, or that a button stopped responding
+                    // because you hit the limit.
+                    SizedBox(
+                      width: 52,
+                      child: Text(
+                        '${(_scale * 100).round()}%',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: foreground.withValues(alpha: 0.6),
+                        ),
+                      ),
+                    ),
+                    _ViewerButton(
+                      icon: Icons.add_rounded,
+                      tooltip: 'Zoom in',
+                      color: foreground,
+                      onPressed: _scale < _maxScale
+                          ? () => _zoomBy(1.3, viewport)
+                          : null,
+                    ),
+                    _ViewerButton(
+                      icon: Icons.fit_screen_rounded,
+                      tooltip: 'Reset',
+                      color: foreground,
+                      onPressed: _controller.value.isIdentity() ? null : _reset,
+                    ),
+                    const SizedBox(width: 4),
+                    _ViewerButton(
+                      icon: Icons.close_rounded,
+                      tooltip: 'Close',
+                      color: foreground,
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _ViewerButton extends StatelessWidget {
+  const _ViewerButton({
+    required this.icon,
+    required this.tooltip,
+    required this.color,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final Color color;
+  final VoidCallback? onPressed;
+
+  @override
+  Widget build(BuildContext context) => IconButton(
+        onPressed: onPressed,
+        icon: Icon(icon, size: 17),
+        color: color.withValues(alpha: 0.75),
+        disabledColor: color.withValues(alpha: 0.2),
+        visualDensity: VisualDensity.compact,
+        tooltip: tooltip,
+      );
 }
