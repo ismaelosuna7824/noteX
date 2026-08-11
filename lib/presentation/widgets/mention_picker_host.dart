@@ -17,7 +17,7 @@ import 'note_markdown_editor.dart';
 /// A host wires it in four steps:
 ///   1. `with MentionPickerHost`
 ///   2. pass `onMentionQuery: onMentionQuery` to the editor
-///   3. give the editor a [GlobalObjectKey] and return it from [mentionEditorKey]
+///   3. give the editor a [GlobalKey] field and return it from [mentionEditorKey]
 ///   4. render [buildMentionOverlay] above the editor, typically in a [Stack]
 mixin MentionPickerHost<T extends StatefulWidget> on State<T> {
   MentionQuery? _query;
@@ -29,9 +29,15 @@ mixin MentionPickerHost<T extends StatefulWidget> on State<T> {
 
   /// Key of the editor the picker should commit into.
   ///
-  /// Must be the same [GlobalObjectKey] the host gave its [NoteMarkdownEditor],
-  /// which is how the picker reaches [NoteMarkdownEditorState.commitMention].
-  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey;
+  /// Must be the very same [GlobalKey] instance the host passed to its
+  /// [NoteMarkdownEditor] — that is how the picker reaches
+  /// [NoteMarkdownEditorState.commitMention].
+  ///
+  /// Hold it in a field; do NOT build a [GlobalObjectKey] from an interpolated
+  /// string here. `GlobalObjectKey.==` compares its value with [identical], and
+  /// string interpolation produces a fresh object every call, so two keys that
+  /// look equal never match and `currentState` silently returns null.
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey;
 
   @override
   void initState() {

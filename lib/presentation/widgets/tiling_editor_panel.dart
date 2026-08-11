@@ -38,13 +38,12 @@ class TilingEditorPanel extends StatefulWidget {
 
 class _TilingEditorPanelState extends State<TilingEditorPanel>
     with MentionPickerHost {
-  /// Key of this panel's editor, so its own @mention picker commits here and
-  /// not into a sibling tile.
+  /// Identity of this panel's editor. Held as a field so this tile's picker
+  /// commits here and never into a sibling tile.
+  GlobalKey<NoteMarkdownEditorState> _editorKey = GlobalKey();
+
   @override
-  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey =>
-      GlobalObjectKey<NoteMarkdownEditorState>(
-        '${widget.note.id}#$_reloadCount',
-      );
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
 
   TextEditingController? _titleController;
   String? _loadedNoteId;
@@ -58,10 +57,6 @@ class _TilingEditorPanelState extends State<TilingEditorPanel>
   /// every real edit; this snapshot is what gets persisted.
   String _latestMarkdown = '';
 
-  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
-  /// rebuilds with fresh content — both when switching notes and when the same
-  /// note's content is refreshed externally.
-  int _reloadCount = 0;
 
   @override
   void initState() {
@@ -114,7 +109,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel>
     // real edit replaces it. Bump the reload token so the editor remounts with
     // the new content (note switch or external refresh).
     _latestMarkdown = note.content;
-    _reloadCount++;
+    _editorKey = GlobalKey();
 
     _isDirty = false;
 
@@ -273,12 +268,9 @@ class _TilingEditorPanelState extends State<TilingEditorPanel>
                 child: Stack(
                   children: [
                     NoteMarkdownEditor(
-                      // GlobalObjectKey keeps the per-note remount identity and
-                      // lets the @mention picker commit into this panel — each
-                      // tile owns its own picker, so two panels never share one.
-                      key: GlobalObjectKey<NoteMarkdownEditorState>(
-                        '${widget.note.id}#$_reloadCount',
-                      ),
+                      // A fresh key on each load remounts this tile's editor
+                      // and lets its own @mention picker commit here.
+                      key: _editorKey,
                       initialContent: widget.note.content,
                       toolbar: EditorToolbarProfile.minimal,
                       fontSize: widget.themeState.editorFontSize,

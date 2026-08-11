@@ -50,12 +50,16 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   String? _loadedNoteId;
 
   // ── @mention picker ───────────────────────────────────────────────────
+  /// Identity of the mounted editor.
+  ///
+  /// Replaced on every note (re)load, which is what remounts the editor with
+  /// fresh content — the job the old `ValueKey('$id#$reloadCount')` did. It is
+  /// held as a field rather than rebuilt per frame so the picker can reach the
+  /// editor's state through the exact same key instance.
+  GlobalKey<NoteMarkdownEditorState> _editorKey = GlobalKey();
+
   @override
-  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey {
-    final note = widget.appState.currentNote;
-    if (note == null) return null;
-    return GlobalObjectKey<NoteMarkdownEditorState>('${note.id}#$_reloadCount');
-  }
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
 
   // ── Backlinks ─────────────────────────────────────────────────────────
   /// Notes linking to the one on screen. Empty until the index is read.
@@ -81,9 +85,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   /// self-triggered refresh does not look like an external edit.
   String _prevContent = '';
 
-  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
-  /// remounts with fresh content — both on note switch and external refresh.
-  int _reloadCount = 0;
 
   // ── Lifecycle ─────────────────────────────────────────────────────────
 
@@ -167,7 +168,8 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     // with the new content (note switch or external refresh).
     _latestMarkdown = note.content;
     _prevContent = note.content;
-    _reloadCount++;
+    // New key ⇒ the editor remounts with this note's content.
+    _editorKey = GlobalKey();
 
     // Fire-and-forget: the panel fills in when the index answers, and until
     // then it simply renders nothing.
@@ -429,9 +431,7 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                           // per-note identity that forces a rebuild on note switch
                           // AND exposes currentState so the picker can commit a
                           // mention back into the editor.
-                          key: GlobalObjectKey<NoteMarkdownEditorState>(
-                            '${note.id}#$_reloadCount',
-                          ),
+                          key: _editorKey,
                           initialContent: note.content,
                           initialViewMode: EditorViewModeName.fromName(
                             widget.themeState.editorViewMode,

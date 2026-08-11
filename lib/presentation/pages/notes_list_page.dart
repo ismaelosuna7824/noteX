@@ -35,14 +35,13 @@ class NotesListPage extends StatefulWidget {
 
 class _NotesListPageState extends State<NotesListPage>
     with MentionPickerHost {
-  /// Key of the inline preview editor, so the @mention picker can commit into
-  /// it. Same per-note identity the editor uses to remount on note switch.
+  /// Identity of the inline preview editor. Replaced on every note (re)load,
+  /// which is what remounts it with fresh content, and held as a field so the
+  /// @mention picker can reach its state through the same key instance.
+  GlobalKey<NoteMarkdownEditorState> _editorKey = GlobalKey();
+
   @override
-  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey {
-    final note = widget.appState.currentNote;
-    if (note == null) return null;
-    return GlobalObjectKey<NoteMarkdownEditorState>('${note.id}#$_reloadCount');
-  }
+  GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
 
   late TextEditingController _titleController;
   String? _loadedNoteId;
@@ -52,10 +51,6 @@ class _NotesListPageState extends State<NotesListPage>
   /// every real edit; this snapshot is what gets persisted.
   String _latestMarkdown = '';
 
-  /// Bumped on every (re)load so the [NoteMarkdownEditor]'s key changes and it
-  /// rebuilds with fresh content — both when switching notes and when the same
-  /// note's content is refreshed externally.
-  int _reloadCount = 0;
 
   // ── Auto-save state ──────────────────────────────────────────────────
   final ValueNotifier<String> _saveStatus = ValueNotifier('');
@@ -119,10 +114,10 @@ class _NotesListPageState extends State<NotesListPage>
 
     // The editor converts raw stored content (Delta or Markdown) for display;
     // seed the latest-Markdown snapshot with the raw content until the first
-    // real edit replaces it. Bump the reload token so the editor remounts with
-    // the new content (note switch or external refresh).
+    // real edit replaces it. A new key remounts the editor with the new content
+    // (note switch or external refresh).
     _latestMarkdown = note.content;
-    _reloadCount++;
+    _editorKey = GlobalKey();
 
     // Register with auto-save service. The lazy content getter returns the
     // latest Markdown emitted by the editor.
@@ -1488,13 +1483,10 @@ class _NotesListPageState extends State<NotesListPage>
               child: Stack(
                 children: [
                   NoteMarkdownEditor(
-                // Key includes the reload token so the editor remounts with
-                // fresh content on note switch AND on external content refresh.
-                // GlobalObjectKey keeps that identity while letting the
-                // @mention picker reach the editor's state to commit a link.
-                key: GlobalObjectKey<NoteMarkdownEditorState>(
-                  '${note.id}#$_reloadCount',
-                ),
+                // A fresh key on each load remounts the editor with new
+                // content, on note switch and on external refresh alike, and
+                // lets the @mention picker reach its state to commit a link.
+                key: _editorKey,
                 initialContent: note.content,
                 initiallyPreview: true,
                 toolbar: EditorToolbarProfile.none,
