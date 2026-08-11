@@ -12,6 +12,8 @@ import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/security_state.dart';
 import 'package:get_it/get_it.dart';
+
+import '../../application/use_cases/export_notes_use_case.dart';
 import '../utils/platform_utils.dart';
 import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
@@ -39,6 +41,9 @@ class _SettingsPageState extends State<SettingsPage> {
   /// Persistent controller for the horizontal preset-image strip.
   /// Kept alive so the Scrollbar always has a valid scroll position.
   final ScrollController _bgScrollController = ScrollController();
+
+  /// True while an export is writing, so the button cannot be fired twice.
+  bool _isExporting = false;
 
   @override
   void dispose() {
@@ -825,6 +830,80 @@ class _SettingsPageState extends State<SettingsPage> {
                               mutedText: mutedText,
                               value: themeState.markdownLineHeight,
                               onChanged: themeState.setMarkdownLineHeight,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Your data
+                      _buildSection(
+                        context,
+                        isDark: isDark,
+                        title: 'Your data',
+                        icon: Icons.folder_open_rounded,
+                        accentColor: accentColor,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Write every note to a folder as Markdown files, '
+                              'keeping your folder structure. Your notes stay '
+                              'readable without this app.',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: mutedText,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            InkWell(
+                              onTap: _isExporting
+                                  ? null
+                                  : () => _exportNotes(context),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: innerBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: innerBorder),
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (_isExporting)
+                                      SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: accentColor,
+                                        ),
+                                      )
+                                    else
+                                      Icon(
+                                        Icons.ios_share_rounded,
+                                        size: 16,
+                                        color: accentColor,
+                                      ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      _isExporting
+                                          ? 'Exporting…'
+                                          : 'Export notes as Markdown',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: accentColor,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
                           ],
                         ),
@@ -2028,6 +2107,44 @@ class _SettingsPageState extends State<SettingsPage> {
           ),
         );
       }
+    }
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────────
+
+  /// Writes every visible note to a folder the user chooses.
+  Future<void> _exportNotes(BuildContext context) async {
+    final destination = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose where to export your notes',
+    );
+    // Null means the user dismissed the picker — not an error, so stay quiet.
+    if (destination == null) return;
+
+    setState(() => _isExporting = true);
+    try {
+      final summary =
+          await GetIt.instance<ExportNotesUseCase>(param1: destination)
+              .execute();
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            summary.isEmpty
+                ? 'Nothing to export yet — this library has no notes.'
+                : 'Exported ${summary.fileCount} '
+                    '${summary.fileCount == 1 ? 'note' : 'notes'} '
+                    'to $destination',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
     }
   }
 }

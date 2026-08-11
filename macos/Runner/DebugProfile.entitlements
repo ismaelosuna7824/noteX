@@ -10,5 +10,10 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Lets the app write into the folder the user picks when exporting
+	     notes. Without it the sandbox rejects the write and the export fails
+	     after the user has already chosen a destination. -->
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
 </dict>
 </plist>

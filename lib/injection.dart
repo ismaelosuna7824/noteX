@@ -16,6 +16,7 @@ import 'domain/services/update_service.dart';
 
 import 'infrastructure/local/database.dart';
 import 'infrastructure/local/drift_note_repository.dart';
+import 'infrastructure/local/file_system_note_export_sink.dart';
 import 'infrastructure/local/drift_project_repository.dart';
 import 'infrastructure/local/drift_time_entry_repository.dart';
 import 'infrastructure/local/drift_markdown_file_repository.dart';
@@ -30,6 +31,7 @@ import 'infrastructure/config/app_config.dart';
 import 'infrastructure/update/github_update_adapter.dart';
 
 import 'application/use_cases/create_note_use_case.dart';
+import 'application/use_cases/export_notes_use_case.dart';
 import 'application/use_cases/update_note_use_case.dart';
 import 'application/use_cases/get_notes_use_case.dart';
 import 'application/use_cases/delete_note_use_case.dart';
@@ -158,6 +160,15 @@ Future<void> setupDependencies() async {
   // Application - Note Use Cases
   getIt.registerFactory<CreateNoteUseCase>(
     () => CreateNoteUseCase(getIt<NoteRepository>()),
+  );
+  // Parameterised: the destination folder is only known once the user picks
+  // it, which keeps the presentation layer free of the filesystem adapter.
+  getIt.registerFactoryParam<ExportNotesUseCase, String, void>(
+    (destinationPath, _) => ExportNotesUseCase(
+      getIt<NoteRepository>(),
+      getIt<NoteProjectRepository>(),
+      FileSystemNoteExportSink(destinationPath),
+    ),
   );
   getIt.registerFactory<UpdateNoteUseCase>(
     () => UpdateNoteUseCase(getIt<NoteRepository>()),
