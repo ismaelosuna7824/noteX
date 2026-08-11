@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
 import '../../domain/services/mention_trigger.dart';
 import '../../domain/services/note_link_parser.dart';
 import '../../infrastructure/content/note_content_format.dart';
-import 'markdown_code_block_builder.dart';
+import 'markdown/notex_markdown_view.dart';
 
 /// Which set of formatting controls the [NoteMarkdownEditor] exposes.
 ///
@@ -37,7 +36,7 @@ extension EditorViewModeName on EditorViewMode {
 /// A reusable source-mode Markdown editor shared by every editor surface.
 ///
 /// The user edits raw Markdown in a plain [TextField] and can flip to a
-/// rendered preview (via `flutter_markdown_plus`) with an edit⇄preview toggle.
+/// rendered preview (via [NoteXMarkdownView]) with an edit⇄preview toggle.
 /// There is no WYSIWYG layer: the [TextEditingController]'s text IS the
 /// Markdown document.
 ///
@@ -473,8 +472,8 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
 
   // --- link handling --------------------------------------------------------
 
-  void _handleTapLink(String text, String? href, String title) {
-    if (href == null || href.isEmpty) return;
+  void _handleTapLink(String href) {
+    if (href.isEmpty) return;
     // Resolved through NoteLinkParser rather than re-parsed here, so tapping a
     // link and indexing a backlink can never disagree about which note an
     // href addresses.
@@ -763,118 +762,26 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   Widget _buildPreview(BuildContext context) {
     final theme = Theme.of(context);
     final color = widget.textColor ?? theme.colorScheme.onSurface;
-    final base = MarkdownStyleSheet.fromTheme(theme);
-    final accent = theme.colorScheme.primary;
-    final baseFont = widget.fontSize ?? base.p?.fontSize ?? 16.0;
-    final rule = color.withValues(alpha: 0.15);
-    final isDark = theme.brightness == Brightness.dark;
-    // Subtle code box + monospace text in the current color — shared with the
-    // Markdown page so both previews render code identically (no highlight).
-    final codeStyles = MarkdownCodeStyles.from(
-      isDark: isDark,
-      baseFont: baseFont,
-      color: color,
-    );
-    final styleSheet = base.copyWith(
-      p: base.p?.copyWith(
-        fontSize: baseFont,
-        height: widget.lineHeight,
-        color: color,
-      ),
-      h1: base.h1?.copyWith(
-        fontSize: (baseFont * 1.75).roundToDouble(),
-        fontWeight: FontWeight.w800,
-        color: color,
-      ),
-      h2: base.h2?.copyWith(
-        fontSize: (baseFont * 1.45).roundToDouble(),
-        fontWeight: FontWeight.w700,
-        color: color,
-      ),
-      h3: base.h3?.copyWith(
-        fontSize: (baseFont * 1.2).roundToDouble(),
-        fontWeight: FontWeight.w600,
-        color: color,
-      ),
-      a: TextStyle(
-        color: accent,
-        decoration: TextDecoration.underline,
-        decorationColor: accent.withValues(alpha: 0.5),
-      ),
-      // Inline code keeps the current text color and monospace font, with NO
-      // background highlight — per the requested look (no "selected text" band).
-      code: codeStyles.textStyle,
-      // Fenced code blocks are rendered by the custom `_CodeBlockBuilder`
-      // registered under the `pre` tag below, which draws the full-width box.
-      // flutter_markdown_plus still wraps every `pre` builder's output in an
-      // outer Container using this decoration (builder.dart:470-474), so it is
-      // neutralised to an empty decoration to avoid a double box.
-      codeblockDecoration: const BoxDecoration(),
-      blockquote: TextStyle(
-        fontSize: baseFont,
-        height: widget.lineHeight,
-        color: color.withValues(alpha: 0.7),
-        fontStyle: FontStyle.italic,
-      ),
-      blockquoteDecoration: BoxDecoration(
-        border: Border(left: BorderSide(color: accent, width: 3)),
-      ),
-      blockquotePadding: const EdgeInsets.fromLTRB(14, 4, 14, 4),
-      tableHead: TextStyle(
-        fontSize: baseFont,
-        fontWeight: FontWeight.w700,
-        color: color,
-      ),
-      tableBody: TextStyle(fontSize: baseFont, color: color),
-      tableHeadAlign: TextAlign.left,
-      tableBorder: TableBorder.all(
-        color: rule,
-        width: 1,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      tableCellsPadding:
-          const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      listBullet: TextStyle(
-        fontSize: baseFont,
-        color: accent,
-        fontWeight: FontWeight.w700,
-      ),
-      horizontalRuleDecoration: BoxDecoration(
-        border: Border(top: BorderSide(color: rule, width: 1)),
-      ),
-    );
+
     return SelectionArea(
       child: SingleChildScrollView(
-      padding: const EdgeInsets.all(16),
-      child: MarkdownBody(
-        data: _controller.text,
-        // Selection is provided by the SelectionArea wrapper below (see build).
-        // flutter_markdown's own `selectable: true` cannot select the custom
-        // code-block widgets, so we let SelectionArea handle the whole subtree.
-        selectable: false,
-        // A single newline (one Enter) renders as a real line break, matching
-        // what the user typed in the editor. Without this, CommonMark collapses
-        // single newlines into a space (soft break).
-        softLineBreak: true,
-        styleSheet: styleSheet,
-        // Custom renderer for fenced code blocks (`pre`). Draws a full-width
-        // box instead of the default shrink-to-content SingleChildScrollView.
-        // Only affects block code — inline `code` is untouched.
-        builders: {
-          'pre': CodeBlockBuilder(
-            textStyle: codeStyles.textStyle,
-            decoration: codeStyles.decoration,
+        padding: const EdgeInsets.all(16),
+        // One renderer for every surface in the app. The style below is all
+        // this preview gets to decide; which Markdown features exist is
+        // settled once, in NoteXMarkdownView.
+        child: NoteXMarkdownView(
+          data: _controller.text,
+          onTapLink: _handleTapLink,
+          style: NoteXMarkdownStyle(
+            isDark: theme.brightness == Brightness.dark,
+            baseFontSize: widget.fontSize ?? 16.0,
+            lineHeight: widget.lineHeight ?? 1.5,
+            textColor: color,
+            accentColor: theme.colorScheme.primary,
           ),
-        },
-        // extensionSet is intentionally left null: flutter_markdown_plus
-        // defaults to markdown's ExtensionSet.gitHubFlavored, which enables
-        // tables, checkbox task-lists, strikethrough, and fenced code blocks.
-        // The `markdown` package is not a direct dependency, so passing the
-        // constant explicitly would require importing it and trip the
-        // depend_on_referenced_packages lint.
-        onTapLink: _handleTapLink,
+        ),
       ),
-    ));
+    );
   }
 
   // --- toolbar --------------------------------------------------------------
