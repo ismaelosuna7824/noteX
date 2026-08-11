@@ -382,7 +382,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // 7:3 against the panel below — the editor keeps the larger
+                // share, since writing is what this page is for.
                 Expanded(
+                  flex: 7,
                   child:
                       note.isLocked &&
                           !GetIt.instance<SecurityState>().isNoteUnlocked(
@@ -507,13 +510,19 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                 // panel gives. Hidden in zen and tiling modes, which each own
                 // the whole area for their own reasons.
                 if (_showRelated && !isZen && !_tiling.isActive)
-                  LocalGraphPanel(
-                    notes: widget.appState.notes,
-                    noteId: note.id,
-                    accentColor: accentColor,
-                    surfaceColor: widget.themeState.editorBgColor,
-                    onOpenNote: _openInternalNote,
-                    onClose: () => setState(() => _showRelated = false),
+                  // A share of the width rather than a fixed number, so a wide
+                  // window gives the graph room to breathe and a narrow one
+                  // does not have the panel eating the writing surface.
+                  Expanded(
+                    flex: 3,
+                    child: LocalGraphPanel(
+                      notes: widget.appState.notes,
+                      noteId: note.id,
+                      accentColor: accentColor,
+                      surfaceColor: widget.themeState.editorBgColor,
+                      onOpenNote: _openInternalNote,
+                      onClose: () => setState(() => _showRelated = false),
+                    ),
                   ),
               ],
             ),

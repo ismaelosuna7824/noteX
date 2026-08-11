@@ -74,6 +74,10 @@ class _NoteGraphViewState extends State<NoteGraphView> {
   /// Whether the graph has been framed for the current layout yet.
   bool _needsFit = true;
 
+  /// Viewport the current framing was computed for, so a resize can be told
+  /// apart from an ordinary rebuild.
+  Size? _fittedFor;
+
   void _adoptPositions() {
     _positions = {
       for (final entry in widget.positions.entries)
@@ -195,10 +199,16 @@ class _NoteGraphViewState extends State<NoteGraphView> {
       builder: (context, constraints) {
         final viewport = Size(constraints.maxWidth, constraints.maxHeight);
 
-        // Frame the graph once the viewport is known — during layout, not
-        // during paint, so it lands on the first frame the user sees.
-        if (_needsFit && viewport.width > 0 && viewport.height > 0) {
+        // Frame the graph once the viewport is known, and again if it changes
+        // shape — the panel's width follows the window, and a framing computed
+        // for the old size leaves the graph off to one side.
+        final resized = _fittedFor != null &&
+            ((_fittedFor!.width - viewport.width).abs() > 24 ||
+                (_fittedFor!.height - viewport.height).abs() > 24);
+
+        if ((_needsFit || resized) && viewport.width > 0 && viewport.height > 0) {
           _needsFit = false;
+          _fittedFor = viewport;
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (mounted) _fitToView(viewport);
           });
