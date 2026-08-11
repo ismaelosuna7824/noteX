@@ -9,6 +9,11 @@ void main() {
   Future<void> mountEditor(WidgetTester tester, Widget child) async {
     await tester.pumpWidget(
       MaterialApp(
+        // Toolbar buttons are Material inkwells, and loading the ink sparkle
+        // shader throws under a Flutter SDK whose shaders were compiled for
+        // Vulkan only — the splash is incidental to every case here, so it is
+        // switched off rather than left to decide whether the suite runs.
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
         home: Scaffold(
           body: SizedBox(
             width: 800,
