@@ -24,6 +24,16 @@ export const site = {
   license: 'MIT',
 } as const;
 
+/*
+  Deliberately not in `social` below: that array renders as icon-only circles
+  for profiles someone might want to follow. A tip jar is an action, and an
+  unlabelled cup in a row of logos is a button nobody presses.
+*/
+export const support = {
+  label: 'Buy me a coffee',
+  href: 'https://buymeacoffee.com/ismaelosuna',
+} as const;
+
 /** Where to find the person who builds this. */
 export const social = [
   {
@@ -135,7 +145,7 @@ export const features: Feature[] = [
 export const faqs = [
   {
     q: 'Is NoteX free?',
-    a: 'Yes. NoteX is free and open source under the MIT licence. There is no account required, no subscription and no paid tier.',
+    a: 'Yes. NoteX is free and open source under the MIT licence. There is no account required, no subscription and no paid tier. If it earns a place in your day, there is a Buy me a coffee link in the footer — entirely optional, and nothing is held back without it.',
   },
   {
     q: 'Where are my notes stored?',

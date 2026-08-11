@@ -1,5 +1,5 @@
 ---
-import { site, social } from '../data/site';
+import { site, social, support } from '../data/site';
 
 const year = new Date().getFullYear();
 ---
@@ -17,6 +17,7 @@ const year = new Date().getFullYear();
       <a href="#features" class="cursor-pointer transition duration-200 hover:text-white">
         Features
       </a>
+      <a href="#graph" class="cursor-pointer transition duration-200 hover:text-white">Graph</a>
       <a href="#tour" class="cursor-pointer transition duration-200 hover:text-white">Tour</a>
       <a href="#download" class="cursor-pointer transition duration-200 hover:text-white">
         Download
@@ -53,6 +54,22 @@ const year = new Date().getFullYear();
       cannot.
     -->
     <ul class="flex items-center gap-3">
+      <li>
+        <a
+          href={support.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          class="flex h-11 cursor-pointer items-center gap-2 rounded-full border border-clay-400/30 bg-clay-400/10 px-4 text-sm font-medium text-clay-200 transition duration-200 hover:border-clay-400/60 hover:bg-clay-400/20 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-400"
+        >
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M4 8h13v6a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5V8Z" />
+            <path d="M18 9h.8a3.2 3.2 0 0 1 0 6.4H18v-2h.8a1.2 1.2 0 0 0 0-2.4H18V9Z" />
+            <path d="M4 20.5h13V22H4z" />
+          </svg>
+          {support.label}
+        </a>
+      </li>
+
       {
         social.map((account) => (
           <li>
