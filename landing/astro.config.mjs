@@ -39,6 +39,7 @@ export default defineConfig({
       // reported as a duplicate. Strip the trailing slash from both the loc
       // and its alternates so every URL this site publishes agrees.
       serialize(item) {
+        /** @param {string} url */
         const trim = (url) => url.replace(/(.+)\/$/, '$1');
 
         item.url = trim(item.url);

@@ -1,6 +1,7 @@
 ---
 import { site, downloads } from '../data/site';
 import { getContent, languages, toLang, urlFor } from '../i18n';
+import { getLatestVersion } from '../lib/github';
 import '../styles/global.css';
 
 interface Props {
@@ -17,6 +18,7 @@ const pageTitle = title ? `${title} · ${site.name}` : `${site.name} — ${t.met
 // Not from Astro.url.pathname — see the note on pathFor. That would emit
 // `/es/`, which this host redirects, making the canonical point at a 301.
 const canonical = urlFor(lang, Astro.site);
+const version = await getLatestVersion();
 const ogImage = new URL(`${import.meta.env.BASE_URL}/og.jpg`.replace(/\/+/g, '/'), Astro.site).href;
 
 /*
@@ -34,7 +36,9 @@ const softwareSchema = {
   inLanguage: t.htmlLang,
   applicationCategory: 'ProductivityApplication',
   operatingSystem: downloads.map((d) => t.download.platforms[d.key].platform).join(', '),
-  softwareVersion: site.version,
+  // Omitted rather than guessed when the API is unreachable: structured
+  // data that disagrees with the visible page is worse than absent.
+  ...(version ? { softwareVersion: version } : {}),
   url: canonical,
   downloadUrl: site.releases,
   license: 'https://opensource.org/licenses/MIT',

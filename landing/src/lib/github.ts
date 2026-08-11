@@ -31,6 +31,38 @@ export async function getRepoStats(): Promise<RepoStats> {
   }
 }
 
+/**
+ * The version of the build the download buttons actually hand over.
+ *
+ * Read from GitHub's "latest release" rather than from a constant in this
+ * repo, because those are two different facts: pubspec.yaml holds the version
+ * being *developed*, and printing that would advertise a build nobody can
+ * download yet. The buttons already point at /releases/latest/download/, so
+ * this is simply the same source, named.
+ *
+ * Returns null rather than a stale guess when the API cannot be reached. The
+ * page then omits the version instead of stating a wrong one — a number that
+ * is sometimes missing is survivable; a number that is confidently wrong sends
+ * someone hunting for a release that does not exist.
+ */
+export async function getLatestVersion(): Promise<string | null> {
+  try {
+    const response = await fetch(`${REPO_API}/releases/latest`, {
+      headers: { Accept: 'application/vnd.github+json' },
+      signal: AbortSignal.timeout(5000),
+    });
+
+    if (!response.ok) return null;
+
+    const data = (await response.json()) as { tag_name?: string };
+    // Tags are published as `v1.56.0`; the page writes the `v` itself where it
+    // wants one.
+    return data.tag_name?.replace(/^v/, '') ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** 1200 → "1.2k", so a wide number never reflows the nav. */
 export function formatCount(value: number): string {
   if (value < 1000) return String(value);

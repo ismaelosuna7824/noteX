@@ -1,12 +1,13 @@
 ---
 import { site } from '../data/site';
 import { getContent, toLang } from '../i18n';
-import { getRepoStats, formatCount } from '../lib/github';
+import { getLatestVersion, getRepoStats, formatCount } from '../lib/github';
 
 const t = getContent(toLang(Astro.currentLocale));
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const { stars } = await getRepoStats();
+const version = await getLatestVersion();
 
 /*
   Product on the left, argument on the right.
@@ -144,7 +145,7 @@ const { stars } = await getRepoStats();
         </div>
 
         <p data-reveal class="mt-6 text-sm text-white/40" style="transition-delay:300ms">
-          {t.hero.platforms} · v{site.version}
+          {t.hero.platforms}{version && ` · v${version}`}
         </p>
       </div>
     </div>

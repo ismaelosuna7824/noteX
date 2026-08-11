@@ -18,7 +18,10 @@ export const site = {
   repo: 'https://github.com/ismaelosuna7824/noteX',
   releases: 'https://github.com/ismaelosuna7824/noteX/releases/latest',
   author: 'ismaelosuna7824',
-  version: '1.56.0',
+  // No version here on purpose. It is read from GitHub's latest release at
+  // build time (see lib/github.ts): the number the page prints and the file
+  // the buttons serve have to be the same fact, and a constant in this repo
+  // drifts from it on every release.
   license: 'MIT',
 } as const;
 

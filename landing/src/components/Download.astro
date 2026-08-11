@@ -1,8 +1,10 @@
 ---
 import { site, downloads, firstRunPlatforms } from '../data/site';
 import { getContent, toLang } from '../i18n';
+import { getLatestVersion } from '../lib/github';
 
 const t = getContent(toLang(Astro.currentLocale));
+const version = await getLatestVersion();
 
 /*
   Links point at the /latest/download/ path rather than a pinned tag, so a new
@@ -107,7 +109,7 @@ const firstRun = firstRunPlatforms.map((p) => ({
     </details>
 
     <p class="mt-10 text-sm text-white/45">
-      {t.download.versionLine(site.version)}{' '}
+      {version && t.download.versionLine(version)}{' '}
       <a href={site.releases} target="_blank"
               rel="noopener noreferrer" class="underline underline-offset-4 hover:text-white/70">
         {t.download.allReleases}
