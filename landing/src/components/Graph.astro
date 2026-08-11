@@ -1,0 +1,271 @@
+---
+/*
+  The link graph, drawn rather than screenshotted.
+
+  A screenshot of a graph is a screenshot of someone else's notes: the shapes
+  mean nothing to a visitor, and the titles are private. So this is built from
+  the same construction rule as the app's painter — edges curve by a control
+  point pushed perpendicular to the span, nodes carry a bloom scaled by how
+  connected they are — with a made-up library whose labels a reader can follow.
+
+  Geometry is computed here rather than written out as path strings, because a
+  hand-tuned `d` attribute is a drawing that merely resembles the product. This
+  one is the product's own rule, run over different data.
+*/
+
+type Node = { id: string; x: number; y: number; degree: number; label?: string };
+
+const nodes: Node[] = [
+  { id: 'research', x: 262, y: 208, degree: 7, label: 'Research' },
+  { id: 'ideas', x: 128, y: 116, degree: 4, label: 'Ideas' },
+  { id: 'reading', x: 398, y: 126, degree: 4, label: 'Reading' },
+  { id: 'daily', x: 106, y: 302, degree: 3, label: 'Daily notes' },
+  { id: 'projects', x: 406, y: 300, degree: 3, label: 'Projects' },
+  { id: 'weekly', x: 252, y: 366, degree: 2, label: 'Weekly review' },
+  { id: 'sources', x: 258, y: 58, degree: 2 },
+  { id: 'archive', x: 52, y: 206, degree: 1 },
+  { id: 'shipped', x: 470, y: 214, degree: 1 },
+  { id: 'drafts', x: 176, y: 254, degree: 1 },
+  { id: 'quotes', x: 344, y: 250, degree: 1 },
+];
+
+const edges: [string, string][] = [
+  ['research', 'ideas'],
+  ['research', 'reading'],
+  ['research', 'daily'],
+  ['research', 'projects'],
+  ['research', 'weekly'],
+  ['research', 'drafts'],
+  ['research', 'quotes'],
+  ['ideas', 'sources'],
+  ['reading', 'sources'],
+  ['daily', 'archive'],
+  ['projects', 'shipped'],
+  ['ideas', 'daily'],
+  ['reading', 'projects'],
+  ['daily', 'weekly'],
+];
+
+const byId = new Map(nodes.map((node) => [node.id, node]));
+
+/** Same rule as the app: control point pushed perpendicular, 12% of the span. */
+const curve = ([fromId, toId]: [string, string]) => {
+  const from = byId.get(fromId)!;
+  const to = byId.get(toId)!;
+
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const length = Math.hypot(dx, dy) || 1;
+
+  // Perpendicular to the span, scaled by the span itself, so long edges bow
+  // more than short ones and nothing looks uniformly wobbly.
+  const cx = (from.x + to.x) / 2 + (-dy / length) * (length * 0.12);
+  const cy = (from.y + to.y) / 2 + (dx / length) * (length * 0.12);
+
+  return `M ${from.x} ${from.y} Q ${cx} ${cy} ${to.x} ${to.y}`;
+};
+
+/** Matches the painter's `6 + min(degree, 8) * 1.6`, scaled up for the page. */
+const radiusOf = (node: Node) => 7 + Math.min(node.degree, 8) * 1.9;
+
+const points = [
+  'Type @ anywhere in a note and pick another to link them.',
+  'Open the graph to see the whole library at once, or toggle the panel beside the editor to see just what this note touches.',
+  'Drag a note to move it, click to focus it and dim everything unrelated, click again to open it.',
+];
+---
+
+<section id="graph" class="scroll-mt-24 px-6 py-24 lg:py-32">
+  <div class="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-20">
+    <div data-reveal>
+      <p class="text-sm font-semibold uppercase tracking-widest text-clay-400">Graph</p>
+      <h2 class="mt-3 text-3xl font-bold tracking-tight sm:text-4xl">
+        See the shape of what you know
+      </h2>
+      <p class="mt-5 text-lg leading-relaxed text-white/60">
+        Every link you make draws an edge. Notes you keep returning to grow larger and brighter than
+        the ones you wrote once — so the structure you have been building without noticing becomes
+        something you can actually look at.
+      </p>
+
+      <ul class="mt-8 space-y-4">
+        {
+          points.map((point) => (
+            <li class="flex gap-3 text-white/60">
+              <svg
+                class="mt-1 h-4 w-4 shrink-0 text-clay-400"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4l3.8 3.8 6.8-6.8a1 1 0 0 1 1.4 0Z"
+                  clip-rule="evenodd"
+                />
+              </svg>
+              <span class="leading-relaxed">{point}</span>
+            </li>
+          ))
+        }
+      </ul>
+    </div>
+
+    <figure data-reveal class="graph-figure">
+      <div
+        class="overflow-hidden rounded-2xl border border-white/10 bg-ink-900 shadow-2xl shadow-black/50"
+      >
+        <svg
+          viewBox="0 0 520 420"
+          class="h-auto w-full"
+          role="img"
+          aria-labelledby="graph-title graph-desc"
+        >
+          <title id="graph-title">A NoteX link graph</title>
+          <desc id="graph-desc">
+            Eleven notes drawn as circles joined by curved lines. A central note titled Research is
+            the largest and connects to Ideas, Reading, Daily notes, Projects and Weekly review;
+            those in turn link on to smaller notes, so the most-linked notes are the biggest and
+            brightest.
+          </desc>
+
+          <defs>
+            <radialGradient id="graph-bloom">
+              <stop offset="0%" stop-color="#ffffff" stop-opacity="0.20"></stop>
+              <stop offset="100%" stop-color="#ffffff" stop-opacity="0"></stop>
+            </radialGradient>
+            <radialGradient id="graph-bloom-accent">
+              <stop offset="0%" stop-color="#d9a892" stop-opacity="0.34"></stop>
+              <stop offset="100%" stop-color="#d9a892" stop-opacity="0"></stop>
+            </radialGradient>
+          </defs>
+
+          <g class="graph-edges">
+            {
+              edges.map((edge, index) => (
+                <path
+                  class="graph-edge"
+                  d={curve(edge)}
+                  fill="none"
+                  stroke={edge.includes('research') ? '#d9a892' : '#ffffff'}
+                  stroke-opacity={edge.includes('research') ? 0.5 : 0.16}
+                  stroke-width="1.4"
+                  stroke-linecap="round"
+                  style={`--i:${index}`}
+                />
+              ))
+            }
+          </g>
+
+          <g class="graph-nodes">
+            {
+              nodes.map((node, index) => {
+                const radius = radiusOf(node);
+                const isHub = node.degree >= 7;
+                // Neutral fills brightening with connectedness — the accent is
+                // spent on the hub alone, so it still means something.
+                const fill = isHub
+                  ? '#d9a892'
+                  : `rgba(255,255,255,${0.34 + (Math.min(node.degree, 6) / 6) * 0.5})`;
+
+                return (
+                  <g class="graph-node" style={`--i:${index}`}>
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={radius * (isHub ? 3.4 : 2.6)}
+                      fill={`url(#${isHub ? 'graph-bloom-accent' : 'graph-bloom'})`}
+                    />
+                    {/* Opaque base in the panel colour. Without it the edges,
+                        drawn underneath, show straight through the translucent
+                        fill and every node has a line crossing its face. */}
+                    <circle cx={node.x} cy={node.y} r={radius} fill="#101014" />
+                    <circle cx={node.x} cy={node.y} r={radius} fill={fill} />
+                    {/* Rim in the panel's own colour, so it reads as a gap
+                        rather than one more line competing with the edges. */}
+                    <circle
+                      cx={node.x}
+                      cy={node.y}
+                      r={radius}
+                      fill="none"
+                      stroke="#101014"
+                      stroke-opacity="0.85"
+                      stroke-width="2"
+                    />
+                    {node.label && (
+                      <text
+                        x={node.x}
+                        y={node.y + radius + 16}
+                        text-anchor="middle"
+                        fill="#ffffff"
+                        fill-opacity={isHub ? 0.95 : 0.55}
+                        font-size="12.5"
+                        font-weight={isHub ? 600 : 400}
+                      >
+                        {node.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })
+            }
+          </g>
+        </svg>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<style>
+  /*
+    Edges draw themselves in, then the notes land on top. The order is the
+    point: it reads as links being followed rather than shapes fading in.
+
+    Everything is gated on `.js-motion` so the no-JS render is the finished
+    picture, not an invisible one.
+  */
+  .graph-edge {
+    stroke-dasharray: 1;
+    stroke-dashoffset: 0;
+  }
+
+  .js-motion .graph-figure .graph-edge {
+    stroke-dasharray: 640;
+    stroke-dashoffset: 640;
+  }
+
+  .js-motion .graph-figure.is-visible .graph-edge {
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 900ms cubic-bezier(0.22, 1, 0.36, 1);
+    transition-delay: calc(var(--i) * 45ms);
+  }
+
+  .js-motion .graph-figure .graph-node {
+    opacity: 0;
+    transform: scale(0.6);
+    transform-box: fill-box;
+    transform-origin: center;
+  }
+
+  .js-motion .graph-figure.is-visible .graph-node {
+    opacity: 1;
+    transform: scale(1);
+    /* Overshoot on the way in, so a dot arriving has a little weight. */
+    transition:
+      opacity 320ms ease-out,
+      transform 420ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    /* Starts once the first edges are already drawing. */
+    transition-delay: calc(260ms + var(--i) * 55ms);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .js-motion .graph-figure .graph-edge,
+    .js-motion .graph-figure .graph-node {
+      stroke-dasharray: 1;
+      stroke-dashoffset: 0;
+      opacity: 1;
+      transform: none;
+      transition: none;
+    }
+  }
+</style>

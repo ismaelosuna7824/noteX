@@ -20,7 +20,7 @@ export const site = {
   repo: 'https://github.com/ismaelosuna7824/noteX',
   releases: 'https://github.com/ismaelosuna7824/noteX/releases/latest',
   author: 'ismaelosuna7824',
-  version: '1.55.0',
+  version: '1.56.0',
   license: 'MIT',
 } as const;
 
@@ -83,6 +83,11 @@ export const features: Feature[] = [
     title: 'Notes that link to notes',
     body: 'Type @ and pick a note to drop a link right into your text. Follow it with a click and your thinking starts forming a shape instead of a pile.',
     icon: 'M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244',
+  },
+  {
+    title: 'The graph of it all',
+    body: 'Every link draws an edge. Open the graph to see your whole library laid out, or toggle the panel beside the editor to see just what the note in front of you connects to. Drag notes around, focus one to dim the rest, click through to open it.',
+    icon: 'M12 4.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm-6.75 10.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm13.5 0a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5ZM10.4 8.85l-3.55 5.3m6.75-5.3 3.55 5.3m-9.65 2.6h9.1',
   },
   {
     title: 'A note for every day',
