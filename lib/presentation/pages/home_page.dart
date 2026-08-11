@@ -172,8 +172,7 @@ class _HomePageState extends State<HomePage>
                     child: _HeroNowEditing(
                       note: recentNote,
                       accentColor: accentColor,
-                      heroColor: heroColor,
-                      shadows: heroShadows,
+                      surfaceColor: themeState.editorBgColor,
                       onTap: () => appState.selectNote(recentNote),
                     ),
                   ),
@@ -2351,22 +2350,26 @@ class _AccentLinePainter extends CustomPainter {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Hero Now Editing — compact CTA in the hero area using heroColor styling
-// so it blends naturally with the hero text and shortcuts.
+// Hero Now Editing — compact CTA in the hero area, built as the same kind of
+// surface as the stats cards below it rather than as hero text. It sits over
+// the wallpaper like they do, and the reason they stay readable is that they
+// are nearly opaque: a panel you can see through has to be legible against
+// every image the user might pick, which is not a fight worth having.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _HeroNowEditing extends StatelessWidget {
   final Note note;
   final Color accentColor;
-  final Color heroColor;
-  final List<Shadow> shadows;
+
+  /// Card fill, matching the stats cards (`themeState.editorBgColor`).
+  final Color surfaceColor;
+
   final VoidCallback onTap;
 
   const _HeroNowEditing({
     required this.note,
     required this.accentColor,
-    required this.heroColor,
-    required this.shadows,
+    required this.surfaceColor,
     required this.onTap,
   });
 
@@ -2376,17 +2379,9 @@ class _HeroNowEditing extends StatelessWidget {
     final title = note.title.isNotEmpty ? note.title : 'Untitled';
     final timeAgo = _formatTimeAgoStatic(note.updatedAt);
 
-    // This card floats over the wallpaper, so everything about it follows the
-    // wallpaper — never Theme.brightness, which describes the app's light/dark
-    // mode and says nothing about the photo behind this pixel. heroColor is
-    // already chosen by WCAG contrast against that background, so its
-    // luminance is the one honest answer to "is it dark back there".
-    final onDarkBackdrop = heroColor.computeLuminance() > 0.5;
-
-    final titleColor = heroColor.withValues(alpha: 0.95);
-    // Held well above the old 0.60: this line is small, and a timestamp that
-    // dissolves into a bright patch of wallpaper may as well not be drawn.
-    final subtitleColor = heroColor.withValues(alpha: 0.78);
+    final isDark = theme.brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : Colors.black87;
+    final subtitleColor = isDark ? Colors.white54 : Colors.grey.shade500;
 
     return _PressButton(
       onTap: onTap,
@@ -2397,16 +2392,15 @@ class _HeroNowEditing extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              // Tinted against the text, and more opaque than before so the
-              // panel is a surface rather than a suggestion.
-              color: onDarkBackdrop
-                  ? Colors.black.withValues(alpha: 0.38)
-                  : Colors.white.withValues(alpha: 0.58),
+              // Same fill and opacity as _BlurredShapeCard, which is what
+              // makes the stats cards readable over any wallpaper. The old
+              // 0.45 was see-through enough that the photo set the contrast.
+              color: surfaceColor.withValues(alpha: isDark ? 0.72 : 0.82),
               borderRadius: BorderRadius.circular(14),
               border: Border.all(
-                color: onDarkBackdrop
-                    ? Colors.white.withValues(alpha: 0.14)
-                    : Colors.black.withValues(alpha: 0.08),
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.08)
+                    : Colors.white.withValues(alpha: 0.4),
                 width: 0.5,
               ),
             ),
@@ -2433,11 +2427,6 @@ class _HeroNowEditing extends StatelessWidget {
                       style: theme.textTheme.bodyMedium?.copyWith(
                         color: titleColor,
                         fontWeight: FontWeight.w700,
-                        // The same shadows the hero title uses. They were
-                        // already being passed in and simply never applied,
-                        // which is what left this text at the mercy of
-                        // whatever happened to be behind it.
-                        shadows: shadows,
                       ),
                     ),
                     Text(
@@ -2445,7 +2434,6 @@ class _HeroNowEditing extends StatelessWidget {
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: subtitleColor,
                         fontSize: 11,
-                        shadows: shadows,
                       ),
                     ),
                   ],
