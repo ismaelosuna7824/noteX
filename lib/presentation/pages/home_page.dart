@@ -152,8 +152,6 @@ class _HomePageState extends State<HomePage>
                   child: _ReminderCard(
                     accentColor: accentColor,
                     editorBgColor: themeState.editorBgColor,
-                    heroColor: heroColor,
-                    heroShadows: heroShadows,
                     onNavigateToReminders: () => appState.navigateToPage(7),
                   ),
                 ),
@@ -1921,15 +1919,11 @@ class _RecentActivityCardState extends State<_RecentActivityCard>
 class _ReminderCard extends StatelessWidget {
   final Color accentColor;
   final Color editorBgColor;
-  final Color heroColor;
-  final List<Shadow> heroShadows;
   final VoidCallback onNavigateToReminders;
 
   const _ReminderCard({
     required this.accentColor,
     required this.editorBgColor,
-    required this.heroColor,
-    required this.heroShadows,
     required this.onNavigateToReminders,
   });
 
@@ -1962,14 +1956,15 @@ class _ReminderCard extends StatelessWidget {
           width: 220,
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isDark
-                ? editorBgColor.withValues(alpha: 0.28)
-                : Colors.white.withValues(alpha: 0.38),
+            // Same fill and opacity as _BlurredShapeCard and the rest of the
+            // cards. At the old 0.28/0.38 the wallpaper decided whether this
+            // card could be read at all.
+            color: editorBgColor.withValues(alpha: isDark ? 0.72 : 0.82),
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.08)
-                  : Colors.white.withValues(alpha: 0.2),
+                  : Colors.white.withValues(alpha: 0.4),
               width: 0.5,
             ),
           ),
