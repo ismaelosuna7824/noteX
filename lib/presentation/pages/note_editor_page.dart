@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/note.dart';
+import '../../domain/services/mention_trigger.dart';
+import '../widgets/mention_overlay.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/security_state.dart';
@@ -45,6 +47,13 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   late TextEditingController _titleController;
   String? _loadedNoteId;
 
+  // ── @mention picker ───────────────────────────────────────────────────
+  /// The `@query` currently being composed, or null when no picker is open.
+  MentionQuery? _mentionQuery;
+
+  /// Gives the picker's keyboard handling somewhere to be driven from.
+  final GlobalKey<MentionOverlayState> _mentionOverlayKey = GlobalKey();
+
   // ── Tiling state (singleton, persisted to disk) ─────────────────────
   TilingState get _tiling => GetIt.instance<TilingState>();
 
@@ -78,6 +87,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _loadNote();
     // Register save callback so navigateToPage can flush before switching
     widget.appState.editorSaveCallback = _saveCurrentNote;
+    // The picker's arrow/Enter keys must beat the TextField to the event, and
+    // a Focus ancestor never would: EditableText consumes arrows before they
+    // bubble. Same process-wide handler the editor uses for Cmd/Ctrl+E.
+    HardwareKeyboard.instance.addHandler(_mentionKeyHandler);
+  }
+
+  /// Routes navigation keys to the mention picker while one is open.
+  ///
+  /// Returns false whenever no picker is showing, so ordinary typing, caret
+  /// movement and every other shortcut behave exactly as before.
+  bool _mentionKeyHandler(KeyEvent event) {
+    if (_mentionQuery == null) return false;
+    return _mentionOverlayKey.currentState?.handleKey(event) ?? false;
   }
 
   @override
@@ -97,6 +119,7 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   void dispose() {
+    HardwareKeyboard.instance.removeHandler(_mentionKeyHandler);
     _debounce?.cancel();
     _hideTimer?.cancel();
 
@@ -200,28 +223,46 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  // ── @mention (DEFERRED) ────────────────────────────────────────────────
-  //
-  // TODO(mentions): reimplement @mention detection + insertion.
-  // The former Quill implementation (an `@` back-scan listener on the
-  // QuillController, a floating `MentionOverlay`, and rich insertion of a
-  // `LinkAttribute('notex://<id>')` at the caret) was Quill-specific and could
-  // not be ported verbatim. It has been removed here rather than left as dead
-  // code (dead private members would trip analyzer unused_element warnings).
-  //
-  // The `MentionOverlay` widget (lib/presentation/widgets/mention_overlay.dart)
-  // is intentionally kept on disk for reuse by the reimplementation.
-  //
-  // Reimplementation is simpler than the Quill original because the editor is
-  // now a plain [TextField]: NoteMarkdownEditor holds a [TextEditingController]
-  // whose text IS the stored Markdown (there is no attributed-document layer).
-  //   * Back-scan `controller.text` from `controller.selection.baseOffset` on
-  //     change to detect a composing `@query` token, and drive MentionOverlay
-  //     from it.
-  //   * On picker selection, replace the composing `@query` range with an
-  //     ordinary Markdown link `[display](notex://<id>)`. No custom attribution
-  //     is needed — the preview renderer already produces a tappable link and
-  //     the existing notex:// routing (_openInternalNote) keeps working.
+  // ── @mention ──────────────────────────────────────────────────────────
+
+  /// Opens, updates or closes the picker as the editor reports the token.
+  ///
+  /// Only rebuilds when the token actually changes, so ordinary typing outside
+  /// a mention costs nothing.
+  void _onMentionQuery(MentionQuery? query) {
+    if (query == _mentionQuery) return;
+    setState(() => _mentionQuery = query);
+  }
+
+  /// Notes offerable for [currentNoteId], newest first.
+  ///
+  /// Excludes the note being edited — a note linking to itself is not a link —
+  /// and anything in the trash. The overlay does the query filtering.
+  List<Note> _mentionCandidates(String currentNoteId) {
+    final candidates = widget.appState.notes
+        .where((n) => n.id != currentNoteId && n.deletedAt == null)
+        .toList();
+    candidates.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    return candidates;
+  }
+
+  /// Replaces the composing `@query` with a Markdown link to [note].
+  void _commitMention(Note note) {
+    final trigger = _mentionQuery;
+    if (trigger == null) return;
+
+    final editorState = GlobalObjectKey<NoteMarkdownEditorState>(
+      '${widget.appState.currentNote?.id}#$_reloadCount',
+    ).currentState;
+
+    setState(() => _mentionQuery = null);
+
+    editorState?.commitMention(
+      trigger: trigger,
+      noteId: note.id,
+      displayText: note.title,
+    );
+  }
 
   /// Navigate to the note targeted by a `notex://<id>` internal link tap.
   void _openInternalNote(String noteId) {
@@ -402,37 +443,70 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     // (full, or minimal in compact mode) + the editor. The
                     // font-size / line-height controls ride in the toolbar row
                     // via `trailing` (hidden in compact mode, as before).
-                    child: NoteMarkdownEditor(
-                      key: ValueKey('${note.id}#$_reloadCount'),
-                      initialContent: note.content,
-                      initialViewMode: EditorViewModeName.fromName(
-                        widget.themeState.editorViewMode,
-                      ),
-                      onViewModeChanged: (mode) =>
-                          widget.themeState.setEditorViewMode(mode.name),
-                      autofocus: true,
-                      toolbar: isCompact
-                          ? EditorToolbarProfile.minimal
-                          : EditorToolbarProfile.full,
-                      fontSize: widget.themeState.editorFontSize,
-                      lineHeight: widget.themeState.editorLineHeight,
-                      textColor: noteColor != null
-                          ? (noteColor.computeLuminance() > 0.5
-                                ? Colors.black87
-                                : Colors.white)
-                          : widget.themeState.editorTextColor,
-                      trailing: isCompact
-                          ? null
-                          : EditorTextControls(
-                              themeState: widget.themeState,
-                              noteColor: noteColor,
+                    //
+                    // The Stack exists only to float the @mention picker over
+                    // the editor; with no mention open it adds a single child
+                    // and the layout is unchanged.
+                    child: Stack(
+                      children: [
+                        NoteMarkdownEditor(
+                          // GlobalObjectKey, not ValueKey: it keeps the same
+                          // per-note identity that forces a rebuild on note switch
+                          // AND exposes currentState so the picker can commit a
+                          // mention back into the editor.
+                          key: GlobalObjectKey<NoteMarkdownEditorState>(
+                            '${note.id}#$_reloadCount',
+                          ),
+                          initialContent: note.content,
+                          initialViewMode: EditorViewModeName.fromName(
+                            widget.themeState.editorViewMode,
+                          ),
+                          onViewModeChanged: (mode) =>
+                              widget.themeState.setEditorViewMode(mode.name),
+                          autofocus: true,
+                          toolbar: isCompact
+                              ? EditorToolbarProfile.minimal
+                              : EditorToolbarProfile.full,
+                          fontSize: widget.themeState.editorFontSize,
+                          lineHeight: widget.themeState.editorLineHeight,
+                          textColor: noteColor != null
+                              ? (noteColor.computeLuminance() > 0.5
+                                    ? Colors.black87
+                                    : Colors.white)
+                              : widget.themeState.editorTextColor,
+                          trailing: isCompact
+                              ? null
+                              : EditorTextControls(
+                                  themeState: widget.themeState,
+                                  noteColor: noteColor,
+                                ),
+                          onChanged: (markdown) {
+                            _latestMarkdown = markdown;
+                            _onUserEdit();
+                          },
+                          onInternalLink: _openInternalNote,
+                          onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                          onMentionQuery: _onMentionQuery,
+                        ),
+                        if (_mentionQuery != null)
+                          Positioned(
+                            left: 0,
+                            bottom: 0,
+                            child: MentionOverlay(
+                              key: _mentionOverlayKey,
+                              notes: _mentionCandidates(note.id),
+                              query: _mentionQuery!.query,
+                              onSelect: _commitMention,
+                              onDismiss: () =>
+                                  setState(() => _mentionQuery = null),
+                              accentColor: accentColor,
+                              bgColor: theme.colorScheme.surface,
+                              borderColor: chipBorder,
+                              textColor: theme.colorScheme.onSurface,
+                              mutedColor: theme.colorScheme.onSurfaceVariant,
                             ),
-                      onChanged: (markdown) {
-                        _latestMarkdown = markdown;
-                        _onUserEdit();
-                      },
-                      onInternalLink: _openInternalNote,
-                      onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                          ),
+                      ],
                     ),
                   ),
           ),

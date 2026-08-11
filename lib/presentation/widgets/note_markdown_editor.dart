@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 
+import '../../domain/services/mention_trigger.dart';
+import '../../domain/services/note_link_parser.dart';
 import '../../infrastructure/content/note_content_format.dart';
 import 'markdown_code_block_builder.dart';
 
@@ -69,6 +71,7 @@ class NoteMarkdownEditor extends StatefulWidget {
     this.lineHeight,
     this.textColor,
     this.trailing,
+    this.onMentionQuery,
   });
 
   /// Raw stored note content. May be Markdown or legacy Quill Delta JSON; it is
@@ -144,13 +147,20 @@ class NoteMarkdownEditor extends StatefulWidget {
   /// When null the control bar layout is unchanged.
   final Widget? trailing;
 
+  /// Called as the user types with the `@mention` token under the caret, or
+  /// null when no mention is open.
+  ///
+  /// The editor only *reports* the token — it does not search notes or render
+  /// a picker. The hosting surface decides what to show and calls
+  /// [NoteMarkdownEditorState.commitMention] when the user picks something,
+  /// so this widget stays free of any note-repository dependency.
+  final ValueChanged<MentionQuery?>? onMentionQuery;
+
   @override
-  State<NoteMarkdownEditor> createState() => _NoteMarkdownEditorState();
+  State<NoteMarkdownEditor> createState() => NoteMarkdownEditorState();
 }
 
-class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
-  static const _internalScheme = 'notex';
-
+class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// The editor instance that currently owns the global Cmd/Ctrl+E toggle.
   ///
   /// The toggle is delivered through a process-wide [HardwareKeyboard] handler
@@ -163,7 +173,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// last-interacted editor wins. The app's AnimatedSwitcher keeps the note
   /// editor and notes list from being co-mounted, so the common case is a single
   /// editor that always owns the toggle.
-  static _NoteMarkdownEditorState? _activeInstance;
+  static NoteMarkdownEditorState? _activeInstance;
 
   late final TextEditingController _controller;
 
@@ -465,17 +475,70 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
 
   void _handleTapLink(String text, String? href, String title) {
     if (href == null || href.isEmpty) return;
-    final uri = Uri.tryParse(href);
-    if (uri != null && uri.scheme == _internalScheme) {
-      // notex://<id> — the id is the host, falling back to the path for schemes
-      // parsed without an authority component.
-      final id = uri.host.isNotEmpty
-          ? uri.host
-          : uri.path.replaceFirst(RegExp(r'^/+'), '');
-      widget.onInternalLink?.call(id);
+    // Resolved through NoteLinkParser rather than re-parsed here, so tapping a
+    // link and indexing a backlink can never disagree about which note an
+    // href addresses.
+    final noteId = NoteLinkParser.noteIdFromHref(href);
+    if (noteId != null) {
+      widget.onInternalLink?.call(noteId);
     } else {
       widget.onExternalLink?.call(href);
     }
+  }
+
+  // --- @mention -------------------------------------------------------------
+
+  /// Forwards user typing to the host and reports the mention under the caret.
+  ///
+  /// Only reached for real user input: programmatic controller mutations do not
+  /// fire [TextField.onChanged], so loading a note never opens a picker.
+  void _handleChanged(String value) {
+    widget.onChanged(value);
+    _reportMentionQuery();
+  }
+
+  void _reportMentionQuery() {
+    final onMentionQuery = widget.onMentionQuery;
+    if (onMentionQuery == null) return;
+
+    final selection = _controller.selection;
+    // A range selection has no single caret to compose at, and an invalid
+    // offset means the field has not been placed yet.
+    if (!selection.isValid || !selection.isCollapsed) {
+      onMentionQuery(null);
+      return;
+    }
+
+    onMentionQuery(MentionTrigger.detect(
+      text: _controller.text,
+      caret: selection.baseOffset,
+    ));
+  }
+
+  /// Replaces the mention being composed with a link to [noteId].
+  ///
+  /// Called by the hosting surface once the user picks a note from its picker.
+  /// Mutating the controller programmatically does not fire
+  /// [TextField.onChanged], so [widget.onChanged] is invoked explicitly — the
+  /// same contract the toolbar inserts follow.
+  void commitMention({
+    required MentionQuery trigger,
+    required String noteId,
+    required String displayText,
+  }) {
+    final insertion = MentionTrigger.complete(
+      text: _controller.text,
+      trigger: trigger,
+      noteId: noteId,
+      displayText: displayText,
+    );
+
+    _controller.value = TextEditingValue(
+      text: insertion.text,
+      selection: TextSelection.collapsed(offset: insertion.caret),
+    );
+    widget.onChanged(insertion.text);
+    widget.onMentionQuery?.call(null);
   }
 
   // --- build ----------------------------------------------------------------
@@ -598,7 +661,7 @@ class _NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       child: TextField(
         controller: _controller,
         focusNode: _editFocusNode,
-        onChanged: widget.onChanged,
+        onChanged: _handleChanged,
         maxLines: null,
         minLines: null,
         expands: true,
