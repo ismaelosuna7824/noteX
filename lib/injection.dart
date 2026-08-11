@@ -35,6 +35,7 @@ import 'infrastructure/update/github_update_adapter.dart';
 
 import 'application/use_cases/create_note_use_case.dart';
 import 'application/use_cases/export_notes_use_case.dart';
+import 'application/use_cases/export_markdown_file_use_case.dart';
 import 'application/use_cases/export_single_note_use_case.dart';
 import 'application/use_cases/import_notes_use_case.dart';
 import 'application/use_cases/update_note_use_case.dart';
@@ -180,6 +181,13 @@ Future<void> setupDependencies() async {
   getIt.registerFactoryParam<ExportSingleNoteUseCase, String, void>(
     (filePath, _) => ExportSingleNoteUseCase(
       getIt<NoteRepository>(),
+      FileSystemNoteExportSink(p.dirname(filePath)),
+      p.basename(filePath),
+    ),
+  );
+  getIt.registerFactoryParam<ExportMarkdownFileUseCase, String, void>(
+    (filePath, _) => ExportMarkdownFileUseCase(
+      getIt<MarkdownFileRepository>(),
       FileSystemNoteExportSink(p.dirname(filePath)),
       p.basename(filePath),
     ),

@@ -24,7 +24,10 @@ class ExportSingleNoteUseCase {
 
     await _sink.write([
       NoteExportPlan.single(
-        note: note,
+        title: note.title,
+        content: note.content,
+        createdAt: note.createdAt,
+        updatedAt: note.updatedAt,
         // Notes predating the v1.50 migration still hold Quill Delta JSON.
         toMarkdown: NoteContentFormat.ensureMarkdown,
         fileName: _fileName,

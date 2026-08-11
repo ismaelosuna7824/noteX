@@ -92,29 +92,51 @@ class NoteExportPlan {
       final path = _claimPath(folder, sanitizeSegment(note.title), taken);
       entries.add(ExportEntry(
         path: path,
-        content: _render(note, toMarkdown),
+        content: _render(
+          title: note.title,
+          content: note.content,
+          createdAt: note.createdAt,
+          updatedAt: note.updatedAt,
+          toMarkdown: toMarkdown,
+        ),
       ));
     }
 
     return entries;
   }
 
-  /// Renders one note as a standalone file, for exporting a single note.
+  /// Renders one document as a standalone file, for a single-item export.
+  ///
+  /// Takes the fields rather than an entity so notes and Markdown files share
+  /// one renderer. Two of them would drift, and the day they did, the same
+  /// content would export differently depending on which library it lived in.
   ///
   /// [fileName] is the name the user picked in a save dialog, already vetted
   /// by the OS — it is used verbatim apart from ensuring the extension. When
   /// omitted the name is derived from the title, which is what a save dialog
   /// should be pre-filled with.
   static ExportEntry single({
-    required Note note,
+    required String title,
+    required String content,
+    required DateTime createdAt,
+    required DateTime updatedAt,
     required String Function(String) toMarkdown,
     String? fileName,
   }) {
     final name = fileName == null || fileName.trim().isEmpty
-        ? suggestedFileName(note.title)
+        ? suggestedFileName(title)
         : _withExtension(fileName.trim());
 
-    return ExportEntry(path: name, content: _render(note, toMarkdown));
+    return ExportEntry(
+      path: name,
+      content: _render(
+        title: title,
+        content: content,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+        toMarkdown: toMarkdown,
+      ),
+    );
   }
 
   /// File name to pre-fill a save dialog with for a note called [title].
@@ -185,21 +207,27 @@ class NoteExportPlan {
     return name;
   }
 
-  /// Renders a note's file body.
+  /// Renders a document's file body.
   ///
   /// YAML front matter carries the fields the filesystem cannot. The title
   /// especially: sanitising strips characters a real title may depend on, so
   /// without this the true title would only survive in mangled form.
-  static String _render(Note note, String Function(String) toMarkdown) {
+  static String _render({
+    required String title,
+    required String content,
+    required DateTime createdAt,
+    required DateTime updatedAt,
+    required String Function(String) toMarkdown,
+  }) {
     final buffer = StringBuffer()
       ..writeln('---')
-      ..writeln('title: ${_yamlString(note.title)}')
-      ..writeln('created: ${note.createdAt.toIso8601String()}')
-      ..writeln('updated: ${note.updatedAt.toIso8601String()}')
+      ..writeln('title: ${_yamlString(title)}')
+      ..writeln('created: ${createdAt.toIso8601String()}')
+      ..writeln('updated: ${updatedAt.toIso8601String()}')
       ..writeln('---')
       ..writeln();
 
-    buffer.write(toMarkdown(note.content));
+    buffer.write(toMarkdown(content));
     return buffer.toString();
   }
 

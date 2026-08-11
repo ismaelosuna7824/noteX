@@ -4,11 +4,14 @@ import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../application/use_cases/export_markdown_file_use_case.dart';
 import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
 import '../../domain/entities/note.dart';
+import '../../domain/services/note_export_plan.dart';
 import '../../domain/services/note_link_parser.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
@@ -185,6 +188,60 @@ class _MarkdownPageState extends State<MarkdownPage> {
         if (mounted) _saveStatus.value = '';
       });
     }
+  }
+
+  // ── Export ────────────────────────────────────────────────────────────
+
+  /// Saves the open Markdown file wherever the user chooses.
+  Future<void> _exportThisFile(BuildContext context) async {
+    final file = _mdState.currentFile;
+    if (file == null) return;
+
+    // Flush first and wait for it: the debounce may still be holding the last
+    // keystrokes, and the export reads the file back from the database.
+    await _awaitableSave();
+
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export Markdown file',
+      fileName: NoteExportPlan.suggestedFileName(
+        _titleController?.text ?? file.title,
+      ),
+      type: FileType.custom,
+      allowedExtensions: const ['md'],
+    );
+    // Null means the user dismissed the dialog — not an error.
+    if (path == null) return;
+
+    try {
+      final written =
+          await GetIt.instance<ExportMarkdownFileUseCase>(param1: path)
+              .execute(file.id);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(written ? 'Exported to $path' : 'That file is gone.'),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
+    }
+  }
+
+  /// [_forceSave] without the fire-and-forget, for callers that need the write
+  /// to have landed before they read the file back.
+  Future<void> _awaitableSave() async {
+    final fileId = _loadedFileId;
+    if (fileId == null || _contentController == null) return;
+
+    await _mdState.autoSaveService.forceSave(
+      fileId: fileId,
+      title: _titleController?.text ?? '',
+      content: _contentController!.text,
+    );
   }
 
   void _forceSave() {
@@ -1021,6 +1078,14 @@ class _MarkdownPageState extends State<MarkdownPage> {
                     const SizedBox(width: 6),
                     EditorTextControls(
                         themeState: widget.themeState, isMarkdown: true),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      onPressed: () => _exportThisFile(context),
+                      icon: const Icon(Icons.file_download_outlined, size: 18),
+                      tooltip: 'Export as Markdown',
+                      visualDensity: VisualDensity.compact,
+                      color: isDark ? Colors.white70 : Colors.grey.shade600,
+                    ),
                     const SizedBox(width: 6),
                     editorToggle,
                   ],

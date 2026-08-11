@@ -211,40 +211,44 @@ void main() {
     });
   });
 
-  group('single-note export', () {
+  group('single-document export', () {
+    /// Exports [n] the way a single-item export does, from its fields.
+    ExportEntry singleOf(Note n, {String? fileName}) => NoteExportPlan.single(
+          title: n.title,
+          content: n.content,
+          createdAt: n.createdAt,
+          updatedAt: n.updatedAt,
+          toMarkdown: (c) => c,
+          fileName: fileName,
+        );
+
     test('derives a file name from the title when none is given', () {
-      final entry = NoteExportPlan.single(
-        note: note(id: 'a', title: 'Q3: plan/review'),
-        toMarkdown: (c) => c,
+      expect(
+        singleOf(note(id: 'a', title: 'Q3: plan/review')).path,
+        'Q3- plan-review.md',
       );
-      expect(entry.path, 'Q3- plan-review.md');
     });
 
     test('uses the name the save dialog returned', () {
-      final entry = NoteExportPlan.single(
-        note: note(id: 'a', title: 'Ignored'),
-        toMarkdown: (c) => c,
-        fileName: 'What I typed.md',
+      expect(
+        singleOf(note(id: 'a', title: 'Ignored'), fileName: 'What I typed.md')
+            .path,
+        'What I typed.md',
       );
-      expect(entry.path, 'What I typed.md');
     });
 
     test('adds the extension when the dialog name lacks it', () {
-      final entry = NoteExportPlan.single(
-        note: note(id: 'a'),
-        toMarkdown: (c) => c,
-        fileName: 'No extension',
+      expect(
+        singleOf(note(id: 'a'), fileName: 'No extension').path,
+        'No extension.md',
       );
-      expect(entry.path, 'No extension.md');
     });
 
     test('falls back to the title when the dialog name is blank', () {
-      final entry = NoteExportPlan.single(
-        note: note(id: 'a', title: 'Fallback'),
-        toMarkdown: (c) => c,
-        fileName: '   ',
+      expect(
+        singleOf(note(id: 'a', title: 'Fallback'), fileName: '   ').path,
+        'Fallback.md',
       );
-      expect(entry.path, 'Fallback.md');
     });
 
     test('is byte-identical to the same note inside a full export', () {
@@ -255,13 +259,29 @@ void main() {
         projects: const [],
         toMarkdown: (c) => c,
       ).single;
-      final alone = NoteExportPlan.single(
-        note: subject,
+
+      expect(singleOf(subject).content, fromBatch.content);
+      expect(singleOf(subject).path, fromBatch.path);
+    });
+
+    test('a note and a Markdown file with the same fields export identically',
+        () {
+      // The two libraries share one renderer precisely so this holds; if it
+      // ever stops, the same content exports differently depending on which
+      // side of the app it was written on.
+      final subject = note(id: 'a', title: 'Shared', content: '# Body');
+
+      final asNote = singleOf(subject);
+      final asFile = NoteExportPlan.single(
+        title: subject.title,
+        content: subject.content,
+        createdAt: subject.createdAt,
+        updatedAt: subject.updatedAt,
         toMarkdown: (c) => c,
       );
 
-      expect(alone.content, fromBatch.content);
-      expect(alone.path, fromBatch.path);
+      expect(asFile.content, asNote.content);
+      expect(asFile.path, asNote.path);
     });
   });
 
