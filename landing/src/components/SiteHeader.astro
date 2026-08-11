@@ -1,6 +1,14 @@
 ---
 import { site } from '../data/site';
+import { getContent, alternatesFor, pathFor, toLang } from '../i18n';
 import GithubLink from './GithubLink.astro';
+
+const lang = toLang(Astro.currentLocale);
+const t = getContent(lang);
+
+// One other language today, but written as a list so adding a third does not
+// mean rediscovering this file.
+const others = alternatesFor(lang);
 
 /*
   The landing pattern calls for the primary CTA in two places: dominant in the
@@ -33,26 +41,43 @@ import GithubLink from './GithubLink.astro';
         href="#features"
         class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
       >
-        Features
+        {t.nav.features}
       </a>
       <a
         href="#graph"
         class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
       >
-        Graph
+        {t.nav.graph}
       </a>
       <a
         href="#tour"
         class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
       >
-        Tour
+        {t.nav.tour}
       </a>
       <a
         href="#faq"
         class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
       >
-        FAQ
+        {t.nav.faq}
       </a>
+
+      {
+        others.map((other) => (
+          <a
+            href={pathFor(other)}
+            hreflang={getContent(other).hreflang}
+            lang={getContent(other).hreflang}
+            class="flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-white/12 px-3 text-xs font-medium text-white/70 transition duration-200 hover:border-white/30 hover:bg-white/5 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-400"
+          >
+            <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3c2.5 2.7 2.5 15.3 0 18M12 3c-2.5 2.7-2.5 15.3 0 18" stroke-linecap="round" />
+            </svg>
+            {getContent(other).languageName}
+          </a>
+        ))
+      }
 
       <GithubLink />
 
@@ -66,7 +91,7 @@ import GithubLink from './GithubLink.astro';
         id="header-cta"
         class="pointer-events-none hidden max-w-0 cursor-pointer overflow-hidden rounded-full bg-clay-400 py-2 text-center font-semibold whitespace-nowrap text-ink-950 opacity-0 transition-all duration-300 hover:bg-clay-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-300 sm:block"
       >
-        Download
+        {t.nav.download}
       </a>
     </div>
   </div>

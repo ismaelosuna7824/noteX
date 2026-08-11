@@ -26,6 +26,11 @@
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
       },
       {
+        "//": "Same reason as `/` above, for the other locale: cleanUrls means this is requested as `/es`, which matches neither `/` nor `**/*.html`.",
+        "source": "/@(es)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+      },
+      {
         "source": "**/*.html",
         "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
       },

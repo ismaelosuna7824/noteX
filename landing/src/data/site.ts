@@ -1,18 +1,16 @@
 /**
- * Single source of truth for everything the page says about the product.
+ * Everything about the product that is the same in every language.
  *
- * Keeping copy here rather than inline in markup means a feature can be added
- * or a version bumped without touching layout, and the JSON-LD stays in step
- * with the visible page — search engines penalise the two disagreeing.
+ * All reader-facing copy moved to src/i18n/. What is left here is identity and
+ * structure: URLs, the version, asset filenames, icon paths. Those are shared
+ * by every locale, and a second copy of an SVG path is a second thing to
+ * forget — one of them ends up a year out of date.
  */
+
+import type { FeatureKey, PlatformKey, ShotKey } from '../i18n/types';
 
 export const site = {
   name: 'NoteX',
-  tagline: 'Immerse in your notes',
-  description:
-    'A beautiful desktop notes app for Windows, macOS and Linux. Markdown editing with live preview, linked notes, daily notes, focus timer and optional cloud sync — with your notes exportable as plain Markdown, always.',
-  shortDescription:
-    'Markdown notes that feel like a place you want to write. Free and open source.',
   // The origin deliberately does NOT live here. It is set once as `site` in
   // astro.config.mjs and read through Astro.site, because a second copy is a
   // second thing to forget: this one still pointed at GitHub Pages after the
@@ -30,7 +28,6 @@ export const site = {
   unlabelled cup in a row of logos is a button nobody presses.
 */
 export const support = {
-  label: 'Buy me a coffee',
   href: 'https://buymeacoffee.com/ismaelosuna',
 } as const;
 
@@ -48,153 +45,79 @@ export const social = [
   },
 ] as const;
 
-export type Download = {
-  platform: string;
-  file: string;
-  note: string;
-  icon: 'apple' | 'windows' | 'linux';
-};
-
-export const downloads: Download[] = [
+/** Download targets. Order here is the order shown; copy comes from the locale. */
+export const downloads: { key: PlatformKey; file: string; icon: string }[] = [
   {
-    platform: 'macOS',
+    key: 'macos',
     file: 'NoteX-macos.zip',
-    note: 'Apple silicon & Intel',
-    icon: 'apple',
+    icon: 'M16.365 1.43c0 1.14-.47 2.22-1.24 3.01-.85.9-2.25 1.6-3.4 1.5-.14-1.1.44-2.28 1.2-3.03.85-.86 2.32-1.5 3.44-1.48ZM20.5 17.2c-.6 1.38-.89 2-1.66 3.22-1.07 1.7-2.58 3.81-4.45 3.83-1.66.01-2.09-1.08-4.35-1.07-2.26.01-2.73 1.09-4.4 1.08-1.87-.02-3.3-1.93-4.37-3.62C-1.7 16.9-2 10.3.9 6.86 2.2 5.28 4.1 4.3 5.9 4.3c1.83 0 2.98 1.09 4.5 1.09 1.47 0 2.36-1.09 4.48-1.09 1.6 0 3.3.87 4.5 2.38-3.96 2.17-3.32 7.83.62 9.36-.5 1.4-.75 1.9-1.5 3.16Z',
   },
   {
-    platform: 'Windows',
+    key: 'windows',
     file: 'NoteX-windows-setup.exe',
-    note: 'Installer, 64-bit',
-    icon: 'windows',
+    icon: 'M0 3.45 9.75 2.1v9.45H0V3.45Zm10.95-1.5L24 0v11.55H10.95V1.95ZM0 12.75h9.75v9.45L0 20.85v-8.1Zm10.95 0H24V24l-13.05-1.8v-9.45Z',
   },
   {
-    platform: 'Linux',
+    key: 'linux',
     file: 'NoteX-linux.deb',
-    note: 'Debian & Ubuntu',
-    icon: 'linux',
+    icon: 'M12 0a5.5 5.5 0 0 0-5.5 5.5c0 1.9-.3 3.4-1 4.9-.9 2-2.1 3.6-2.1 5.6 0 1 .4 1.7 1.1 2.1.5.3.8.8.9 1.4.2 1.3 1.3 2.3 2.6 2.3.8 0 1.5-.4 2-1 .6.2 1.3.3 2 .3s1.4-.1 2-.3c.5.6 1.2 1 2 1 1.3 0 2.4-1 2.6-2.3.1-.6.4-1.1.9-1.4.7-.4 1.1-1.1 1.1-2.1 0-2-1.2-3.6-2.1-5.6-.7-1.5-1-3-1-4.9A5.5 5.5 0 0 0 12 0Zm-2.2 5.1c.5 0 .9.6.9 1.3s-.4 1.3-.9 1.3-.9-.6-.9-1.3.4-1.3.9-1.3Zm4.4 0c.5 0 .9.6.9 1.3s-.4 1.3-.9 1.3-.9-.6-.9-1.3.4-1.3.9-1.3ZM12 9.2c1.1 0 2.1.5 2.1 1s-1 1.4-2.1 1.4-2.1-.9-2.1-1.4 1-1 2.1-1Z',
   },
 ];
 
-/*
-  What the operating system says the first time you open an unsigned build.
-
-  Signing certificates are a paid subscription on both platforms — Apple's
-  Developer Program and a Windows code-signing certificate — so the releases
-  are built unsigned. That is a real cost to the person downloading, and the
-  honest thing is to say so before they meet a dialog whose most prominent
-  button is "Move to Trash".
-*/
-export const firstRun = [
+/**
+ * Feature order and icons. Heroicons-style path data, drawn inline to avoid an
+ * icon dependency. Titles and bodies live in the locale files, keyed to these.
+ */
+export const featureOrder: { key: FeatureKey; icon: string }[] = [
   {
-    platform: 'macOS',
-    warning: '"Apple could not verify NoteX.app is free of malware."',
-    steps: [
-      'Open System Settings → Privacy & Security.',
-      'Scroll to the Security section — it will name NoteX as blocked.',
-      'Click Open Anyway, then confirm.',
-    ],
-    // Worth stating outright: every guide still says to do this, and it has
-    // not worked since macOS 15.
-    note: 'On macOS 15 and later, right-clicking the app and choosing Open no longer works — Apple removed that route. The Privacy & Security panel is the way.',
-  },
-  {
-    platform: 'Windows',
-    warning: '"Windows protected your PC."',
-    steps: ['Click More info.', 'Click Run anyway.'],
-    note: null,
-  },
-] as const;
-
-export type Feature = {
-  title: string;
-  body: string;
-  /** Heroicons-style path data, drawn inline to avoid an icon dependency. */
-  icon: string;
-};
-
-export const features: Feature[] = [
-  {
-    title: 'Markdown, all the way down',
-    body: 'Write in plain Markdown with a live preview beside you, or split the view and watch both at once. What you type is exactly what gets stored — no proprietary format standing between you and your words.',
+    key: 'markdown',
     icon: 'M17.25 6.75 22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3-4.5 16.5',
   },
   {
-    title: 'Notes that link to notes',
-    body: 'Type @ and pick a note to drop a link right into your text. Follow it with a click and your thinking starts forming a shape instead of a pile.',
+    key: 'links',
     icon: 'M13.19 8.688a4.5 4.5 0 0 1 1.242 7.244l-4.5 4.5a4.5 4.5 0 0 1-6.364-6.364l1.757-1.757m13.35-.622 1.757-1.757a4.5 4.5 0 0 0-6.364-6.364l-4.5 4.5a4.5 4.5 0 0 0 1.242 7.244',
   },
   {
-    title: 'The graph of it all',
-    body: 'Every link draws an edge. Open the graph to see your whole library laid out, or toggle the panel beside the editor to see just what the note in front of you connects to. Drag notes around, focus one to dim the rest, click through to open it.',
+    key: 'graph',
     icon: 'M12 4.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm-6.75 10.5a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5Zm13.5 0a2.25 2.25 0 1 0 0 4.5 2.25 2.25 0 0 0 0-4.5ZM10.4 8.85l-3.55 5.3m6.75-5.3 3.55 5.3m-9.65 2.6h9.1',
   },
   {
-    title: 'A note for every day',
-    body: 'Today\'s note is waiting when you open the app, titled and ready. Browse the whole month on a calendar and find the day you are looking for.',
+    key: 'daily',
     icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5',
   },
   {
-    title: 'One search, everything',
-    body: 'Search once and reach your notes and your Markdown files together, each result labelled and opened where it lives. No remembering which side you filed it under.',
+    key: 'search',
     icon: 'm21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z',
   },
   {
-    title: 'Folders that nest',
-    body: 'Group notes into colour-coded projects, nest them as deep as your thinking needs, and filter the sidebar down to just the branch you care about.',
+    key: 'folders',
     icon: 'M2.25 12.75V12A2.25 2.25 0 0 1 4.5 9.75h15A2.25 2.25 0 0 1 21.75 12v.75m-8.69-6.44-2.12-2.12a1.5 1.5 0 0 0-1.061-.44H4.5A2.25 2.25 0 0 0 2.25 5.25v13.5A2.25 2.25 0 0 0 4.5 21h15a2.25 2.25 0 0 0 2.25-2.25V9a2.25 2.25 0 0 0-2.25-2.25h-5.379a1.5 1.5 0 0 1-1.06-.44Z',
   },
   {
-    title: 'Several notes at once',
-    body: 'Tile the window into a grid and work across notes side by side. Every pane keeps its own toolbar, preview toggle and auto-save, so drafting one note out of three others stops meaning constant tab-switching.',
+    key: 'tiling',
     icon: 'M3.75 6A2.25 2.25 0 0 1 6 3.75h2.25A2.25 2.25 0 0 1 10.5 6v2.25a2.25 2.25 0 0 1-2.25 2.25H6a2.25 2.25 0 0 1-2.25-2.25V6ZM3.75 15.75A2.25 2.25 0 0 1 6 13.5h2.25a2.25 2.25 0 0 1 2.25 2.25V18a2.25 2.25 0 0 1-2.25 2.25H6A2.25 2.25 0 0 1 3.75 18v-2.25ZM13.5 6a2.25 2.25 0 0 1 2.25-2.25H18A2.25 2.25 0 0 1 20.25 6v2.25A2.25 2.25 0 0 1 18 10.5h-2.25a2.25 2.25 0 0 1-2.25-2.25V6ZM13.5 15.75a2.25 2.25 0 0 1 2.25-2.25H18a2.25 2.25 0 0 1 2.25 2.25V18A2.25 2.25 0 0 1 18 20.25h-2.25A2.25 2.25 0 0 1 13.5 18v-2.25Z',
   },
+  { key: 'focus', icon: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z' },
   {
-    title: 'Focus time, tracked',
-    body: 'Start a timer against a project and see the week add up. Writing stats keep a streak from the days you actually wrote, not the days you happened to open the app.',
-    icon: 'M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z',
-  },
-  {
-    title: 'Yours to take',
-    body: 'Export the whole library to a folder of .md files, folders and all, or save one note wherever you like. Import a folder back just as easily. Your notes outlive the app.',
+    key: 'export',
     icon: 'M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3',
   },
   {
-    title: 'Sync if you want it',
-    body: 'Sign in and your notes follow you across devices. Skip it and everything stays on your machine, in a local database. The choice is yours, and it is reversible.',
+    key: 'sync',
     icon: 'M2.25 15a4.5 4.5 0 0 0 4.5 4.5H18a3.75 3.75 0 0 0 1.332-7.257 3 3 0 0 0-3.758-3.848 5.25 5.25 0 0 0-10.233 2.33A4.502 4.502 0 0 0 2.25 15Z',
   },
   {
-    title: 'Make it yours',
-    body: 'Thirteen accent colours, your own wallpaper or a looping video behind the glass, seven fonts, and type sizing that stays out of your way. The accent even adapts itself to your background.',
+    key: 'personalise',
     icon: 'M4.098 19.902a3.75 3.75 0 0 0 5.304 0l6.401-6.402M6.75 21A3.75 3.75 0 0 1 3 17.25V4.125C3 3.504 3.504 3 4.125 3h5.25c.621 0 1.125.504 1.125 1.125v4.5m0 0 3.712 3.712M10.5 8.625a1.875 1.875 0 1 1-3.75 0 1.875 1.875 0 0 1 3.75 0Z',
   },
 ];
 
-/** Answers the questions people actually ask before downloading. */
-export const faqs = [
-  {
-    q: 'Is NoteX free?',
-    a: 'Yes. NoteX is free and open source under the MIT licence. There is no account required, no subscription and no paid tier. If it earns a place in your day, there is a Buy me a coffee link in the footer — entirely optional, and nothing is held back without it.',
-  },
-  {
-    q: 'Where are my notes stored?',
-    a: 'In a local SQLite database on your own machine. If you sign in, notes also sync to your Supabase project so they follow you across devices — but signing in is entirely optional.',
-  },
-  {
-    q: 'Can I get my notes out?',
-    a: 'Any time. Export the whole library to a folder of Markdown files, keeping your folder structure, or save a single note wherever you like. Notes are stored as Markdown already, so nothing is converted on the way out.',
-  },
-  {
-    q: 'Why does my Mac say NoteX cannot be verified?',
-    a: 'Because the build is not signed with a paid developer certificate, so macOS cannot check a receipt for it — it is not a finding about the code. To open it: System Settings → Privacy & Security → scroll to Security → Open Anyway. Note that on macOS 15 and later, right-clicking the app and choosing Open no longer works; Apple removed that route. Windows shows a comparable "Windows protected your PC" notice, where More info → Run anyway gets past it. The full source is public if you would rather read it or build it yourself.',
-  },
-  {
-    q: 'Which platforms does it run on?',
-    a: 'Windows, macOS and Linux. Every release ships all three, built from the same source.',
-  },
-  {
-    q: 'Does it work offline?',
-    a: 'Completely. NoteX is a local-first desktop app: everything works with no connection, and sync catches up when you are back online.',
-  },
-];
+/** Tour order. The images are imported in the component; the copy is keyed. */
+export const shotOrder: ShotKey[] = ['home', 'editor', 'calendar', 'timer', 'tiling', 'settings'];
+
+/*
+  Which platforms get first-run instructions. The wording each OS shows is NOT
+  here: an operating system speaks the reader's language, so the quote is part
+  of the translation, not of the product data.
+*/
+export const firstRunPlatforms = [{ key: 'macos' }, { key: 'windows' }] as const;

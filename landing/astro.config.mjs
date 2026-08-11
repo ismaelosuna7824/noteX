@@ -14,7 +14,40 @@ export default defineConfig({
   site: 'https://notex.fun',
   trailingSlash: 'ignore',
 
-  integrations: [sitemap()],
+  // English at `/`, Spanish at `/es`. The default locale is not prefixed so
+  // the bare domain serves a page directly: prefixing both would turn the
+  // most-linked URL there is into a redirect.
+  i18n: {
+    defaultLocale: 'en',
+    locales: ['en', 'es'],
+    routing: { prefixDefaultLocale: false },
+  },
+
+  // Passing the locales here is what makes the sitemap emit <xhtml:link
+  // rel="alternate"> for each page. Without it the two languages look like
+  // unrelated URLs to a crawler, and one of them gets treated as duplicate.
+  integrations: [
+    sitemap({
+      i18n: {
+        defaultLocale: 'en',
+        locales: { en: 'en', es: 'es' },
+      },
+
+      // The sitemap builds its URLs from the built file paths, so it emits
+      // `/es/` while the pages declare `/es` as canonical — and a sitemap
+      // listing a URL whose canonical points elsewhere is exactly what gets
+      // reported as a duplicate. Strip the trailing slash from both the loc
+      // and its alternates so every URL this site publishes agrees.
+      serialize(item) {
+        const trim = (url) => url.replace(/(.+)\/$/, '$1');
+
+        item.url = trim(item.url);
+        item.links = item.links?.map((link) => ({ ...link, url: trim(link.url) }));
+
+        return item;
+      },
+    }),
+  ],
 
   vite: {
     plugins: [tailwindcss()],

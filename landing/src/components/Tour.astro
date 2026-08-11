@@ -6,6 +6,8 @@ import calendar from '../assets/calendar.png';
 import timer from '../assets/timer.png';
 import tiling from '../assets/tiling.png';
 import settings from '../assets/settings.png';
+import { shotOrder } from '../data/site';
+import { getContent, toLang } from '../i18n';
 
 /*
   Each shot is paired with the claim it proves. A screenshot with a generic
@@ -13,60 +15,23 @@ import settings from '../assets/settings.png';
   like when I use it" is the reason people scroll this far.
 
   `alt` text describes what is on screen for anyone who cannot see it, and is
-  also the only thing image search has to go on.
+  also the only thing image search has to go on — so it is translated too, not
+  left in English on the Spanish page.
+
+  Images are imported here and paired by key; the words live in src/i18n.
 */
-const shots = [
-  {
-    image: home,
-    eyebrow: 'Home',
-    title: 'Open to a room, not a form',
-    body: 'Today\'s note, your writing streak, what you were last editing and anything still pending — all against a backdrop you chose. Everything one click away, nothing demanding attention.',
-    alt: 'NoteX home screen showing the daily note, total notes, a writing streak chart and pending reminders over a full-bleed wallpaper',
-  },
-  {
-    image: editor,
-    eyebrow: 'Editor',
-    title: 'Source on the left, result on the right',
-    body: 'Full Markdown: headings, task lists, tables, footnotes, code blocks with syntax highlighting. Split the view to see both, or press Cmd/Ctrl+E to flip between them.',
-    alt: 'The NoteX editor in split view, raw Markdown on the left and the rendered document on the right, with a formatting toolbar above',
-  },
-  {
-    image: calendar,
-    eyebrow: 'Calendar',
-    title: 'Find the day, find the note',
-    body: 'Every daily note lands on the calendar. Dots mark the days you wrote, so a month of work is legible at a glance and any day is one click away.',
-    alt: 'Monthly calendar view in NoteX with markers on days that have notes, and the selected day\'s notes listed beside it',
-  },
-  {
-    image: timer,
-    eyebrow: 'Focus timer',
-    title: 'Time what you are working on',
-    body: 'Start a timer against a project, let it run while you write, and watch the week total build. Your focus sessions live in the same app as the work itself.',
-    alt: 'The NoteX focus timer with a task input, project selector, running clock and this week\'s tracked total',
-  },
-  {
-    image: tiling,
-    eyebrow: 'Tiling',
-    title: 'Four notes, one screen',
-    body: 'Split the window into a grid and edit several notes side by side. Each pane keeps its own toolbar, its own preview toggle and its own auto-save — useful when you are drafting one note out of three others.',
-    alt: 'NoteX in tiling mode with four Markdown notes open in a two-by-two grid, each with its own toolbar and cursor',
-  },
-  {
-    image: settings,
-    eyebrow: 'Personalise',
-    title: 'Make it somewhere you want to be',
-    body: 'Thirteen accent colours that can adapt themselves to your background, your own image or looping video behind the glass, seven fonts, and type sizing tuned to your eyes.',
-    alt: 'NoteX settings showing accent colour swatches, theme backgrounds, sidebar icon colours, background video picker and font family list',
-  },
-];
+const t = getContent(toLang(Astro.currentLocale));
+
+const images = { home, editor, calendar, timer, tiling, settings };
+const shots = shotOrder.map((key) => ({ key, image: images[key], ...t.tour.shots[key] }));
 ---
 
 <section id="tour" class="scroll-mt-24 border-y border-white/5 bg-ink-900/40 py-24 lg:py-32">
   <div class="mx-auto max-w-6xl px-6">
     <div class="max-w-2xl" data-reveal>
-      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">A look around</h2>
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">{t.tour.heading}</h2>
       <p class="mt-5 text-lg leading-relaxed text-white/60">
-        Six screens, six things it does well.
+        {t.tour.body}
       </p>
     </div>
 

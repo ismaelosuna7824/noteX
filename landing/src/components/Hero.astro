@@ -1,6 +1,9 @@
 ---
 import { site } from '../data/site';
+import { getContent, toLang } from '../i18n';
 import { getRepoStats, formatCount } from '../lib/github';
+
+const t = getContent(toLang(Astro.currentLocale));
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 const { stars } = await getRepoStats();
@@ -63,7 +66,7 @@ const { stars } = await getRepoStats();
               loop
               playsinline
               preload="metadata"
-              aria-label="Screen recording of NoteX: writing a note, switching to split view and browsing the calendar"
+              aria-label={t.hero.videoLabel}
             >
               <source src={`${base}/video/hero.webm`} type="video/webm" />
               <source src={`${base}/video/hero.mp4`} type="video/mp4" />
@@ -84,12 +87,12 @@ const { stars } = await getRepoStats();
                 d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.31l-5.8 3.05 1.11-6.46-4.7-4.58 6.49-.94L12 2.5z"
               ></path>
             </svg>
-            {stars !== null ? `${formatCount(stars)} on GitHub` : 'Open source on GitHub'}
+            {stars !== null ? `${formatCount(stars)} ${t.hero.starsSuffix}` : t.hero.starsFallback}
           </span>
           <span class="hidden h-4 w-px bg-white/15 sm:block"></span>
-          <span>MIT licensed</span>
+          <span>{t.hero.licensed}</span>
           <span class="hidden h-4 w-px bg-white/15 sm:block"></span>
-          <span>No account required</span>
+          <span>{t.hero.noAccount}</span>
         </div>
 
         <h1
@@ -97,11 +100,14 @@ const { stars } = await getRepoStats();
           class="text-5xl font-bold leading-[1.02] tracking-tight text-balance sm:text-6xl xl:text-7xl"
           style="transition-delay:80ms"
         >
-          Writing should
+          {/* Explicit space: Astro collapses whitespace between a text node
+              and an element on the next line, which ran the two halves of the
+              headline together as "shouldfeel". */}
+          {t.hero.headlineLead}{' '}
           <span
             class="bg-gradient-to-br from-clay-200 via-clay-300 to-clay-500 bg-clip-text text-transparent"
           >
-            feel like this.
+            {t.hero.headlineAccent}
           </span>
         </h1>
 
@@ -110,8 +116,7 @@ const { stars } = await getRepoStats();
           class="mt-6 max-w-xl text-lg leading-relaxed text-pretty text-white/60 sm:text-xl"
           style="transition-delay:160ms"
         >
-          Markdown notes with live preview, links between your pages, a note for every day and a
-          focus timer — kept as plain files you can take with you.
+          {t.hero.subheading}
         </p>
 
         <div
@@ -123,7 +128,7 @@ const { stars } = await getRepoStats();
             href="#download"
             class="inline-flex cursor-pointer items-center gap-2.5 rounded-full bg-clay-400 px-7 py-3.5 font-semibold text-ink-950 shadow-lg shadow-clay-600/25 transition duration-200 hover:-translate-y-0.5 hover:bg-clay-300 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-300"
           >
-            Download free
+            {t.hero.ctaPrimary}
             <svg class="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path
                 d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5h-2v2H5v-2H3ZM12 3v10.2l3.6-3.6 1.4 1.4-6 6-6-6 1.4-1.4 3.6 3.6V3h2Z"
@@ -134,12 +139,12 @@ const { stars } = await getRepoStats();
             href="#tour"
             class="inline-flex cursor-pointer items-center gap-2.5 rounded-full border border-white/20 px-7 py-3.5 font-semibold text-white/90 transition duration-200 hover:border-white/45 hover:bg-white/5 hover:text-white active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-400"
           >
-            See it in action
+            {t.hero.ctaSecondary}
           </a>
         </div>
 
         <p data-reveal class="mt-6 text-sm text-white/40" style="transition-delay:300ms">
-          Windows · macOS · Linux · v{site.version}
+          {t.hero.platforms} · v{site.version}
         </p>
       </div>
     </div>

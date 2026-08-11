@@ -1,4 +1,6 @@
 ---
+import { getContent, toLang } from '../i18n';
+
 /*
   The value-prop strip the landing pattern places between the hero and the
   feature grid.
@@ -7,21 +9,16 @@
   the star count and the no-account claim, and repeating them here would read
   as padding. These four say what you get instead of why to believe it.
 */
-const values = [
-  { label: 'Live preview', detail: 'See it as you type' },
-  { label: 'Linked notes', detail: 'Type @ to connect' },
-  { label: 'Daily pages', detail: 'Ready when you open' },
-  { label: 'Plain Markdown', detail: 'Yours to export' },
-];
+const t = getContent(toLang(Astro.currentLocale));
 ---
 
-<section aria-label="At a glance" class="mx-auto max-w-6xl px-6">
+<section aria-label={t.values.ariaLabel} class="mx-auto max-w-6xl px-6">
   <ul
     data-reveal-stagger
     class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/8 bg-white/8 sm:grid-cols-4"
   >
     {
-      values.map((value) => (
+      t.values.items.map((value) => (
         <li class="bg-ink-950 px-5 py-6 text-center">
           <p class="font-semibold text-white/90">{value.label}</p>
           <p class="mt-1 text-sm text-white/45">{value.detail}</p>
