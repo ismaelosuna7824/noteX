@@ -21,6 +21,15 @@
   --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
 
   --radius-card: 1.5rem;
+
+  /*
+    Easing curves matched to the GSAP names the design system specified, so
+    the motion reads the same without shipping 34 kB of animation library to
+    do fades and staggers an IntersectionObserver already handles.
+  */
+  --ease-power1-out: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  --ease-expo-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-back-out: cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 /*
@@ -34,6 +43,49 @@
   border: 1px solid color-mix(in srgb, white 8%, transparent);
 }
 
+/*
+  Scroll reveals.
+
+  The hidden state is applied by JavaScript adding `.js-motion` to <html>, not
+  by this stylesheet. Without it every section renders visible — which is what
+  a crawler, a reader-mode parser, or anyone with JS disabled gets. Hiding
+  below-the-fold content by default and hoping a script un-hides it is how
+  landing pages quietly disappear from search results.
+*/
+.js-motion [data-reveal] {
+  opacity: 0;
+  transform: translateY(12px);
+}
+
+[data-reveal] {
+  transition:
+    opacity 0.35s var(--ease-power1-out),
+    transform 0.35s var(--ease-power1-out);
+}
+
+[data-reveal].is-visible {
+  opacity: 1;
+  transform: none;
+}
+
+/* Stagger tier: a touch more travel and an overshoot, per the motion preset. */
+.js-motion [data-reveal-stagger] > * {
+  opacity: 0;
+  transform: translateY(16px) scale(0.96);
+}
+
+[data-reveal-stagger] > * {
+  transition:
+    opacity 0.4s var(--ease-expo-out),
+    transform 0.4s var(--ease-back-out);
+  transition-delay: calc(var(--stagger-index, 0) * 60ms);
+}
+
+[data-reveal-stagger].is-visible > * {
+  opacity: 1;
+  transform: none;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -45,7 +97,11 @@
     color: color-mix(in srgb, white 92%, transparent);
   }
 
-  /* Respect people who asked their system for less movement. */
+  /*
+    Respect people who asked their system for less movement. Reveals collapse
+    to their visible state rather than to nothing: the point is to remove the
+    motion, not the content.
+  */
   @media (prefers-reduced-motion: reduce) {
     html {
       scroll-behavior: auto;
@@ -57,6 +113,12 @@
       animation-duration: 0.01ms !important;
       animation-iteration-count: 1 !important;
       transition-duration: 0.01ms !important;
+    }
+
+    .js-motion [data-reveal],
+    .js-motion [data-reveal-stagger] > * {
+      opacity: 1 !important;
+      transform: none !important;
     }
   }
 }

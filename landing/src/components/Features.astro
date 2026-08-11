@@ -3,7 +3,7 @@ import { features } from '../data/site';
 ---
 
 <section id="features" class="mx-auto max-w-6xl scroll-mt-24 px-6 py-24 lg:py-32">
-  <div class="max-w-2xl">
+  <div class="max-w-2xl" data-reveal>
     <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">
       Everything a notes app should have.
       <span class="text-white/50">Nothing it shouldn't.</span>
@@ -14,10 +14,10 @@ import { features } from '../data/site';
     </p>
   </div>
 
-  <ul class="mt-16 grid gap-x-10 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+  <ul data-reveal-stagger class="mt-16 grid gap-x-10 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
     {
       features.map((feature) => (
-        <li>
+        <li class="group">
           <div class="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-clay-400/10 text-clay-300 ring-1 ring-clay-400/20">
             <svg
               class="h-5 w-5"

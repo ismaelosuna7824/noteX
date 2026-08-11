@@ -20,7 +20,7 @@ const icons: Record<string, string> = {
 ---
 
 <section id="download" class="mx-auto max-w-6xl scroll-mt-24 px-6 py-24 lg:py-32">
-  <div class="glass rounded-card px-8 py-14 sm:px-14">
+  <div data-reveal class="glass rounded-card px-8 py-14 sm:px-14">
     <div class="max-w-2xl">
       <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Start writing tonight</h2>
       <p class="mt-5 text-lg leading-relaxed text-white/60">
@@ -28,14 +28,15 @@ const icons: Record<string, string> = {
       </p>
     </div>
 
-    <ul class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+    <ul data-reveal-stagger class="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {
         downloads.map((download) => (
           <li>
             <a
               href={assetUrl(download.file)}
-              rel="noopener"
-              class="group flex h-full flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition hover:border-clay-400/40 hover:bg-white/[0.06]"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="group flex h-full cursor-pointer flex-col rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition duration-200 hover:-translate-y-1 hover:border-clay-400/40 hover:bg-white/[0.06] active:translate-y-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-400"
             >
               <svg
                 class="h-7 w-7 text-white/70 transition group-hover:text-clay-300"
@@ -59,7 +60,8 @@ const icons: Record<string, string> = {
 
     <p class="mt-10 text-sm text-white/45">
       Version {site.version} · MIT licensed ·
-      <a href={site.releases} rel="noopener" class="underline underline-offset-4 hover:text-white/70">
+      <a href={site.releases} target="_blank"
+              rel="noopener noreferrer" class="underline underline-offset-4 hover:text-white/70">
         All releases and changelog
       </a>
     </p>

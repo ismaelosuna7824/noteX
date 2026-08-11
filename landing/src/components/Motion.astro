@@ -1,0 +1,61 @@
+---
+/*
+  The whole motion runtime: one IntersectionObserver, no dependencies.
+
+  The design system called for Scroll Reveal (subtle) and Stagger List
+  (standard) — 12-16px of travel, 350-400ms, expo/back easing. Those are
+  transitions, and CSS already does transitions. GSAP + ScrollTrigger would
+  add ~34 kB gzip to express the same three lines.
+*/
+---
+
+<script is:inline>
+  (() => {
+    // Marks that JS is running, which is what switches on the hidden initial
+    // state. Set before first paint so nothing flashes in and back out.
+    document.documentElement.classList.add('js-motion');
+
+    const start = () => {
+      const stillness = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+      const targets = document.querySelectorAll('[data-reveal], [data-reveal-stagger]');
+
+      // No observer, or motion turned down: show everything immediately.
+      if (stillness.matches || !('IntersectionObserver' in window)) {
+        targets.forEach((el) => el.classList.add('is-visible'));
+        return;
+      }
+
+      // Children of a stagger group get their delay from their index, so the
+      // wave order survives any DOM reshuffle.
+      document.querySelectorAll('[data-reveal-stagger]').forEach((group) => {
+        Array.from(group.children).forEach((child, index) => {
+          child.style.setProperty('--stagger-index', String(index));
+        });
+      });
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (!entry.isIntersecting) return;
+            entry.target.classList.add('is-visible');
+            // Reveal once. Re-animating on every scroll past is the thing
+            // that turns a nice touch into a nuisance.
+            observer.unobserve(entry.target);
+          });
+        },
+        // Matches the preset's 'top 90%' trigger: fire just before the
+        // element reaches the fold, so it is already settled when read.
+        { rootMargin: '0px 0px -10% 0px', threshold: 0.1 },
+      );
+
+      targets.forEach((el) => observer.observe(el));
+    };
+
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', start, { once: true });
+    } else {
+      start();
+    }
+  })();
+</script>

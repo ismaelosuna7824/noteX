@@ -1,118 +1,210 @@
 ---
 import { site } from '../data/site';
+import GithubLink from './GithubLink.astro';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 ---
 
-<section class="relative isolate min-h-[92svh] overflow-hidden">
+<header class="relative isolate overflow-hidden">
   <!--
-    The poster carries the first paint, so the hero has something to show
-    before 1.4 MB of video has arrived. The video fades in over it once it can
-    actually play, rather than flashing an empty black box.
+    Ambient light, the signature of the style this page is built in. Two slow
+    blobs behind everything, blurred past recognition so they read as glow
+    rather than shapes. Decorative only — never behind body copy.
   -->
-  <video
-    id="hero-video"
-    class="absolute inset-0 -z-10 h-full w-full object-cover opacity-0 transition-opacity duration-1000"
-    poster={`${base}/video/hero-poster.jpg`}
-    autoplay
-    muted
-    loop
-    playsinline
-    preload="metadata"
-    aria-hidden="true"
-    tabindex="-1"
-  >
-    <source src={`${base}/video/hero.webm`} type="video/webm" />
-    <source src={`${base}/video/hero.mp4`} type="video/mp4" />
-  </video>
-
-  <!-- Poster as a static backdrop for anyone whose browser blocks autoplay. -->
-  <div
-    class="absolute inset-0 -z-20 bg-cover bg-center"
-    style={`background-image:url('${base}/video/hero-poster.jpg')`}
-    aria-hidden="true"
-  >
+  <div class="pointer-events-none absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+    <div
+      class="ambient absolute -top-40 -left-32 h-[38rem] w-[38rem] rounded-full bg-clay-500/20 blur-[120px]"
+    >
+    </div>
+    <div
+      class="ambient ambient--slow absolute -top-24 right-0 h-[32rem] w-[32rem] rounded-full bg-indigo-500/10 blur-[120px]"
+    >
+    </div>
+    <div class="absolute inset-x-0 bottom-0 h-64 bg-gradient-to-b from-transparent to-ink-950"></div>
   </div>
 
-  <!--
-    Two scrims, not one: a downward gradient so the nav and headline hold their
-    contrast, and a bottom fade that hands off into the next section instead of
-    cutting the video off with a hard edge.
-  -->
-  <div
-    class="absolute inset-0 -z-10 bg-gradient-to-b from-ink-950/85 via-ink-950/55 to-ink-950"
-    aria-hidden="true"
-  >
-  </div>
-
-  <div class="mx-auto flex min-h-[92svh] max-w-6xl flex-col px-6">
+  <div class="mx-auto max-w-6xl px-6">
     <nav class="flex items-center justify-between py-6" aria-label="Main">
       <span class="text-lg font-bold tracking-tight">{site.name}</span>
+
       <div class="flex items-center gap-6 text-sm">
-        <a href="#features" class="hidden text-white/70 transition hover:text-white sm:block">
+        <a
+          href="#features"
+          class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
+        >
           Features
         </a>
-        <a href="#tour" class="hidden text-white/70 transition hover:text-white sm:block">Tour</a>
-        <a href="#faq" class="hidden text-white/70 transition hover:text-white sm:block">FAQ</a>
         <a
-          href={site.repo}
-          rel="noopener"
-          class="rounded-full border border-white/15 px-4 py-1.5 font-medium text-white/90 transition hover:border-white/40 hover:text-white"
+          href="#tour"
+          class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
         >
-          GitHub
+          Tour
         </a>
+        <a
+          href="#faq"
+          class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
+        >
+          FAQ
+        </a>
+        <GithubLink />
       </div>
     </nav>
 
-    <div class="flex flex-1 flex-col justify-center py-16">
-      <p class="mb-5 flex items-center gap-2 text-sm font-medium text-clay-300">
-        <span class="inline-block h-1.5 w-1.5 rounded-full bg-clay-400"></span>
-        Free and open source · v{site.version}
+    <div class="pt-16 pb-10 text-center sm:pt-24">
+      <p
+        data-reveal
+        class="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/70"
+      >
+        <span class="relative flex h-1.5 w-1.5">
+          <span
+            class="absolute inline-flex h-full w-full animate-ping rounded-full bg-clay-400 opacity-75"
+          ></span>
+          <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-clay-300"></span>
+        </span>
+        v{site.version} is out — free and open source
       </p>
 
-      <h1 class="max-w-3xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+      <h1
+        data-reveal
+        class="mx-auto max-w-4xl text-5xl font-bold leading-[1.03] tracking-tight text-balance sm:text-6xl lg:text-7xl"
+        style="transition-delay:80ms"
+      >
         Immerse in
-        <span class="block text-clay-200">your notes</span>
+        <span
+          class="bg-gradient-to-br from-clay-200 via-clay-300 to-clay-500 bg-clip-text text-transparent"
+        >
+          your notes
+        </span>
       </h1>
 
-      <p class="mt-7 max-w-xl text-lg leading-relaxed text-white/70">
-        {site.description}
+      <p
+        data-reveal
+        class="mx-auto mt-7 max-w-2xl text-lg leading-relaxed text-pretty text-white/65 sm:text-xl"
+        style="transition-delay:160ms"
+      >
+        Markdown notes that feel like somewhere you want to write. Live preview, linked notes, daily
+        pages and a focus timer — stored as plain files you can take with you.
       </p>
 
-      <div class="mt-10 flex flex-wrap items-center gap-4">
+      <div
+        data-reveal
+        class="mt-10 flex flex-wrap items-center justify-center gap-4"
+        style="transition-delay:240ms"
+      >
         <a
           href="#download"
-          class="rounded-full bg-clay-400 px-7 py-3.5 font-semibold text-ink-950 shadow-lg shadow-clay-600/20 transition hover:bg-clay-300"
+          class="cursor-pointer rounded-full bg-clay-400 px-8 py-3.5 font-semibold text-ink-950 shadow-lg shadow-clay-600/25 transition duration-200 hover:-translate-y-0.5 hover:bg-clay-300 hover:shadow-xl hover:shadow-clay-600/30 active:translate-y-0 active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-300"
         >
           Download free
         </a>
         <a
           href="#tour"
-          class="rounded-full border border-white/20 px-7 py-3.5 font-semibold text-white/90 transition hover:border-white/50 hover:text-white"
+          class="cursor-pointer rounded-full border border-white/20 px-8 py-3.5 font-semibold text-white/90 transition duration-200 hover:border-white/45 hover:bg-white/5 hover:text-white active:scale-[0.98] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-400"
         >
           See it in action
         </a>
       </div>
 
-      <p class="mt-6 text-sm text-white/50">
+      <p data-reveal class="mt-6 text-sm text-white/45" style="transition-delay:300ms">
         Windows · macOS · Linux · Android — no account required
       </p>
     </div>
+
+    <!--
+      The product itself, framed like the desktop app it is. Previously the
+      video was a full-bleed backdrop behind the copy, which made the thing
+      being sold read as wallpaper. In a window, it is the subject.
+    -->
+    <div data-reveal class="relative pb-24" style="transition-delay:380ms">
+      <div
+        class="pointer-events-none absolute -inset-x-8 -top-8 bottom-16 -z-10 rounded-[3rem] bg-clay-500/15 blur-[80px]"
+        aria-hidden="true"
+      >
+      </div>
+
+      <div
+        class="mx-auto max-w-5xl overflow-hidden rounded-2xl border border-white/12 bg-ink-900 shadow-2xl shadow-black/60"
+      >
+        <div class="flex items-center gap-2 border-b border-white/8 bg-ink-850 px-4 py-3">
+          <span class="h-3 w-3 rounded-full bg-[#ff5f57]"></span>
+          <span class="h-3 w-3 rounded-full bg-[#febc2e]"></span>
+          <span class="h-3 w-3 rounded-full bg-[#28c840]"></span>
+          <span class="ml-3 text-xs font-medium text-white/35">NoteX</span>
+        </div>
+
+        <video
+          id="hero-video"
+          class="block aspect-[1280/862] w-full bg-ink-900 object-cover"
+          poster={`${base}/video/hero-poster.jpg`}
+          autoplay
+          muted
+          loop
+          playsinline
+          preload="metadata"
+          aria-label="Screen recording of NoteX: writing a note, switching to split view and browsing the calendar"
+        >
+          <source src={`${base}/video/hero.webm`} type="video/webm" />
+          <source src={`${base}/video/hero.mp4`} type="video/mp4" />
+        </video>
+      </div>
+    </div>
   </div>
-</section>
+</header>
+
+<style>
+  /*
+    Slow oscillation, the "ambient light blobs" the style calls for. Only
+    transform and opacity animate, so this stays on the compositor and never
+    triggers layout.
+  */
+  .ambient {
+    animation: drift 22s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+
+  .ambient--slow {
+    animation-duration: 30s;
+    animation-direction: alternate-reverse;
+  }
+
+  @keyframes drift {
+    from {
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+    to {
+      transform: translate3d(4rem, 2.5rem, 0) scale(1.12);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ambient {
+      animation: none;
+    }
+  }
+</style>
 
 <script>
-  // Only reveal the video once it can play, and never when the visitor has
-  // asked for reduced motion — a looping background is exactly what that
-  // setting is about.
+  // Pause the loop when it scrolls out of view. A background video decoding
+  // frames nobody can see is pure battery cost on a laptop.
   const video = document.getElementById('hero-video') as HTMLVideoElement | null;
+
   if (video) {
-    const stillness = window.matchMedia('(prefers-reduced-motion: reduce)');
-    if (stillness.matches) {
-      video.pause();
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       video.removeAttribute('autoplay');
-    } else {
-      video.addEventListener('canplay', () => video.classList.remove('opacity-0'), { once: true });
+      video.pause();
+    } else if ('IntersectionObserver' in window) {
+      new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              video.play().catch(() => {});
+            } else {
+              video.pause();
+            }
+          });
+        },
+        { threshold: 0.15 },
+      ).observe(video);
     }
   }
 </script>
