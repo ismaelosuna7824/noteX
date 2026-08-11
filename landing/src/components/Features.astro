@@ -1,0 +1,39 @@
+---
+import { features } from '../data/site';
+---
+
+<section id="features" class="mx-auto max-w-6xl scroll-mt-24 px-6 py-24 lg:py-32">
+  <div class="max-w-2xl">
+    <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">
+      Everything a notes app should have.
+      <span class="text-white/50">Nothing it shouldn't.</span>
+    </h2>
+    <p class="mt-5 text-lg leading-relaxed text-white/60">
+      Built for people who write every day and want their words to stay theirs — plain Markdown on
+      disk, no lock-in, no subscription.
+    </p>
+  </div>
+
+  <ul class="mt-16 grid gap-x-10 gap-y-12 sm:grid-cols-2 lg:grid-cols-3">
+    {
+      features.map((feature) => (
+        <li>
+          <div class="mb-5 flex h-11 w-11 items-center justify-center rounded-xl bg-clay-400/10 text-clay-300 ring-1 ring-clay-400/20">
+            <svg
+              class="h-5 w-5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.6"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d={feature.icon} />
+            </svg>
+          </div>
+          <h3 class="text-lg font-semibold">{feature.title}</h3>
+          <p class="mt-2.5 leading-relaxed text-white/60">{feature.body}</p>
+        </li>
+      ))
+    }
+  </ul>
+</section>

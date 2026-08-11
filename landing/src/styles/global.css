@@ -1,0 +1,62 @@
+@import 'tailwindcss';
+
+/*
+  Design tokens lifted from the app itself, so the landing page and the
+  product read as one thing: a near-black glass surface over imagery, a warm
+  clay accent, and Poppins — the app's default font.
+*/
+@theme {
+  --color-ink-950: #0a0a0c;
+  --color-ink-900: #101014;
+  --color-ink-850: #16161b;
+  --color-ink-800: #1d1d24;
+  --color-ink-700: #2a2a33;
+
+  --color-clay-200: #f0d6c9;
+  --color-clay-300: #e5bfae;
+  --color-clay-400: #d9a892;
+  --color-clay-500: #c8907a;
+  --color-clay-600: #a97361;
+
+  --font-sans: 'Poppins', ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 1.5rem;
+}
+
+/*
+  The app paints every panel as a translucent card over a photographic
+  background. Anything below 0.7 opacity lets the image set the contrast, a
+  lesson learned the hard way in the app's own home screen.
+*/
+@utility glass {
+  background-color: color-mix(in srgb, var(--color-ink-850) 82%, transparent);
+  backdrop-filter: blur(20px);
+  border: 1px solid color-mix(in srgb, white 8%, transparent);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  body {
+    background-color: var(--color-ink-950);
+    color: color-mix(in srgb, white 92%, transparent);
+  }
+
+  /* Respect people who asked their system for less movement. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

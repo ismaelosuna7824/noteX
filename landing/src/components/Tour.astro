@@ -1,0 +1,96 @@
+---
+import { Image } from 'astro:assets';
+import home from '../assets/home.png';
+import editor from '../assets/editor.png';
+import calendar from '../assets/calendar.png';
+import timer from '../assets/timer.png';
+import settings from '../assets/settings.png';
+
+/*
+  Each shot is paired with the claim it proves. A screenshot with a generic
+  caption is decoration; a screenshot answering "what does this actually look
+  like when I use it" is the reason people scroll this far.
+
+  `alt` text describes what is on screen for anyone who cannot see it, and is
+  also the only thing image search has to go on.
+*/
+const shots = [
+  {
+    image: home,
+    eyebrow: 'Home',
+    title: 'Open to a room, not a form',
+    body: 'Today\'s note, your writing streak, what you were last editing and anything still pending — all against a backdrop you chose. Everything one click away, nothing demanding attention.',
+    alt: 'NoteX home screen showing the daily note, total notes, a writing streak chart and pending reminders over a full-bleed wallpaper',
+  },
+  {
+    image: editor,
+    eyebrow: 'Editor',
+    title: 'Source on the left, result on the right',
+    body: 'Full Markdown: headings, task lists, tables, footnotes, code blocks with syntax highlighting. Split the view to see both, or press Cmd/Ctrl+E to flip between them.',
+    alt: 'The NoteX editor in split view, raw Markdown on the left and the rendered document on the right, with a formatting toolbar above',
+  },
+  {
+    image: calendar,
+    eyebrow: 'Calendar',
+    title: 'Find the day, find the note',
+    body: 'Every daily note lands on the calendar. Dots mark the days you wrote, so a month of work is legible at a glance and any day is one click away.',
+    alt: 'Monthly calendar view in NoteX with markers on days that have notes, and the selected day\'s notes listed beside it',
+  },
+  {
+    image: timer,
+    eyebrow: 'Focus timer',
+    title: 'Time what you are working on',
+    body: 'Start a timer against a project, let it run while you write, and watch the week total build. Your focus sessions live in the same app as the work itself.',
+    alt: 'The NoteX focus timer with a task input, project selector, running clock and this week\'s tracked total',
+  },
+  {
+    image: settings,
+    eyebrow: 'Personalise',
+    title: 'Make it somewhere you want to be',
+    body: 'Thirteen accent colours that can adapt themselves to your background, your own image or looping video behind the glass, seven fonts, and type sizing tuned to your eyes.',
+    alt: 'NoteX settings showing accent colour swatches, theme backgrounds, sidebar icon colours, background video picker and font family list',
+  },
+];
+---
+
+<section id="tour" class="scroll-mt-24 border-y border-white/5 bg-ink-900/40 py-24 lg:py-32">
+  <div class="mx-auto max-w-6xl px-6">
+    <div class="max-w-2xl">
+      <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">A look around</h2>
+      <p class="mt-5 text-lg leading-relaxed text-white/60">
+        Five screens, five things it does well.
+      </p>
+    </div>
+
+    <div class="mt-20 space-y-24 lg:space-y-32">
+      {
+        shots.map((shot, index) => (
+          <article class="grid items-center gap-10 lg:grid-cols-2 lg:gap-16">
+            <div class={index % 2 === 1 ? 'lg:order-2' : ''}>
+              <p class="text-sm font-semibold uppercase tracking-widest text-clay-400">
+                {shot.eyebrow}
+              </p>
+              <h3 class="mt-3 text-2xl font-bold tracking-tight sm:text-3xl">{shot.title}</h3>
+              <p class="mt-4 text-lg leading-relaxed text-white/60">{shot.body}</p>
+            </div>
+
+            <div class={index % 2 === 1 ? 'lg:order-1' : ''}>
+              <div class="overflow-hidden rounded-2xl border border-white/10 shadow-2xl shadow-black/50">
+                <Image
+                  src={shot.image}
+                  alt={shot.alt}
+                  widths={[640, 960, 1280]}
+                  sizes="(min-width: 1024px) 40rem, 100vw"
+                  format="webp"
+                  quality={72}
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  class="w-full"
+                />
+              </div>
+            </div>
+          </article>
+        ))
+      }
+    </div>
+  </div>
+</section>

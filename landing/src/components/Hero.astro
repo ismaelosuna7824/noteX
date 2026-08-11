@@ -1,0 +1,118 @@
+---
+import { site } from '../data/site';
+
+const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+---
+
+<section class="relative isolate min-h-[92svh] overflow-hidden">
+  <!--
+    The poster carries the first paint, so the hero has something to show
+    before 1.4 MB of video has arrived. The video fades in over it once it can
+    actually play, rather than flashing an empty black box.
+  -->
+  <video
+    id="hero-video"
+    class="absolute inset-0 -z-10 h-full w-full object-cover opacity-0 transition-opacity duration-1000"
+    poster={`${base}/video/hero-poster.jpg`}
+    autoplay
+    muted
+    loop
+    playsinline
+    preload="metadata"
+    aria-hidden="true"
+    tabindex="-1"
+  >
+    <source src={`${base}/video/hero.webm`} type="video/webm" />
+    <source src={`${base}/video/hero.mp4`} type="video/mp4" />
+  </video>
+
+  <!-- Poster as a static backdrop for anyone whose browser blocks autoplay. -->
+  <div
+    class="absolute inset-0 -z-20 bg-cover bg-center"
+    style={`background-image:url('${base}/video/hero-poster.jpg')`}
+    aria-hidden="true"
+  >
+  </div>
+
+  <!--
+    Two scrims, not one: a downward gradient so the nav and headline hold their
+    contrast, and a bottom fade that hands off into the next section instead of
+    cutting the video off with a hard edge.
+  -->
+  <div
+    class="absolute inset-0 -z-10 bg-gradient-to-b from-ink-950/85 via-ink-950/55 to-ink-950"
+    aria-hidden="true"
+  >
+  </div>
+
+  <div class="mx-auto flex min-h-[92svh] max-w-6xl flex-col px-6">
+    <nav class="flex items-center justify-between py-6" aria-label="Main">
+      <span class="text-lg font-bold tracking-tight">{site.name}</span>
+      <div class="flex items-center gap-6 text-sm">
+        <a href="#features" class="hidden text-white/70 transition hover:text-white sm:block">
+          Features
+        </a>
+        <a href="#tour" class="hidden text-white/70 transition hover:text-white sm:block">Tour</a>
+        <a href="#faq" class="hidden text-white/70 transition hover:text-white sm:block">FAQ</a>
+        <a
+          href={site.repo}
+          rel="noopener"
+          class="rounded-full border border-white/15 px-4 py-1.5 font-medium text-white/90 transition hover:border-white/40 hover:text-white"
+        >
+          GitHub
+        </a>
+      </div>
+    </nav>
+
+    <div class="flex flex-1 flex-col justify-center py-16">
+      <p class="mb-5 flex items-center gap-2 text-sm font-medium text-clay-300">
+        <span class="inline-block h-1.5 w-1.5 rounded-full bg-clay-400"></span>
+        Free and open source · v{site.version}
+      </p>
+
+      <h1 class="max-w-3xl text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
+        Immerse in
+        <span class="block text-clay-200">your notes</span>
+      </h1>
+
+      <p class="mt-7 max-w-xl text-lg leading-relaxed text-white/70">
+        {site.description}
+      </p>
+
+      <div class="mt-10 flex flex-wrap items-center gap-4">
+        <a
+          href="#download"
+          class="rounded-full bg-clay-400 px-7 py-3.5 font-semibold text-ink-950 shadow-lg shadow-clay-600/20 transition hover:bg-clay-300"
+        >
+          Download free
+        </a>
+        <a
+          href="#tour"
+          class="rounded-full border border-white/20 px-7 py-3.5 font-semibold text-white/90 transition hover:border-white/50 hover:text-white"
+        >
+          See it in action
+        </a>
+      </div>
+
+      <p class="mt-6 text-sm text-white/50">
+        Windows · macOS · Linux · Android — no account required
+      </p>
+    </div>
+  </div>
+</section>
+
+<script>
+  // Only reveal the video once it can play, and never when the visitor has
+  // asked for reduced motion — a looping background is exactly what that
+  // setting is about.
+  const video = document.getElementById('hero-video') as HTMLVideoElement | null;
+  if (video) {
+    const stillness = window.matchMedia('(prefers-reduced-motion: reduce)');
+    if (stillness.matches) {
+      video.pause();
+      video.removeAttribute('autoplay');
+    } else {
+      video.addEventListener('canplay', () => video.classList.remove('opacity-0'), { once: true });
+    }
+  }
+</script>

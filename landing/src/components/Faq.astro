@@ -1,0 +1,30 @@
+---
+import { faqs } from '../data/site';
+---
+
+<section id="faq" class="mx-auto max-w-3xl scroll-mt-24 px-6 py-24 lg:py-32">
+  <h2 class="text-3xl font-bold tracking-tight sm:text-4xl">Questions</h2>
+
+  <div class="mt-12 divide-y divide-white/10 border-y border-white/10">
+    {
+      faqs.map((faq) => (
+        <details class="group py-6">
+          <summary class="flex cursor-pointer list-none items-center justify-between gap-6 text-lg font-semibold [&::-webkit-details-marker]:hidden">
+            {faq.q}
+            <svg
+              class="h-5 w-5 shrink-0 text-white/40 transition group-open:rotate-45"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.8"
+              stroke="currentColor"
+              aria-hidden="true"
+            >
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+          </summary>
+          <p class="mt-4 leading-relaxed text-white/60">{faq.a}</p>
+        </details>
+      ))
+    }
+  </div>
+</section>
