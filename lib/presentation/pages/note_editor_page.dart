@@ -67,6 +67,15 @@ class _NoteEditorPageState extends State<NoteEditorPage>
   /// Whether the local graph panel is showing beside the editor.
   bool _showRelated = false;
 
+  /// Share of the width the panel takes, adjustable by dragging the divider.
+  ///
+  /// A number picked here is a guess about someone else's screen and someone
+  /// else's note; a handle lets them settle it in one drag. The bounds stop
+  /// either side from being squeezed into uselessness.
+  double _relatedFraction = 0.34;
+  static const _minRelatedFraction = 0.2;
+  static const _maxRelatedFraction = 0.6;
+
   // ── Tiling state (singleton, persisted to disk) ─────────────────────
   TilingState get _tiling => GetIt.instance<TilingState>();
 
@@ -379,152 +388,177 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             // inherits this Expanded's bounded height. Putting it in the
             // enclosing Column instead gave it an unbounded height, and the
             // Expanded inside it brought the whole layout down.
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // 7:3 against the panel below — the editor keeps the larger
-                // share, since writing is what this page is for.
-                Expanded(
-                  flex: 7,
-                  child:
-                      note.isLocked &&
-                          !GetIt.instance<SecurityState>().isNoteUnlocked(
-                            note.id,
-                          )
-                      ? _buildLockedOverlay(
-                          context,
-                          editorBg,
-                          chipBorder,
-                          accentColor,
-                          note.id,
-                        )
-                      : _tiling.isActive
-                      ? // Tiling mode: full tiling layout replaces the editor
-                        TilingLayoutWidget(
-                          tiling: _tiling,
-                          appState: widget.appState,
-                          themeState: widget.themeState,
-                          accentColor: accentColor,
-                          onChanged: () async {
-                            if (!_tiling.isActive) {
-                              // Tiling auto-exited — flush saves then refresh
-                              await _tiling.flushAll();
-                              await widget.appState.refreshNotes();
-                              if (mounted) {
-                                _loadNote(force: true);
-                                setState(() {});
-                              }
-                            } else {
-                              setState(() {});
-                            }
-                          },
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: editorBg.withValues(alpha: bgAlpha),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(color: chipBorder, width: 1),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(
-                                  alpha: isDark ? 0.25 : 0.05,
-                                ),
-                                blurRadius: 20,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          // Tight top padding: the font-size / line-height controls
-                          // moved into the editor toolbar row (via `trailing`), so no
-                          // extra top chrome is needed above the editor.
-                          padding: EdgeInsets.fromLTRB(
-                            isZen ? 32 : (isCompact ? 8 : 24),
-                            isZen ? 16 : (isCompact ? 4 : 8),
-                            isZen ? 32 : (isCompact ? 8 : 24),
-                            isZen ? 32 : (isCompact ? 8 : 24),
-                          ),
-                          // Shared markdown editor widget: renders its own toolbar
-                          // (full, or minimal in compact mode) + the editor. The
-                          // font-size / line-height controls ride in the toolbar row
-                          // via `trailing` (hidden in compact mode, as before).
-                          //
-                          // The Stack exists only to float the @mention picker over
-                          // the editor; with no mention open it adds a single child
-                          // and the layout is unchanged.
-                          child: Stack(
-                            children: [
-                              NoteMarkdownEditor(
-                                // GlobalObjectKey, not ValueKey: it keeps the same
-                                // per-note identity that forces a rebuild on note switch
-                                // AND exposes currentState so the picker can commit a
-                                // mention back into the editor.
-                                key: _editorKey,
-                                initialContent: note.content,
-                                initialViewMode: EditorViewModeName.fromName(
-                                  widget.themeState.editorViewMode,
-                                ),
-                                onViewModeChanged: (mode) => widget.themeState
-                                    .setEditorViewMode(mode.name),
-                                autofocus: true,
-                                toolbar: isCompact
-                                    ? EditorToolbarProfile.minimal
-                                    : EditorToolbarProfile.full,
-                                fontSize: widget.themeState.editorFontSize,
-                                lineHeight: widget.themeState.editorLineHeight,
-                                textColor: noteColor != null
-                                    ? (noteColor.computeLuminance() > 0.5
-                                          ? Colors.black87
-                                          : Colors.white)
-                                    : widget.themeState.editorTextColor,
-                                trailing: isCompact
-                                    ? null
-                                    : EditorTextControls(
-                                        themeState: widget.themeState,
-                                        noteColor: noteColor,
-                                      ),
-                                onChanged: (markdown) {
-                                  _latestMarkdown = markdown;
-                                  _onUserEdit();
-                                },
-                                onInternalLink: _openInternalNote,
-                                onExternalLink: (url) =>
-                                    launchUrl(Uri.parse(url)),
-                                onMentionQuery: onMentionQuery,
-                              ),
-                              buildMentionOverlay(
-                                notes: widget.appState.notes,
-                                currentNoteId: note.id,
-                                accentColor: accentColor,
-                                bgColor: theme.colorScheme.surface,
-                                borderColor: chipBorder,
-                                textColor: theme.colorScheme.onSurface,
-                                mutedColor: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ],
-                          ),
-                        ),
-                ),
+            //
+            // The LayoutBuilder exists to turn the drag distance into a share
+            // of the width: a divider that moved by pixels would behave
+            // differently on every window size.
+            child: LayoutBuilder(
+              builder: (context, rowConstraints) {
+                final totalWidth = rowConstraints.maxWidth;
+                final relatedWidth = totalWidth * _relatedFraction;
 
-                // Related notes: a graph needs height to be readable, and
-                // taking it from the writing surface would cost more than the
-                // panel gives. Hidden in zen and tiling modes, which each own
-                // the whole area for their own reasons.
-                if (_showRelated && !isZen && !_tiling.isActive)
-                  // A share of the width rather than a fixed number, so a wide
-                  // window gives the graph room to breathe and a narrow one
-                  // does not have the panel eating the writing surface.
-                  Expanded(
-                    flex: 3,
-                    child: LocalGraphPanel(
-                      notes: widget.appState.notes,
-                      noteId: note.id,
-                      accentColor: accentColor,
-                      surfaceColor: widget.themeState.editorBgColor,
-                      onOpenNote: _openInternalNote,
-                      onClose: () => setState(() => _showRelated = false),
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(
+                      child:
+                          note.isLocked &&
+                              !GetIt.instance<SecurityState>().isNoteUnlocked(
+                                note.id,
+                              )
+                          ? _buildLockedOverlay(
+                              context,
+                              editorBg,
+                              chipBorder,
+                              accentColor,
+                              note.id,
+                            )
+                          : _tiling.isActive
+                          ? // Tiling mode: full tiling layout replaces the editor
+                            TilingLayoutWidget(
+                              tiling: _tiling,
+                              appState: widget.appState,
+                              themeState: widget.themeState,
+                              accentColor: accentColor,
+                              onChanged: () async {
+                                if (!_tiling.isActive) {
+                                  // Tiling auto-exited — flush saves then refresh
+                                  await _tiling.flushAll();
+                                  await widget.appState.refreshNotes();
+                                  if (mounted) {
+                                    _loadNote(force: true);
+                                    setState(() {});
+                                  }
+                                } else {
+                                  setState(() {});
+                                }
+                              },
+                            )
+                          : Container(
+                              decoration: BoxDecoration(
+                                color: editorBg.withValues(alpha: bgAlpha),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(color: chipBorder, width: 1),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(
+                                      alpha: isDark ? 0.25 : 0.05,
+                                    ),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              // Tight top padding: the font-size / line-height controls
+                              // moved into the editor toolbar row (via `trailing`), so no
+                              // extra top chrome is needed above the editor.
+                              padding: EdgeInsets.fromLTRB(
+                                isZen ? 32 : (isCompact ? 8 : 24),
+                                isZen ? 16 : (isCompact ? 4 : 8),
+                                isZen ? 32 : (isCompact ? 8 : 24),
+                                isZen ? 32 : (isCompact ? 8 : 24),
+                              ),
+                              // Shared markdown editor widget: renders its own toolbar
+                              // (full, or minimal in compact mode) + the editor. The
+                              // font-size / line-height controls ride in the toolbar row
+                              // via `trailing` (hidden in compact mode, as before).
+                              //
+                              // The Stack exists only to float the @mention picker over
+                              // the editor; with no mention open it adds a single child
+                              // and the layout is unchanged.
+                              child: Stack(
+                                children: [
+                                  NoteMarkdownEditor(
+                                    // GlobalObjectKey, not ValueKey: it keeps the same
+                                    // per-note identity that forces a rebuild on note switch
+                                    // AND exposes currentState so the picker can commit a
+                                    // mention back into the editor.
+                                    key: _editorKey,
+                                    initialContent: note.content,
+                                    initialViewMode:
+                                        EditorViewModeName.fromName(
+                                          widget.themeState.editorViewMode,
+                                        ),
+                                    onViewModeChanged: (mode) => widget
+                                        .themeState
+                                        .setEditorViewMode(mode.name),
+                                    autofocus: true,
+                                    toolbar: isCompact
+                                        ? EditorToolbarProfile.minimal
+                                        : EditorToolbarProfile.full,
+                                    fontSize: widget.themeState.editorFontSize,
+                                    lineHeight:
+                                        widget.themeState.editorLineHeight,
+                                    textColor: noteColor != null
+                                        ? (noteColor.computeLuminance() > 0.5
+                                              ? Colors.black87
+                                              : Colors.white)
+                                        : widget.themeState.editorTextColor,
+                                    trailing: isCompact
+                                        ? null
+                                        : EditorTextControls(
+                                            themeState: widget.themeState,
+                                            noteColor: noteColor,
+                                          ),
+                                    onChanged: (markdown) {
+                                      _latestMarkdown = markdown;
+                                      _onUserEdit();
+                                    },
+                                    onInternalLink: _openInternalNote,
+                                    onExternalLink: (url) =>
+                                        launchUrl(Uri.parse(url)),
+                                    onMentionQuery: onMentionQuery,
+                                  ),
+                                  buildMentionOverlay(
+                                    notes: widget.appState.notes,
+                                    currentNoteId: note.id,
+                                    accentColor: accentColor,
+                                    bgColor: theme.colorScheme.surface,
+                                    borderColor: chipBorder,
+                                    textColor: theme.colorScheme.onSurface,
+                                    mutedColor:
+                                        theme.colorScheme.onSurfaceVariant,
+                                  ),
+                                ],
+                              ),
+                            ),
                     ),
-                  ),
-              ],
+
+                    // Related notes: a graph needs height to be readable, and
+                    // taking it from the writing surface would cost more than the
+                    // panel gives. Hidden in zen and tiling modes, which each own
+                    // the whole area for their own reasons.
+                    if (_showRelated && !isZen && !_tiling.isActive) ...[
+                      _RelatedDivider(
+                        accentColor: accentColor,
+                        onDrag: (delta) {
+                          if (totalWidth <= 0) return;
+                          setState(() {
+                            // Dragging left widens the panel, so the delta is
+                            // subtracted from the editor's share.
+                            _relatedFraction =
+                                (_relatedFraction - delta / totalWidth).clamp(
+                                  _minRelatedFraction,
+                                  _maxRelatedFraction,
+                                );
+                          });
+                        },
+                      ),
+                      SizedBox(
+                        width: relatedWidth,
+                        child: LocalGraphPanel(
+                          notes: widget.appState.notes,
+                          noteId: note.id,
+                          accentColor: accentColor,
+                          surfaceColor: widget.themeState.editorBgColor,
+                          onOpenNote: _openInternalNote,
+                          onClose: () => setState(() => _showRelated = false),
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -1500,6 +1534,63 @@ class _NoteEditorPageState extends State<NoteEditorPage>
             child: const Text('Set PIN & Lock'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Draggable divider between the editor and the related-notes panel.
+///
+/// Exists because three attempts at picking a good width all missed: the right
+/// number depends on the window, the note and who is reading it, so the person
+/// who knows gets the handle.
+class _RelatedDivider extends StatefulWidget {
+  final Color accentColor;
+
+  /// Horizontal drag distance in logical pixels; negative widens the panel.
+  final ValueChanged<double> onDrag;
+
+  const _RelatedDivider({required this.accentColor, required this.onDrag});
+
+  @override
+  State<_RelatedDivider> createState() => _RelatedDividerState();
+}
+
+class _RelatedDividerState extends State<_RelatedDivider> {
+  bool _hovered = false;
+  bool _dragging = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final active = _hovered || _dragging;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeLeftRight,
+      onEnter: (_) => setState(() => _hovered = true),
+      onExit: (_) => setState(() => _hovered = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onHorizontalDragStart: (_) => setState(() => _dragging = true),
+        onHorizontalDragEnd: (_) => setState(() => _dragging = false),
+        onHorizontalDragCancel: () => setState(() => _dragging = false),
+        onHorizontalDragUpdate: (details) => widget.onDrag(details.delta.dx),
+        // The grab area is 12px wide while the visible line is 2px: a divider
+        // you have to hit exactly is a divider nobody discovers.
+        child: SizedBox(
+          width: 12,
+          child: Center(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              width: active ? 3 : 2,
+              decoration: BoxDecoration(
+                color: active
+                    ? widget.accentColor
+                    : widget.accentColor.withValues(alpha: 0.25),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
