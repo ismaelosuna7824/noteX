@@ -13,7 +13,10 @@ export const site = {
     'A beautiful desktop notes app for Windows, macOS and Linux. Markdown editing with live preview, linked notes, daily notes, focus timer and optional cloud sync — with your notes exportable as plain Markdown, always.',
   shortDescription:
     'Markdown notes that feel like a place you want to write. Free and open source.',
-  url: 'https://ismaelosuna7824.github.io/noteX',
+  // The origin deliberately does NOT live here. It is set once as `site` in
+  // astro.config.mjs and read through Astro.site, because a second copy is a
+  // second thing to forget: this one still pointed at GitHub Pages after the
+  // move to Firebase, quietly telling search engines the wrong canonical URL.
   repo: 'https://github.com/ismaelosuna7824/noteX',
   releases: 'https://github.com/ismaelosuna7824/noteX/releases/latest',
   author: 'ismaelosuna7824',

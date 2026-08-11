@@ -27,7 +27,7 @@ const softwareSchema = {
   applicationCategory: 'ProductivityApplication',
   operatingSystem: downloads.map((d) => d.platform).join(', '),
   softwareVersion: site.version,
-  url: site.url,
+  url: Astro.site?.href,
   downloadUrl: site.releases,
   license: 'https://opensource.org/licenses/MIT',
   author: { '@type': 'Person', name: site.author },

@@ -1,0 +1,43 @@
+{
+  "hosting": {
+    "public": "dist",
+    "cleanUrls": true,
+    "trailingSlash": false,
+    "ignore": ["firebase.json", "**/.*", "**/node_modules/**"],
+    "headers": [
+      {
+        "//": "Astro fingerprints these filenames, so a changed file is a changed URL. They can be cached forever.",
+        "source": "/_astro/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+      },
+      {
+        "//": "Video and poster are not fingerprinted — cached for a month, so replacing them still lands within a sensible window.",
+        "source": "/video/**",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=2592000" }]
+      },
+      {
+        "//": "Social preview and icon: long enough to be free, short enough to fix a mistake.",
+        "source": "/@(og.jpg|favicon.svg|favicon.ico)",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=604800" }]
+      },
+      {
+        "//": "HTML always revalidates, so a deploy is visible on the next request rather than an hour later. Both patterns are needed: Firebase matches headers on the REQUEST path, and with cleanUrls the home page is requested as `/`, which never matches `**/*.html`. Firebase's default of max-age=3600 applies otherwise, and this page carries a version number and download links that change every release.",
+        "source": "/",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+      },
+      {
+        "source": "**/*.html",
+        "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }]
+      },
+      {
+        "//": "Baseline hardening for a static marketing site. No frames, no MIME sniffing, no referrer leakage to third parties.",
+        "source": "**",
+        "headers": [
+          { "key": "X-Content-Type-Options", "value": "nosniff" },
+          { "key": "X-Frame-Options", "value": "DENY" },
+          { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" }
+        ]
+      }
+    ]
+  }
+}

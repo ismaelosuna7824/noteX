@@ -7,8 +7,11 @@ import sitemap from '@astrojs/sitemap';
 export default defineConfig({
   // Absolute URLs for canonical links, Open Graph tags and the sitemap. Search
   // engines and social crawlers need the full origin, not a relative path.
-  site: 'https://ismaelosuna7824.github.io',
-  base: '/noteX',
+  //
+  // Firebase Hosting serves at the domain root, so there is no base path. Swap
+  // `site` for the custom domain once one is registered — it is the only place
+  // the origin is written down.
+  site: 'https://notex-b95a8.web.app',
   trailingSlash: 'ignore',
 
   integrations: [sitemap()],

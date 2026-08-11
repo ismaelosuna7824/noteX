@@ -1,4 +1,0 @@
-User-agent: *
-Allow: /
-
-Sitemap: https://ismaelosuna7824.github.io/noteX/sitemap-index.xml
