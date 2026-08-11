@@ -25,7 +25,7 @@ export type Download = {
   platform: string;
   file: string;
   note: string;
-  icon: 'apple' | 'windows' | 'linux' | 'android';
+  icon: 'apple' | 'windows' | 'linux';
 };
 
 export const downloads: Download[] = [
@@ -46,12 +46,6 @@ export const downloads: Download[] = [
     file: 'NoteX-linux.deb',
     note: 'Debian & Ubuntu',
     icon: 'linux',
-  },
-  {
-    platform: 'Android',
-    file: 'NoteX-android.apk',
-    note: 'Sideload APK',
-    icon: 'android',
   },
 ];
 
@@ -126,7 +120,7 @@ export const faqs = [
   },
   {
     q: 'Which platforms does it run on?',
-    a: 'Windows, macOS and Linux as a desktop app, plus an Android build. Every release ships all four.',
+    a: 'Windows, macOS and Linux. Every release ships all three, built from the same source.',
   },
   {
     q: 'Does it work offline?',
