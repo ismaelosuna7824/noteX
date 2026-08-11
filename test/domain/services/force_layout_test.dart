@@ -121,6 +121,29 @@ void main() {
     expect(withinB, lessThan(across));
   });
 
+  test('unconnected notes cluster near the middle, not against the walls', () {
+    // The failure this guards against: with nothing pulling inward, repulsion
+    // drives every node outward until it clamps on the frame, leaving a ring
+    // of notes stuck to the edges and an empty centre.
+    final positions = layout(graphOf(
+      List.generate(30, (i) => 'n$i'),
+      const [],
+    ));
+
+    const centre = LayoutPoint(width / 2, height / 2);
+    final onTheEdge = positions.values
+        .where((p) => p.x <= 1 || p.y <= 1 || p.x >= width - 1 || p.y >= height - 1)
+        .length;
+
+    expect(onTheEdge, 0, reason: 'no node should be pinned to the frame');
+
+    final averageFromCentre =
+        positions.values.map((p) => distance(p, centre)).reduce((a, b) => a + b) /
+            positions.length;
+    // Comfortably inside the canvas rather than orbiting its border.
+    expect(averageFromCentre, lessThan(width / 2));
+  });
+
   test('a different seed gives a different arrangement', () {
     final graph = graphOf(['a', 'b', 'c'], []);
 

@@ -71,11 +71,18 @@ class _NoteGraphViewState extends State<NoteGraphView> {
     if (!identical(old.positions, widget.positions)) _adoptPositions();
   }
 
+  /// Whether the graph has been framed for the current layout yet.
+  bool _needsFit = true;
+
   void _adoptPositions() {
     _positions = {
       for (final entry in widget.positions.entries)
         entry.key: Offset(entry.value.x, entry.value.y),
     };
+    // A fresh layout has not been framed. Without this the view opens at
+    // zoom 1 on the top-left corner of a 1600x1100 space and shows a slice of
+    // the graph with everything else off screen.
+    _needsFit = true;
   }
 
   /// Radius a node is drawn at. Grows with how connected it is, so the notes
@@ -188,6 +195,15 @@ class _NoteGraphViewState extends State<NoteGraphView> {
       builder: (context, constraints) {
         final viewport = Size(constraints.maxWidth, constraints.maxHeight);
 
+        // Frame the graph once the viewport is known — during layout, not
+        // during paint, so it lands on the first frame the user sees.
+        if (_needsFit && viewport.width > 0 && viewport.height > 0) {
+          _needsFit = false;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) _fitToView(viewport);
+          });
+        }
+
         return Stack(
           children: [
             MouseRegion(
@@ -287,9 +303,10 @@ class _GraphPainter extends CustomPainter {
         to,
         Paint()
           ..color = touchesHighlight
-              ? accentColor.withValues(alpha: 0.85)
-              : baseLine.withValues(alpha: lit ? 0.18 : 0.05)
-          ..strokeWidth = (touchesHighlight ? 1.8 : 1) / zoom,
+              ? accentColor.withValues(alpha: 0.9)
+              : baseLine.withValues(alpha: lit ? 0.22 : 0.06)
+          ..strokeWidth = (touchesHighlight ? 1.6 : 0.9) / zoom
+          ..isAntiAlias = true,
       );
     }
 
@@ -311,18 +328,25 @@ class _GraphPainter extends CustomPainter {
         );
       }
 
+      // Neutral fills, brightening with how connected a note is. Size and
+      // value carry the hierarchy; the accent is spent only on what is
+      // focused, so it still means something when it appears.
+      final connectedness = math.min(node.degree, 6) / 6;
+      final restColor = baseLine.withValues(
+        alpha: (0.32 + connectedness * 0.55) * (lit ? 1 : 0.22),
+      );
+
       canvas.drawCircle(
         position,
         radius,
-        Paint()
-          ..color = node.degree == 0
-              ? baseLine.withValues(alpha: lit ? 0.28 : 0.08)
-              : accentColor.withValues(alpha: lit ? (isFocus ? 1 : 0.85) : 0.15),
+        Paint()..color = isFocus ? accentColor : restColor,
       );
 
-      // Labels only where they can be read: below a certain zoom they overlap
-      // into noise, and an unconnected note's label is rarely what you came for.
-      final showLabel = isFocus || (zoom > 0.7 && (node.degree > 0 || highlighted == null));
+      // Labels are earned, not given. Forty of them at once is a wall of text
+      // with a graph hidden behind it, so they appear on the focused note
+      // always, and on the rest only once zoomed in far enough to read them
+      // without overlap.
+      final showLabel = isFocus || zoom >= 0.95;
       if (!showLabel) continue;
 
       final painter = TextPainter(

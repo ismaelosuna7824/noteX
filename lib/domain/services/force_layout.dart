@@ -34,6 +34,15 @@ class ForceLayout {
   /// Enough passes for a library-sized graph to stop moving visibly.
   static const defaultIterations = 400;
 
+  /// How hard every node is drawn toward the middle, as a fraction of its
+  /// distance from it.
+  ///
+  /// Without this, repulsion has nothing to push against: in a library where
+  /// most notes link to nothing, every node accelerates outward until it hits
+  /// the edge and stops there, leaving a ring of nodes stacked on the walls
+  /// and an empty middle. Gravity gives the outward push something to balance.
+  static const gravity = 0.05;
+
   /// Runs the simulation and returns a position per node id.
   static Map<String, LayoutPoint> run({
     required NoteGraph graph,
@@ -108,6 +117,15 @@ class ForceLayout {
 
         displacement[edge.sourceId] = displacement[edge.sourceId]! - pull;
         displacement[edge.targetId] = displacement[edge.targetId]! + pull;
+      }
+
+      // Gravity: a gentle pull toward the middle, proportional to how far out
+      // a node has drifted. Unconnected notes settle into a loose cloud around
+      // the centre instead of a ring stuck to the frame.
+      final centre = _Vec(width / 2, height / 2);
+      for (final node in graph.nodes) {
+        final toCentre = centre - positions[node.id]!;
+        displacement[node.id] = displacement[node.id]! + toCentre * gravity * k;
       }
 
       // Apply, capped by temperature and clamped inside the canvas.

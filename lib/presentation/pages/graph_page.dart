@@ -119,8 +119,14 @@ class _GraphPageState extends State<GraphPage> {
               Expanded(
                 child: Container(
                   decoration: BoxDecoration(
-                    color: widget.themeState.editorBgColor
-                        .withValues(alpha: isDark ? 0.72 : 0.82),
+                    // Near-opaque on purpose. A graph is thin lines and small
+                    // dots — the least forgiving thing to draw over a photo,
+                    // and at the card opacity used elsewhere the wallpaper won
+                    // outright.
+                    color: Color.alphaBlend(
+                      widget.themeState.editorBgColor.withValues(alpha: 0.96),
+                      isDark ? Colors.black : Colors.white,
+                    ),
                     borderRadius: BorderRadius.circular(16),
                     border: Border.all(
                       color: (isDark ? Colors.white : Colors.black)

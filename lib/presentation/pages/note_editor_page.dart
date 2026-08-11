@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../application/use_cases/export_single_note_use_case.dart';
 import '../../domain/services/note_export_plan.dart';
 import '../../domain/entities/note.dart';
+import '../widgets/local_graph_panel.dart';
 import '../widgets/mention_picker_host.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
@@ -61,6 +62,10 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
   @override
   GlobalKey<NoteMarkdownEditorState>? get mentionEditorKey => _editorKey;
+
+  // ── Related notes ─────────────────────────────────────────────────────
+  /// Whether the local graph panel is showing beside the editor.
+  bool _showRelated = false;
 
   // ── Tiling state (singleton, persisted to disk) ─────────────────────
   TilingState get _tiling => GetIt.instance<TilingState>();
@@ -485,6 +490,19 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                     ),
                   ),
           ),
+
+          // Related notes, beside the editor rather than under it: a graph
+          // needs height to be readable, and stealing it from the writing
+          // surface would make the panel cost more than it gives.
+          if (_showRelated && !isZen)
+            LocalGraphPanel(
+              notes: widget.appState.notes,
+              noteId: note.id,
+              accentColor: accentColor,
+              surfaceColor: widget.themeState.editorBgColor,
+              onOpenNote: _openInternalNote,
+              onClose: () => setState(() => _showRelated = false),
+            ),
         ],
       ),
     );
@@ -688,6 +706,18 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               ),
               const SizedBox(width: 4),
               // Export this note as a Markdown file
+              _buildToolbarBtn(
+                icon: _showRelated ? Icons.hub_rounded : Icons.hub_outlined,
+                tooltip: _showRelated ? 'Hide related notes' : 'Show related notes',
+                onTap: () => setState(() => _showRelated = !_showRelated),
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
+                iconColor: _showRelated ? accentColor : iconColor,
+                chipBg: chipBg,
+                chipBorder: chipBorder,
+              ),
+              const SizedBox(width: 4),
               _buildToolbarBtn(
                 icon: Icons.file_download_outlined,
                 tooltip: 'Export as Markdown',
