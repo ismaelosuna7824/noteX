@@ -18,6 +18,7 @@ export const defaultLang: Lang = 'en';
 /** Keys shared by the locale files and the language-independent data. */
 export type FeatureKey =
   | 'markdown'
+  | 'diagrams'
   | 'links'
   | 'graph'
   | 'daily'

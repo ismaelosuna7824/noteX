@@ -50,7 +50,7 @@ export const en: Content = {
       { label: 'Live preview', detail: 'See it as you type' },
       { label: 'Linked notes', detail: 'Type @ to connect' },
       { label: 'Daily pages', detail: 'Ready when you open' },
-      { label: 'Plain Markdown', detail: 'Yours to export' },
+      { label: 'Mermaid diagrams', detail: 'Rendered as you write' },
     ],
   },
 
@@ -61,7 +61,11 @@ export const en: Content = {
     items: {
       markdown: {
         title: 'Markdown, all the way down',
-        body: 'Write in plain Markdown with a live preview beside you, or split the view and watch both at once. What you type is exactly what gets stored — no proprietary format standing between you and your words.',
+        body: 'The full GitHub flavour: tables, task lists, footnotes, callouts, syntax-highlighted code and emoji shortcodes. Live preview beside you, or split the view and watch both at once. What you type is exactly what gets stored — no proprietary format between you and your words.',
+      },
+      diagrams: {
+        title: 'Diagrams from plain text',
+        body: 'Write a mermaid block and watch it become a flowchart, a sequence diagram, a state machine, a gantt chart, a pie or a mindmap. Click any diagram to open it full screen and zoom in. It renders inside the app — no browser, no export step, no account with a diagram service.',
       },
       links: {
         title: 'Notes that link to notes',
@@ -220,6 +224,10 @@ export const en: Content = {
       {
         q: 'Why does my Mac say NoteX cannot be verified?',
         a: 'Because the build is not signed with a paid developer certificate, so macOS cannot check a receipt for it — it is not a finding about the code. To open it: System Settings → Privacy & Security → scroll to Security → Open Anyway. Note that on macOS 15 and later, right-clicking the app and choosing Open no longer works; Apple removed that route. Windows shows a comparable "Windows protected your PC" notice, where More info → Run anyway gets past it. The full source is public if you would rather read it or build it yourself.',
+      },
+      {
+        q: 'Which Markdown does it support?',
+        a: 'GitHub Flavored Markdown, rendered natively in the app: headings, tables, task lists, footnotes, strikethrough, autolinks, alert callouts (> [!NOTE] and friends), emoji shortcodes and fenced code with syntax highlighting. A ```mermaid block is drawn as a diagram — flowcharts, sequence diagrams, state machines, gantt charts, pies and mindmaps — which you can open full screen and zoom. Nothing is converted or uploaded: the file on disk stays the Markdown you typed.',
       },
       {
         q: 'Which platforms does it run on?',

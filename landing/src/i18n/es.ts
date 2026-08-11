@@ -58,7 +58,7 @@ export const es: Content = {
       { label: 'Vista previa en vivo', detail: 'Mientras escribes' },
       { label: 'Notas enlazadas', detail: 'Escribe @ para conectar' },
       { label: 'Página diaria', detail: 'Lista al abrir' },
-      { label: 'Markdown plano', detail: 'Tuyo para exportar' },
+      { label: 'Diagramas mermaid', detail: 'Se dibujan al escribir' },
     ],
   },
 
@@ -69,7 +69,11 @@ export const es: Content = {
     items: {
       markdown: {
         title: 'Markdown de principio a fin',
-        body: 'Escribe en Markdown plano con la vista previa al lado, o divide la pantalla y mira las dos a la vez. Lo que escribes es exactamente lo que se guarda: ningún formato propietario entre tú y tus palabras.',
+        body: 'El sabor completo de GitHub: tablas, listas de tareas, notas al pie, avisos destacados, código con resaltado de sintaxis y atajos de emoji. Vista previa al lado, o divide la pantalla y mira las dos a la vez. Lo que escribes es exactamente lo que se guarda: ningún formato propietario entre tú y tus palabras.',
+      },
+      diagrams: {
+        title: 'Diagramas desde texto plano',
+        body: 'Escribe un bloque mermaid y míralo convertirse en un diagrama de flujo, de secuencia, una máquina de estados, un gantt, un pastel o un mapa mental. Haz clic en cualquier diagrama para abrirlo a pantalla completa y acercarte. Se dibuja dentro de la app: sin navegador, sin exportar, sin cuenta en un servicio de diagramas.',
       },
       links: {
         title: 'Notas que enlazan a notas',
@@ -230,6 +234,10 @@ export const es: Content = {
       {
         q: '¿Por qué mi Mac dice que NoteX no se puede verificar?',
         a: 'Porque el binario no está firmado con un certificado de desarrollador de pago, así que macOS no puede comprobar un recibo — no es un hallazgo sobre el código. Para abrirla: Ajustes del Sistema → Privacidad y Seguridad → baja hasta Seguridad → Abrir de todos modos. Ten en cuenta que en macOS 15 y posteriores, hacer clic derecho y elegir Abrir ya no funciona; Apple eliminó esa vía. Windows muestra un aviso equivalente, "Windows protegió su PC", donde Más información → Ejecutar de todas formas lo resuelve. El código fuente completo es público si prefieres leerlo o compilarlo tú mismo.',
+      },
+      {
+        q: '¿Qué Markdown soporta?',
+        a: 'GitHub Flavored Markdown, renderizado de forma nativa en la app: encabezados, tablas, listas de tareas, notas al pie, tachado, enlaces automáticos, avisos destacados (> [!NOTE] y similares), atajos de emoji y bloques de código con resaltado de sintaxis. Un bloque ```mermaid se dibuja como diagrama — de flujo, de secuencia, máquinas de estados, gantt, pastel y mapas mentales — y puedes abrirlo a pantalla completa para acercarte. Nada se convierte ni se sube: el archivo en disco sigue siendo el Markdown que escribiste.',
       },
       {
         q: '¿En qué plataformas funciona?',
