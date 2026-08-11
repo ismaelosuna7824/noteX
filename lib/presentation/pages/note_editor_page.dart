@@ -237,9 +237,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
     if (path == null) return;
 
     try {
-      final written =
-          await GetIt.instance<ExportSingleNoteUseCase>(param1: path)
-              .execute(note.id);
+      final written = await GetIt.instance<ExportSingleNoteUseCase>(
+        param1: path,
+      ).execute(note.id);
 
       if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -249,9 +249,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       );
     } catch (e) {
       if (!context.mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Export failed: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Export failed: $e')));
     }
   }
 
@@ -375,134 +375,149 @@ class _NoteEditorPageState extends State<NoteEditorPage>
 
           // Main editor area
           Expanded(
-            child:
-                note.isLocked &&
-                    !GetIt.instance<SecurityState>().isNoteUnlocked(note.id)
-                ? _buildLockedOverlay(
-                    context,
-                    editorBg,
-                    chipBorder,
-                    accentColor,
-                    note.id,
-                  )
-                : _tiling.isActive
-                ? // Tiling mode: full tiling layout replaces the editor
-                  TilingLayoutWidget(
-                    tiling: _tiling,
-                    appState: widget.appState,
-                    themeState: widget.themeState,
-                    accentColor: accentColor,
-                    onChanged: () async {
-                      if (!_tiling.isActive) {
-                        // Tiling auto-exited — flush saves then refresh
-                        await _tiling.flushAll();
-                        await widget.appState.refreshNotes();
-                        if (mounted) {
-                          _loadNote(force: true);
-                          setState(() {});
-                        }
-                      } else {
-                        setState(() {});
-                      }
-                    },
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      color: editorBg.withValues(alpha: bgAlpha),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: chipBorder, width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(
-                            alpha: isDark ? 0.25 : 0.05,
-                          ),
-                          blurRadius: 20,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    // Tight top padding: the font-size / line-height controls
-                    // moved into the editor toolbar row (via `trailing`), so no
-                    // extra top chrome is needed above the editor.
-                    padding: EdgeInsets.fromLTRB(
-                      isZen ? 32 : (isCompact ? 8 : 24),
-                      isZen ? 16 : (isCompact ? 4 : 8),
-                      isZen ? 32 : (isCompact ? 8 : 24),
-                      isZen ? 32 : (isCompact ? 8 : 24),
-                    ),
-                    // Shared markdown editor widget: renders its own toolbar
-                    // (full, or minimal in compact mode) + the editor. The
-                    // font-size / line-height controls ride in the toolbar row
-                    // via `trailing` (hidden in compact mode, as before).
-                    //
-                    // The Stack exists only to float the @mention picker over
-                    // the editor; with no mention open it adds a single child
-                    // and the layout is unchanged.
-                    child: Stack(
-                      children: [
-                        NoteMarkdownEditor(
-                          // GlobalObjectKey, not ValueKey: it keeps the same
-                          // per-note identity that forces a rebuild on note switch
-                          // AND exposes currentState so the picker can commit a
-                          // mention back into the editor.
-                          key: _editorKey,
-                          initialContent: note.content,
-                          initialViewMode: EditorViewModeName.fromName(
-                            widget.themeState.editorViewMode,
-                          ),
-                          onViewModeChanged: (mode) =>
-                              widget.themeState.setEditorViewMode(mode.name),
-                          autofocus: true,
-                          toolbar: isCompact
-                              ? EditorToolbarProfile.minimal
-                              : EditorToolbarProfile.full,
-                          fontSize: widget.themeState.editorFontSize,
-                          lineHeight: widget.themeState.editorLineHeight,
-                          textColor: noteColor != null
-                              ? (noteColor.computeLuminance() > 0.5
-                                    ? Colors.black87
-                                    : Colors.white)
-                              : widget.themeState.editorTextColor,
-                          trailing: isCompact
-                              ? null
-                              : EditorTextControls(
-                                  themeState: widget.themeState,
-                                  noteColor: noteColor,
-                                ),
-                          onChanged: (markdown) {
-                            _latestMarkdown = markdown;
-                            _onUserEdit();
-                          },
-                          onInternalLink: _openInternalNote,
-                          onExternalLink: (url) => launchUrl(Uri.parse(url)),
-                          onMentionQuery: onMentionQuery,
-                        ),
-                        buildMentionOverlay(
-                          notes: widget.appState.notes,
-                          currentNoteId: note.id,
+            // A Row, so the related-notes panel sits beside the editor and
+            // inherits this Expanded's bounded height. Putting it in the
+            // enclosing Column instead gave it an unbounded height, and the
+            // Expanded inside it brought the whole layout down.
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Expanded(
+                  child:
+                      note.isLocked &&
+                          !GetIt.instance<SecurityState>().isNoteUnlocked(
+                            note.id,
+                          )
+                      ? _buildLockedOverlay(
+                          context,
+                          editorBg,
+                          chipBorder,
+                          accentColor,
+                          note.id,
+                        )
+                      : _tiling.isActive
+                      ? // Tiling mode: full tiling layout replaces the editor
+                        TilingLayoutWidget(
+                          tiling: _tiling,
+                          appState: widget.appState,
+                          themeState: widget.themeState,
                           accentColor: accentColor,
-                          bgColor: theme.colorScheme.surface,
-                          borderColor: chipBorder,
-                          textColor: theme.colorScheme.onSurface,
-                          mutedColor: theme.colorScheme.onSurfaceVariant,
+                          onChanged: () async {
+                            if (!_tiling.isActive) {
+                              // Tiling auto-exited — flush saves then refresh
+                              await _tiling.flushAll();
+                              await widget.appState.refreshNotes();
+                              if (mounted) {
+                                _loadNote(force: true);
+                                setState(() {});
+                              }
+                            } else {
+                              setState(() {});
+                            }
+                          },
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: editorBg.withValues(alpha: bgAlpha),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: chipBorder, width: 1),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withValues(
+                                  alpha: isDark ? 0.25 : 0.05,
+                                ),
+                                blurRadius: 20,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          // Tight top padding: the font-size / line-height controls
+                          // moved into the editor toolbar row (via `trailing`), so no
+                          // extra top chrome is needed above the editor.
+                          padding: EdgeInsets.fromLTRB(
+                            isZen ? 32 : (isCompact ? 8 : 24),
+                            isZen ? 16 : (isCompact ? 4 : 8),
+                            isZen ? 32 : (isCompact ? 8 : 24),
+                            isZen ? 32 : (isCompact ? 8 : 24),
+                          ),
+                          // Shared markdown editor widget: renders its own toolbar
+                          // (full, or minimal in compact mode) + the editor. The
+                          // font-size / line-height controls ride in the toolbar row
+                          // via `trailing` (hidden in compact mode, as before).
+                          //
+                          // The Stack exists only to float the @mention picker over
+                          // the editor; with no mention open it adds a single child
+                          // and the layout is unchanged.
+                          child: Stack(
+                            children: [
+                              NoteMarkdownEditor(
+                                // GlobalObjectKey, not ValueKey: it keeps the same
+                                // per-note identity that forces a rebuild on note switch
+                                // AND exposes currentState so the picker can commit a
+                                // mention back into the editor.
+                                key: _editorKey,
+                                initialContent: note.content,
+                                initialViewMode: EditorViewModeName.fromName(
+                                  widget.themeState.editorViewMode,
+                                ),
+                                onViewModeChanged: (mode) => widget.themeState
+                                    .setEditorViewMode(mode.name),
+                                autofocus: true,
+                                toolbar: isCompact
+                                    ? EditorToolbarProfile.minimal
+                                    : EditorToolbarProfile.full,
+                                fontSize: widget.themeState.editorFontSize,
+                                lineHeight: widget.themeState.editorLineHeight,
+                                textColor: noteColor != null
+                                    ? (noteColor.computeLuminance() > 0.5
+                                          ? Colors.black87
+                                          : Colors.white)
+                                    : widget.themeState.editorTextColor,
+                                trailing: isCompact
+                                    ? null
+                                    : EditorTextControls(
+                                        themeState: widget.themeState,
+                                        noteColor: noteColor,
+                                      ),
+                                onChanged: (markdown) {
+                                  _latestMarkdown = markdown;
+                                  _onUserEdit();
+                                },
+                                onInternalLink: _openInternalNote,
+                                onExternalLink: (url) =>
+                                    launchUrl(Uri.parse(url)),
+                                onMentionQuery: onMentionQuery,
+                              ),
+                              buildMentionOverlay(
+                                notes: widget.appState.notes,
+                                currentNoteId: note.id,
+                                accentColor: accentColor,
+                                bgColor: theme.colorScheme.surface,
+                                borderColor: chipBorder,
+                                textColor: theme.colorScheme.onSurface,
+                                mutedColor: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-          ),
+                ),
 
-          // Related notes, beside the editor rather than under it: a graph
-          // needs height to be readable, and stealing it from the writing
-          // surface would make the panel cost more than it gives.
-          if (_showRelated && !isZen)
-            LocalGraphPanel(
-              notes: widget.appState.notes,
-              noteId: note.id,
-              accentColor: accentColor,
-              surfaceColor: widget.themeState.editorBgColor,
-              onOpenNote: _openInternalNote,
-              onClose: () => setState(() => _showRelated = false),
+                // Related notes: a graph needs height to be readable, and
+                // taking it from the writing surface would cost more than the
+                // panel gives. Hidden in zen and tiling modes, which each own
+                // the whole area for their own reasons.
+                if (_showRelated && !isZen && !_tiling.isActive)
+                  LocalGraphPanel(
+                    notes: widget.appState.notes,
+                    noteId: note.id,
+                    accentColor: accentColor,
+                    surfaceColor: widget.themeState.editorBgColor,
+                    onOpenNote: _openInternalNote,
+                    onClose: () => setState(() => _showRelated = false),
+                  ),
+              ],
             ),
+          ),
         ],
       ),
     );
@@ -708,7 +723,9 @@ class _NoteEditorPageState extends State<NoteEditorPage>
               // Export this note as a Markdown file
               _buildToolbarBtn(
                 icon: _showRelated ? Icons.hub_rounded : Icons.hub_outlined,
-                tooltip: _showRelated ? 'Hide related notes' : 'Show related notes',
+                tooltip: _showRelated
+                    ? 'Hide related notes'
+                    : 'Show related notes',
                 onTap: () => setState(() => _showRelated = !_showRelated),
                 size: btnSize,
                 radius: btnRadius,
