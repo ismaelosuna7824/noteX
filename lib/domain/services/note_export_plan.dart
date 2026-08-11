@@ -99,6 +99,31 @@ class NoteExportPlan {
     return entries;
   }
 
+  /// Renders one note as a standalone file, for exporting a single note.
+  ///
+  /// [fileName] is the name the user picked in a save dialog, already vetted
+  /// by the OS — it is used verbatim apart from ensuring the extension. When
+  /// omitted the name is derived from the title, which is what a save dialog
+  /// should be pre-filled with.
+  static ExportEntry single({
+    required Note note,
+    required String Function(String) toMarkdown,
+    String? fileName,
+  }) {
+    final name = fileName == null || fileName.trim().isEmpty
+        ? suggestedFileName(note.title)
+        : _withExtension(fileName.trim());
+
+    return ExportEntry(path: name, content: _render(note, toMarkdown));
+  }
+
+  /// File name to pre-fill a save dialog with for a note called [title].
+  static String suggestedFileName(String title) =>
+      '${sanitizeSegment(title)}$extension';
+
+  static String _withExtension(String name) =>
+      name.toLowerCase().endsWith(extension) ? name : '$name$extension';
+
   /// Folder path for a note in [projectId], or `''` for the export root.
   ///
   /// Walks up the parent chain so nested folders survive the round trip. A

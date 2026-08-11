@@ -211,6 +211,60 @@ void main() {
     });
   });
 
+  group('single-note export', () {
+    test('derives a file name from the title when none is given', () {
+      final entry = NoteExportPlan.single(
+        note: note(id: 'a', title: 'Q3: plan/review'),
+        toMarkdown: (c) => c,
+      );
+      expect(entry.path, 'Q3- plan-review.md');
+    });
+
+    test('uses the name the save dialog returned', () {
+      final entry = NoteExportPlan.single(
+        note: note(id: 'a', title: 'Ignored'),
+        toMarkdown: (c) => c,
+        fileName: 'What I typed.md',
+      );
+      expect(entry.path, 'What I typed.md');
+    });
+
+    test('adds the extension when the dialog name lacks it', () {
+      final entry = NoteExportPlan.single(
+        note: note(id: 'a'),
+        toMarkdown: (c) => c,
+        fileName: 'No extension',
+      );
+      expect(entry.path, 'No extension.md');
+    });
+
+    test('falls back to the title when the dialog name is blank', () {
+      final entry = NoteExportPlan.single(
+        note: note(id: 'a', title: 'Fallback'),
+        toMarkdown: (c) => c,
+        fileName: '   ',
+      );
+      expect(entry.path, 'Fallback.md');
+    });
+
+    test('is byte-identical to the same note inside a full export', () {
+      final subject = note(id: 'a', title: 'Same', content: '# Body');
+
+      final fromBatch = NoteExportPlan.build(
+        notes: [subject],
+        projects: const [],
+        toMarkdown: (c) => c,
+      ).single;
+      final alone = NoteExportPlan.single(
+        note: subject,
+        toMarkdown: (c) => c,
+      );
+
+      expect(alone.content, fromBatch.content);
+      expect(alone.path, fromBatch.path);
+    });
+  });
+
   group('file contents', () {
     ExportEntry only(List<Note> notes, {String Function(String)? toMarkdown}) =>
         NoteExportPlan.build(

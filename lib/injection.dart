@@ -1,4 +1,5 @@
 import 'package:get_it/get_it.dart';
+import 'package:path/path.dart' as p;
 import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,6 +35,7 @@ import 'infrastructure/update/github_update_adapter.dart';
 
 import 'application/use_cases/create_note_use_case.dart';
 import 'application/use_cases/export_notes_use_case.dart';
+import 'application/use_cases/export_single_note_use_case.dart';
 import 'application/use_cases/import_notes_use_case.dart';
 import 'application/use_cases/update_note_use_case.dart';
 import 'application/use_cases/get_notes_use_case.dart';
@@ -171,6 +173,15 @@ Future<void> setupDependencies() async {
       getIt<NoteRepository>(),
       getIt<NoteProjectRepository>(),
       FileSystemNoteExportSink(destinationPath),
+    ),
+  );
+  // param1 is the full file path the save dialog returned; the directory and
+  // file name are split here so the use case stays free of path handling.
+  getIt.registerFactoryParam<ExportSingleNoteUseCase, String, void>(
+    (filePath, _) => ExportSingleNoteUseCase(
+      getIt<NoteRepository>(),
+      FileSystemNoteExportSink(p.dirname(filePath)),
+      p.basename(filePath),
     ),
   );
   getIt.registerFactoryParam<ImportNotesUseCase, String, void>(

@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../application/use_cases/export_single_note_use_case.dart';
+import '../../domain/services/note_export_plan.dart';
 import '../../domain/entities/note.dart';
 import '../widgets/mention_picker_host.dart';
 import '../state/app_state.dart';
@@ -208,6 +211,42 @@ class _NoteEditorPageState extends State<NoteEditorPage>
       _hideTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) _saveStatus.value = '';
       });
+    }
+  }
+
+  // ── Single-note export ────────────────────────────────────────────────
+
+  /// Saves [note] as a Markdown file wherever the user chooses.
+  Future<void> _exportThisNote(BuildContext context, Note note) async {
+    // Flush first: the debounce may still be holding the last few keystrokes,
+    // and exporting a stale body would be a quiet way to lose work.
+    await _saveCurrentNote();
+
+    final path = await FilePicker.platform.saveFile(
+      dialogTitle: 'Export note as Markdown',
+      fileName: NoteExportPlan.suggestedFileName(note.title),
+      type: FileType.custom,
+      allowedExtensions: const ['md'],
+    );
+    // Null means the user dismissed the dialog — not an error.
+    if (path == null) return;
+
+    try {
+      final written =
+          await GetIt.instance<ExportSingleNoteUseCase>(param1: path)
+              .execute(note.id);
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(written ? 'Exported to $path' : 'That note is gone.'),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Export failed: $e')),
+      );
     }
   }
 
@@ -640,6 +679,19 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                     }
                   }
                 },
+                size: btnSize,
+                radius: btnRadius,
+                iconSize: btnIconSize,
+                iconColor: iconColor,
+                chipBg: chipBg,
+                chipBorder: chipBorder,
+              ),
+              const SizedBox(width: 4),
+              // Export this note as a Markdown file
+              _buildToolbarBtn(
+                icon: Icons.file_download_outlined,
+                tooltip: 'Export as Markdown',
+                onTap: () => _exportThisNote(context, note),
                 size: btnSize,
                 radius: btnRadius,
                 iconSize: btnIconSize,
