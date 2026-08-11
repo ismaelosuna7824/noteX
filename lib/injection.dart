@@ -1,7 +1,6 @@
 import 'package:get_it/get_it.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'domain/repositories/note_link_index.dart';
 import 'domain/repositories/note_repository.dart';
 import 'domain/repositories/auth_repository.dart';
 import 'domain/repositories/project_repository.dart';
@@ -16,7 +15,6 @@ import 'domain/services/title_generation_service.dart';
 import 'domain/services/update_service.dart';
 
 import 'infrastructure/local/database.dart';
-import 'infrastructure/local/drift_note_link_index.dart';
 import 'infrastructure/local/drift_note_repository.dart';
 import 'infrastructure/local/drift_project_repository.dart';
 import 'infrastructure/local/drift_time_entry_repository.dart';
@@ -32,8 +30,6 @@ import 'infrastructure/config/app_config.dart';
 import 'infrastructure/update/github_update_adapter.dart';
 
 import 'application/use_cases/create_note_use_case.dart';
-import 'application/use_cases/get_backlinks_use_case.dart';
-import 'application/use_cases/index_note_links_use_case.dart';
 import 'application/use_cases/update_note_use_case.dart';
 import 'application/use_cases/get_notes_use_case.dart';
 import 'application/use_cases/delete_note_use_case.dart';
@@ -96,11 +92,6 @@ Future<void> setupDependencies() async {
   // Infrastructure - Repositories (Adapters implementing domain ports)
   getIt.registerSingleton<NoteRepository>(
     DriftNoteRepository(database),
-  );
-
-  // Local-only derived index — never registered with the sync adapter.
-  getIt.registerSingleton<NoteLinkIndex>(
-    DriftNoteLinkIndex(database),
   );
 
   // Infrastructure - Supabase Auth
@@ -168,23 +159,8 @@ Future<void> setupDependencies() async {
   getIt.registerFactory<CreateNoteUseCase>(
     () => CreateNoteUseCase(getIt<NoteRepository>()),
   );
-  getIt.registerFactory<IndexNoteLinksUseCase>(
-    () => IndexNoteLinksUseCase(
-      getIt<NoteRepository>(),
-      getIt<NoteLinkIndex>(),
-    ),
-  );
-  getIt.registerFactory<GetBacklinksUseCase>(
-    () => GetBacklinksUseCase(
-      getIt<NoteRepository>(),
-      getIt<NoteLinkIndex>(),
-    ),
-  );
   getIt.registerFactory<UpdateNoteUseCase>(
-    () => UpdateNoteUseCase(
-      getIt<NoteRepository>(),
-      getIt<IndexNoteLinksUseCase>(),
-    ),
+    () => UpdateNoteUseCase(getIt<NoteRepository>()),
   );
   getIt.registerFactory<GetNotesUseCase>(
     () => GetNotesUseCase(getIt<NoteRepository>()),
@@ -291,10 +267,7 @@ Future<void> setupDependencies() async {
     () => RestoreNoteUseCase(getIt<NoteRepository>()),
   );
   getIt.registerFactory<PermanentDeleteNoteUseCase>(
-    () => PermanentDeleteNoteUseCase(
-      getIt<NoteRepository>(),
-      getIt<IndexNoteLinksUseCase>(),
-    ),
+    () => PermanentDeleteNoteUseCase(getIt<NoteRepository>()),
   );
 
   // Application - Reminder Use Cases
@@ -325,7 +298,6 @@ Future<void> setupDependencies() async {
       auth: getIt<AuthRepository>(),
       syncService: getIt<SyncService>(),
       connectivity: getIt<ConnectivityService>(),
-      indexLinks: getIt<IndexNoteLinksUseCase>(),
     ),
   );
   getIt.registerSingleton<AutoSaveService>(
