@@ -21,6 +21,20 @@ export const site = {
   license: 'MIT',
 } as const;
 
+/** Where to find the person who builds this. */
+export const social = [
+  {
+    label: 'LinkedIn',
+    href: 'https://www.linkedin.com/in/ismael-osuna/',
+    icon: 'M4.98 3.5C4.98 4.88 3.87 6 2.5 6S0 4.88 0 3.5 1.12 1 2.5 1s2.48 1.12 2.48 2.5ZM.24 8h4.52v12H.24V8Zm7.2 0h4.34v1.64h.06c.6-1.14 2.08-2.34 4.28-2.34 4.58 0 5.42 3.01 5.42 6.93V20h-4.52v-5.13c0-1.22-.02-2.8-1.7-2.8-1.7 0-1.96 1.33-1.96 2.71V20H8.84V8h-1.4Z',
+  },
+  {
+    label: 'X',
+    href: 'https://x.com/IsmaelosunaCa',
+    icon: 'M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.66l-5.21-6.82-5.97 6.82H1.66l7.73-8.83L1.24 2.25h6.83l4.71 6.23 5.46-6.23Zm-1.16 17.52h1.83L7.01 4.13H5.05l12.03 15.64Z',
+  },
+] as const;
+
 export type Download = {
   platform: string;
   file: string;
