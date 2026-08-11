@@ -19,7 +19,6 @@ dependencies:
   path: ^1.9.1
 
   # Markdown rendering + source-mode preview
-  flutter_markdown_plus: ^1.0.7
   # Direct dep (already resolved transitively via flutter_markdown_plus) so the
   # `pre` MarkdownElementBuilder can import the AST `Element` type without the
   # depend_on_referenced_packages lint. Pinned to the resolved version.
@@ -79,6 +78,9 @@ dependencies:
   media_kit_libs_ios_video: ^1.1.4
   media_kit_libs_android_video: ^1.0.4
   crypto: ^3.0.7
+  markdown_widget: ^2.3.2+8
+  duskmoon_mermaid_renderer: ^1.8.0
+  flutter_highlight: ^0.7.0
 
 dev_dependencies:
   flutter_test:

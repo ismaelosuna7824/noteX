@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:notex/presentation/widgets/markdown/notex_markdown_view.dart';
 import 'package:notex/presentation/widgets/note_markdown_editor.dart';
 
 void main() {
@@ -216,13 +216,13 @@ void main() {
 
     // Edit mode: TextField present, no rendered preview.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
 
     await tester.tap(find.byIcon(Icons.visibility));
     await tester.pumpAndSettle();
 
     // Preview mode: rendered Markdown present, TextField gone.
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
   });
 
@@ -268,7 +268,7 @@ void main() {
     );
 
     expect(find.byType(NoteMarkdownEditor), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
     // No toolbar / toggle controls in read-only mode.
     expect(find.byType(IconButton), findsNothing);
@@ -289,7 +289,7 @@ void main() {
     );
 
     // Non-empty note opens rendered: preview present, editor field gone.
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
   });
 
@@ -309,7 +309,7 @@ void main() {
 
       // Empty / new note opens ready to type: editor field present, no preview.
       expect(find.byType(TextField), findsOneWidget);
-      expect(find.byType(MarkdownBody), findsNothing);
+      expect(find.byType(NoteXMarkdownView), findsNothing);
     });
   }
 
@@ -325,7 +325,7 @@ void main() {
     );
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
   });
 
   testWidgets('Ctrl+E toggles between edit and preview in both modes',
@@ -350,7 +350,7 @@ void main() {
     await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
     await tester.pumpAndSettle();
 
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
 
     // Ctrl+E again from preview: preview -> edit. Works without a TextField
@@ -362,7 +362,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
   });
 
   testWidgets('Ctrl+Shift+E toggles the side-by-side split view',
@@ -378,7 +378,7 @@ void main() {
 
     // Start in edit mode: field only, no live preview.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
 
     // Ctrl+Shift+E: edit -> split. Both surfaces are on screen at once.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
@@ -389,7 +389,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
 
     // Ctrl+Shift+E again: split -> edit, collapsing back to the field only.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
@@ -400,7 +400,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
   });
 
   testWidgets('initialViewMode: split opens directly in the split view',
@@ -418,7 +418,7 @@ void main() {
     // Both surfaces are on screen at once — the editor restored the split mode
     // instead of the edit/preview default.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
   });
 
   testWidgets('initialViewMode: preview downgrades to edit on an empty note',
@@ -435,7 +435,7 @@ void main() {
 
     // A new/empty note must stay typable even when preview was requested.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
   });
 
   testWidgets('onViewModeChanged fires with the new mode on every toggle',
@@ -517,11 +517,11 @@ void main() {
 
     // Both editors start in edit → two fields, no rendered preview.
     expect(find.byType(TextField), findsNWidgets(2));
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
 
     // Ctrl+E WITHOUT tapping anything: only the autofocus editor should flip
     // (edit -> preview), proving it owns the slot. Its field is replaced by a
-    // MarkdownBody; the first editor's field stays put.
+    // NoteXMarkdownView; the first editor's field stays put.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
@@ -529,7 +529,7 @@ void main() {
 
     expect(find.byType(TextField), findsOneWidget);
     expect(find.text('AAA first'), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
   });
 
   testWidgets(
@@ -547,17 +547,17 @@ void main() {
     // Start in edit mode WITHOUT focusing the field: the editor claims the
     // active-toggle slot on mount, so the global handler still fires.
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
 
     // A single Ctrl+E press must flip exactly once (edit -> preview): the
-    // MarkdownBody appearing and the TextField disappearing proves one toggle
+    // NoteXMarkdownView appearing and the TextField disappearing proves one toggle
     // (a double toggle would land back in edit).
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
     await tester.pumpAndSettle();
 
-    expect(find.byType(MarkdownBody), findsOneWidget);
+    expect(find.byType(NoteXMarkdownView), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
 
     // Meta+E (macOS) exercises the same global path from preview -> edit.
@@ -567,6 +567,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(TextField), findsOneWidget);
-    expect(find.byType(MarkdownBody), findsNothing);
+    expect(find.byType(NoteXMarkdownView), findsNothing);
   });
 }

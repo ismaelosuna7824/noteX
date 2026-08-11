@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:flutter_markdown_plus/flutter_markdown_plus.dart';
 import 'package:get_it/get_it.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -21,7 +20,7 @@ import '../widgets/editor_text_controls.dart';
 import '../widgets/folder_tree_widgets.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/animated_dialog.dart';
-import '../widgets/markdown_code_block_builder.dart';
+import '../widgets/markdown/notex_markdown_view.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Preset colors for new markdown projects
@@ -80,8 +79,8 @@ class _MarkdownPageState extends State<MarkdownPage> {
   ///
   /// Until now this was an empty callback, so every link in a Markdown file —
   /// internal or external — silently did nothing when clicked.
-  void _handleTapLink(String text, String? href, String title) {
-    if (href == null || href.isEmpty) return;
+  void _handleTapLink(String href) {
+    if (href.isEmpty) return;
 
     // Resolved through NoteLinkParser, the same function the note editor and
     // the link index use, so a `notex://` href means the same note everywhere.
@@ -1204,122 +1203,24 @@ class _MarkdownPageState extends State<MarkdownPage> {
               ),
             )
           : Builder(builder: (context) {
-              final baseFontSize = widget.themeState.markdownFontSize;
-              final lineHeight = widget.themeState.markdownLineHeight;
-              final scale = baseFontSize / 14.0;
-              final textColor = widget.themeState.editorTextColor;
-              final mutedTextColor = widget.themeState.editorMutedTextColor;
-              final accentColor = widget.themeState.accentColor;
-
-              // Code (inline + block) renders in the current text color with a
-              // subtle full-width box and NO per-span highlight — shared with
-              // the note editor's preview via [MarkdownCodeStyles].
-              final codeStyles = MarkdownCodeStyles.from(
-                isDark: isDark,
-                baseFont: baseFontSize,
-                color: textColor,
-              );
-              final tableBorderColor = isDark
-                  ? Colors.white.withValues(alpha: 0.1)
-                  : Colors.black.withValues(alpha: 0.1);
-              final blockquoteBg = isDark
-                  ? accentColor.withValues(alpha: 0.06)
-                  : accentColor.withValues(alpha: 0.04);
-
+              // One renderer for every surface in the app: this page and the
+              // note editor previously configured Markdown separately, so a
+              // feature added to one silently missed the other.
               return SelectionArea(
-                child: Markdown(
-              data: content,
-              // Selection is handled by the SelectionArea wrapper so prose AND
-              // the custom code-block widgets are selectable together.
-              selectable: false,
-              softLineBreak: true,
-              onTapLink: _handleTapLink,
-              builders: {
-                'pre': CodeBlockBuilder(
-                  textStyle: codeStyles.textStyle,
-                  decoration: codeStyles.decoration,
-                ),
-              },
-              styleSheet: MarkdownStyleSheet(
-                p: TextStyle(
-                  fontSize: baseFontSize,
-                  height: lineHeight,
-                  color: textColor,
-                ),
-                h1: TextStyle(
-                  fontSize: (28 * scale).roundToDouble(),
-                  fontWeight: FontWeight.w800,
-                  color: textColor,
-                ),
-                h2: TextStyle(
-                  fontSize: (22 * scale).roundToDouble(),
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-                h3: TextStyle(
-                  fontSize: (18 * scale).roundToDouble(),
-                  fontWeight: FontWeight.w600,
-                  color: textColor,
-                ),
-                a: TextStyle(
-                  color: accentColor,
-                  decoration: TextDecoration.underline,
-                  decorationColor: accentColor.withValues(alpha: 0.5),
-                ),
-                // Inline code: monospace, current text color, no highlight.
-                code: codeStyles.textStyle,
-                // Fenced code blocks are drawn full-width by the custom `pre`
-                // builder above. flutter_markdown_plus still wraps every `pre`
-                // builder's output in an outer Container using this decoration,
-                // so it is neutralised to avoid a double box.
-                codeblockDecoration: const BoxDecoration(),
-                blockquote: TextStyle(
-                  fontSize: baseFontSize,
-                  height: lineHeight,
-                  color: mutedTextColor,
-                  fontStyle: FontStyle.italic,
-                ),
-                blockquoteDecoration: BoxDecoration(
-                  color: blockquoteBg,
-                  borderRadius: const BorderRadius.only(
-                    topRight: Radius.circular(6),
-                    bottomRight: Radius.circular(6),
-                  ),
-                  border: Border(
-                    left: BorderSide(color: accentColor, width: 3),
+                child: SingleChildScrollView(
+                  child: NoteXMarkdownView(
+                    data: content,
+                    onTapLink: _handleTapLink,
+                    style: NoteXMarkdownStyle(
+                      isDark: isDark,
+                      baseFontSize: widget.themeState.markdownFontSize,
+                      lineHeight: widget.themeState.markdownLineHeight,
+                      textColor: widget.themeState.editorTextColor,
+                      accentColor: widget.themeState.accentColor,
+                    ),
                   ),
                 ),
-                blockquotePadding:
-                    const EdgeInsets.fromLTRB(14, 10, 14, 10),
-                tableHead: TextStyle(
-                  fontSize: baseFontSize,
-                  fontWeight: FontWeight.w700,
-                  color: textColor,
-                ),
-                tableBody: TextStyle(
-                  fontSize: baseFontSize,
-                  color: textColor,
-                ),
-                tableHeadAlign: TextAlign.left,
-                tableBorder: TableBorder.all(
-                  color: tableBorderColor,
-                  width: 1,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                tableCellsPadding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                listBullet: TextStyle(
-                  fontSize: baseFontSize,
-                  color: accentColor,
-                  fontWeight: FontWeight.w700,
-                ),
-                horizontalRuleDecoration: BoxDecoration(
-                  border: Border(
-                    top: BorderSide(color: tableBorderColor, width: 1),
-                  ),
-                ),
-              ),
-            ));
+              );
             }),
     );
   }
