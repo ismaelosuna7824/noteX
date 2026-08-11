@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../application/use_cases/get_backlinks_use_case.dart';
 import '../../domain/entities/note.dart';
 import '../../domain/services/mention_trigger.dart';
+import '../widgets/backlinks_panel.dart';
 import '../widgets/mention_overlay.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
@@ -54,6 +56,10 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
   /// Gives the picker's keyboard handling somewhere to be driven from.
   final GlobalKey<MentionOverlayState> _mentionOverlayKey = GlobalKey();
 
+  // ── Backlinks ─────────────────────────────────────────────────────────
+  /// Notes linking to the one on screen. Empty until the index is read.
+  List<Backlink> _backlinks = const [];
+
   // ── Tiling state (singleton, persisted to disk) ─────────────────────
   TilingState get _tiling => GetIt.instance<TilingState>();
 
@@ -91,6 +97,19 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     // a Focus ancestor never would: EditableText consumes arrows before they
     // bubble. Same process-wide handler the editor uses for Cmd/Ctrl+E.
     HardwareKeyboard.instance.addHandler(_mentionKeyHandler);
+  }
+
+  /// Reads the backlinks for the note on screen.
+  ///
+  /// Called on load and after each save, because saving is what can change the
+  /// graph — an edit elsewhere in the app reaches this note's panel on its next
+  /// load, which is the same freshness the rest of the page already has.
+  Future<void> _loadBacklinks(String noteId) async {
+    final backlinks =
+        await GetIt.instance<GetBacklinksUseCase>().execute(noteId);
+    // The user may have moved to another note while this was in flight.
+    if (!mounted || widget.appState.currentNote?.id != noteId) return;
+    setState(() => _backlinks = backlinks);
   }
 
   /// Routes navigation keys to the mention picker while one is open.
@@ -162,6 +181,11 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _prevContent = note.content;
     _reloadCount++;
 
+    // Fire-and-forget: the panel fills in when the index answers, and until
+    // then it simply renders nothing.
+    _backlinks = const [];
+    _loadBacklinks(note.id);
+
     // Register for auto-save service safety net
     widget.appState.autoSaveService.watch(
       noteId: note.id,
@@ -220,6 +244,9 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
       _hideTimer = Timer(const Duration(seconds: 2), () {
         if (mounted) _saveStatus.value = '';
       });
+      // The save just re-indexed this note's outgoing links; its incoming ones
+      // can have changed too if the user linked to it from here and back.
+      _loadBacklinks(note.id);
     }
   }
 
@@ -510,6 +537,20 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                     ),
                   ),
           ),
+          // Sits under the editor, outside the Expanded, so it takes only the
+          // height it needs and renders nothing when the note has no backlinks.
+          if (!isZen)
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: isCompact ? 8 : 24),
+              child: BacklinksPanel(
+                backlinks: _backlinks,
+                onOpen: _openInternalNote,
+                accentColor: accentColor,
+                textColor: theme.colorScheme.onSurface,
+                mutedColor: theme.colorScheme.onSurfaceVariant,
+                borderColor: chipBorder,
+              ),
+            ),
         ],
       ),
     );
