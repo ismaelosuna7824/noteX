@@ -11,12 +11,7 @@ export default defineConfig({
   base: '/noteX',
   trailingSlash: 'ignore',
 
-  integrations: [
-    sitemap({
-      // The hero comparison page is a scratch pad, not a destination.
-      filter: (page) => !page.includes('/alt'),
-    }),
-  ],
+  integrations: [sitemap()],
 
   vite: {
     plugins: [tailwindcss()],
