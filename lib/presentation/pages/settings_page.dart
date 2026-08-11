@@ -14,6 +14,7 @@ import '../state/security_state.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../application/use_cases/export_notes_use_case.dart';
+import '../../application/use_cases/import_notes_use_case.dart';
 import '../utils/platform_utils.dart';
 import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
@@ -44,6 +45,9 @@ class _SettingsPageState extends State<SettingsPage> {
 
   /// True while an export is writing, so the button cannot be fired twice.
   bool _isExporting = false;
+
+  /// True while an import is reading, for the same reason.
+  bool _isImporting = false;
 
   @override
   void dispose() {
@@ -903,6 +907,64 @@ class _SettingsPageState extends State<SettingsPage> {
                                     ),
                                   ],
                                 ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            InkWell(
+                              onTap: _isImporting
+                                  ? null
+                                  : () => _importNotes(context),
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: innerBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: innerBorder),
+                                ),
+                                child: Row(
+                                  children: [
+                                    if (_isImporting)
+                                      SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: accentColor,
+                                        ),
+                                      )
+                                    else
+                                      Icon(
+                                        Icons.download_rounded,
+                                        size: 16,
+                                        color: accentColor,
+                                      ),
+                                    const SizedBox(width: 10),
+                                    Text(
+                                      _isImporting
+                                          ? 'Importing…'
+                                          : 'Import Markdown files',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: accentColor,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Importing always creates new notes — bringing '
+                              'the same folder in twice gives you two copies.',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: mutedText,
+                                height: 1.4,
                               ),
                             ),
                           ],
@@ -2145,6 +2207,45 @@ class _SettingsPageState extends State<SettingsPage> {
       );
     } finally {
       if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  /// Creates notes from the Markdown files in a folder the user chooses.
+  Future<void> _importNotes(BuildContext context) async {
+    final source = await FilePicker.platform.getDirectoryPath(
+      dialogTitle: 'Choose a folder of Markdown files to import',
+    );
+    if (source == null) return;
+
+    setState(() => _isImporting = true);
+    try {
+      final summary = await GetIt.instance<ImportNotesUseCase>(param1: source)
+          .execute(folderColorValue: themeState.accentColor.toARGB32());
+
+      // Bring the new notes into the running app instead of waiting for a
+      // restart to reveal them.
+      await widget.appState.refreshNotes();
+
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            summary.isEmpty
+                ? 'No Markdown files found in that folder.'
+                : 'Imported ${summary.notesCreated} '
+                    '${summary.notesCreated == 1 ? 'note' : 'notes'}'
+                    '${summary.foldersCreated > 0 ? ' into ${summary.foldersCreated} new '
+                        '${summary.foldersCreated == 1 ? 'folder' : 'folders'}' : ''}',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Import failed: $e')),
+      );
+    } finally {
+      if (mounted) setState(() => _isImporting = false);
     }
   }
 }

@@ -1,4 +1,5 @@
 import 'package:get_it/get_it.dart';
+import 'package:uuid/uuid.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'domain/repositories/note_repository.dart';
@@ -17,6 +18,7 @@ import 'domain/services/update_service.dart';
 import 'infrastructure/local/database.dart';
 import 'infrastructure/local/drift_note_repository.dart';
 import 'infrastructure/local/file_system_note_export_sink.dart';
+import 'infrastructure/local/file_system_note_import_source.dart';
 import 'infrastructure/local/drift_project_repository.dart';
 import 'infrastructure/local/drift_time_entry_repository.dart';
 import 'infrastructure/local/drift_markdown_file_repository.dart';
@@ -32,6 +34,7 @@ import 'infrastructure/update/github_update_adapter.dart';
 
 import 'application/use_cases/create_note_use_case.dart';
 import 'application/use_cases/export_notes_use_case.dart';
+import 'application/use_cases/import_notes_use_case.dart';
 import 'application/use_cases/update_note_use_case.dart';
 import 'application/use_cases/get_notes_use_case.dart';
 import 'application/use_cases/delete_note_use_case.dart';
@@ -168,6 +171,14 @@ Future<void> setupDependencies() async {
       getIt<NoteRepository>(),
       getIt<NoteProjectRepository>(),
       FileSystemNoteExportSink(destinationPath),
+    ),
+  );
+  getIt.registerFactoryParam<ImportNotesUseCase, String, void>(
+    (sourcePath, _) => ImportNotesUseCase(
+      getIt<NoteRepository>(),
+      getIt<NoteProjectRepository>(),
+      FileSystemNoteImportSource(sourcePath),
+      () => const Uuid().v4(),
     ),
   );
   getIt.registerFactory<UpdateNoteUseCase>(
