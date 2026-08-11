@@ -110,11 +110,9 @@ void main() async {
   await appState.initialize(
     protectedNoteIds: tilingState.tiledNotes.map((n) => n.id).toSet(),
   );
-  // Load writing stats from disk *before* recordActivity so snapshots are
-  // available and the first call doesn't reset today's count to 0.
-  final writingStats = getIt<WritingStatsState>();
-  await writingStats.loadFromDisk();
-  writingStats.recordActivity(appState.notes);
+  // Writing stats are derived from the notes, so there is nothing to load —
+  // one call reconstructs the full history.
+  getIt<WritingStatsState>().recordActivity(appState.notes);
 
   // Initialize timer state so HomePage has daily task stats immediately
   final timerState = getIt<TimerState>();
