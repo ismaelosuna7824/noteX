@@ -8,10 +8,10 @@ export default defineConfig({
   // Absolute URLs for canonical links, Open Graph tags and the sitemap. Search
   // engines and social crawlers need the full origin, not a relative path.
   //
-  // Firebase Hosting serves at the domain root, so there is no base path. Swap
-  // `site` for the custom domain once one is registered — it is the only place
-  // the origin is written down.
-  site: 'https://notex-b95a8.web.app',
+  // Firebase Hosting serves at the domain root, so there is no base path.
+  // This is the only place the origin is written down: canonical, Open Graph,
+  // the JSON-LD, robots.txt and the sitemap all read from it.
+  site: 'https://notex.fun',
   trailingSlash: 'ignore',
 
   integrations: [sitemap()],
