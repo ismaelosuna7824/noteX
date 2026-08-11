@@ -7,6 +7,7 @@ import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/tiling_state.dart';
+import 'mention_picker_host.dart';
 import 'note_markdown_editor.dart';
 
 /// A self-contained editor panel for one note inside the tiling layout.
@@ -35,7 +36,16 @@ class TilingEditorPanel extends StatefulWidget {
   State<TilingEditorPanel> createState() => _TilingEditorPanelState();
 }
 
-class _TilingEditorPanelState extends State<TilingEditorPanel> {
+class _TilingEditorPanelState extends State<TilingEditorPanel>
+    with MentionPickerHost {
+  /// Key of this panel's editor, so its own @mention picker commits here and
+  /// not into a sibling tile.
+  @override
+  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey =>
+      GlobalObjectKey<NoteMarkdownEditorState>(
+        '${widget.note.id}#$_reloadCount',
+      );
+
   TextEditingController? _titleController;
   String? _loadedNoteId;
   Timer? _debounce;
@@ -260,17 +270,38 @@ class _TilingEditorPanelState extends State<TilingEditorPanel> {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(6),
-                child: NoteMarkdownEditor(
-                  key: ValueKey('${widget.note.id}#$_reloadCount'),
-                  initialContent: widget.note.content,
-                  toolbar: EditorToolbarProfile.minimal,
-                  fontSize: widget.themeState.editorFontSize,
-                  lineHeight: widget.themeState.editorLineHeight,
-                  textColor: textColor,
-                  onChanged: (markdown) {
-                    _latestMarkdown = markdown;
-                    _onEdit();
-                  },
+                child: Stack(
+                  children: [
+                    NoteMarkdownEditor(
+                      // GlobalObjectKey keeps the per-note remount identity and
+                      // lets the @mention picker commit into this panel — each
+                      // tile owns its own picker, so two panels never share one.
+                      key: GlobalObjectKey<NoteMarkdownEditorState>(
+                        '${widget.note.id}#$_reloadCount',
+                      ),
+                      initialContent: widget.note.content,
+                      toolbar: EditorToolbarProfile.minimal,
+                      fontSize: widget.themeState.editorFontSize,
+                      lineHeight: widget.themeState.editorLineHeight,
+                      textColor: textColor,
+                      onChanged: (markdown) {
+                        _latestMarkdown = markdown;
+                        _onEdit();
+                      },
+                      onMentionQuery: onMentionQuery,
+                    ),
+                    buildMentionOverlay(
+                      notes: widget.appState.notes,
+                      currentNoteId: widget.note.id,
+                      accentColor: widget.accentColor,
+                      bgColor: Theme.of(context).colorScheme.surface,
+                      borderColor: Theme.of(
+                        context,
+                      ).dividerColor.withValues(alpha: 0.2),
+                      textColor: Theme.of(context).colorScheme.onSurface,
+                      mutedColor: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ],
                 ),
               ),
             ),

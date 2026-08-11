@@ -13,6 +13,7 @@ import '../utils/platform_utils.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_grid_card.dart';
+import '../widgets/mention_picker_host.dart';
 import '../widgets/note_markdown_editor.dart';
 
 /// Notes list view with inline edit panel.
@@ -32,7 +33,17 @@ class NotesListPage extends StatefulWidget {
   State<NotesListPage> createState() => _NotesListPageState();
 }
 
-class _NotesListPageState extends State<NotesListPage> {
+class _NotesListPageState extends State<NotesListPage>
+    with MentionPickerHost {
+  /// Key of the inline preview editor, so the @mention picker can commit into
+  /// it. Same per-note identity the editor uses to remount on note switch.
+  @override
+  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey {
+    final note = widget.appState.currentNote;
+    if (note == null) return null;
+    return GlobalObjectKey<NoteMarkdownEditorState>('${note.id}#$_reloadCount');
+  }
+
   late TextEditingController _titleController;
   String? _loadedNoteId;
 
@@ -1474,10 +1485,16 @@ class _NotesListPageState extends State<NotesListPage> {
           Expanded(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-              child: NoteMarkdownEditor(
+              child: Stack(
+                children: [
+                  NoteMarkdownEditor(
                 // Key includes the reload token so the editor remounts with
                 // fresh content on note switch AND on external content refresh.
-                key: ValueKey('${note.id}#$_reloadCount'),
+                // GlobalObjectKey keeps that identity while letting the
+                // @mention picker reach the editor's state to commit a link.
+                key: GlobalObjectKey<NoteMarkdownEditorState>(
+                  '${note.id}#$_reloadCount',
+                ),
                 initialContent: note.content,
                 initiallyPreview: true,
                 toolbar: EditorToolbarProfile.none,
@@ -1500,6 +1517,18 @@ class _NotesListPageState extends State<NotesListPage> {
                   }
                 },
                 onExternalLink: (url) => launchUrl(Uri.parse(url)),
+                onMentionQuery: onMentionQuery,
+                  ),
+                  buildMentionOverlay(
+                    notes: widget.appState.notes,
+                    currentNoteId: note.id,
+                    accentColor: widget.themeState.accentColor,
+                    bgColor: theme.colorScheme.surface,
+                    borderColor: theme.dividerColor.withValues(alpha: 0.2),
+                    textColor: theme.colorScheme.onSurface,
+                    mutedColor: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
               ),
             ),
           ),

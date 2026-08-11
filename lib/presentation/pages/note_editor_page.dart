@@ -5,9 +5,8 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../application/use_cases/get_backlinks_use_case.dart';
 import '../../domain/entities/note.dart';
-import '../../domain/services/mention_trigger.dart';
 import '../widgets/backlinks_panel.dart';
-import '../widgets/mention_overlay.dart';
+import '../widgets/mention_picker_host.dart';
 import '../state/app_state.dart';
 import '../state/theme_state.dart';
 import '../state/security_state.dart';
@@ -45,16 +44,18 @@ class NoteEditorPage extends StatefulWidget {
   State<NoteEditorPage> createState() => _NoteEditorPageState();
 }
 
-class _NoteEditorPageState extends State<NoteEditorPage> {
+class _NoteEditorPageState extends State<NoteEditorPage>
+    with MentionPickerHost {
   late TextEditingController _titleController;
   String? _loadedNoteId;
 
   // ── @mention picker ───────────────────────────────────────────────────
-  /// The `@query` currently being composed, or null when no picker is open.
-  MentionQuery? _mentionQuery;
-
-  /// Gives the picker's keyboard handling somewhere to be driven from.
-  final GlobalKey<MentionOverlayState> _mentionOverlayKey = GlobalKey();
+  @override
+  GlobalObjectKey<NoteMarkdownEditorState>? get mentionEditorKey {
+    final note = widget.appState.currentNote;
+    if (note == null) return null;
+    return GlobalObjectKey<NoteMarkdownEditorState>('${note.id}#$_reloadCount');
+  }
 
   // ── Backlinks ─────────────────────────────────────────────────────────
   /// Notes linking to the one on screen. Empty until the index is read.
@@ -93,10 +94,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     _loadNote();
     // Register save callback so navigateToPage can flush before switching
     widget.appState.editorSaveCallback = _saveCurrentNote;
-    // The picker's arrow/Enter keys must beat the TextField to the event, and
-    // a Focus ancestor never would: EditableText consumes arrows before they
-    // bubble. Same process-wide handler the editor uses for Cmd/Ctrl+E.
-    HardwareKeyboard.instance.addHandler(_mentionKeyHandler);
   }
 
   /// Reads the backlinks for the note on screen.
@@ -112,14 +109,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     setState(() => _backlinks = backlinks);
   }
 
-  /// Routes navigation keys to the mention picker while one is open.
-  ///
-  /// Returns false whenever no picker is showing, so ordinary typing, caret
-  /// movement and every other shortcut behave exactly as before.
-  bool _mentionKeyHandler(KeyEvent event) {
-    if (_mentionQuery == null) return false;
-    return _mentionOverlayKey.currentState?.handleKey(event) ?? false;
-  }
 
   @override
   void didUpdateWidget(covariant NoteEditorPage oldWidget) {
@@ -138,7 +127,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_mentionKeyHandler);
     _debounce?.cancel();
     _hideTimer?.cancel();
 
@@ -250,46 +238,6 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
     }
   }
 
-  // ── @mention ──────────────────────────────────────────────────────────
-
-  /// Opens, updates or closes the picker as the editor reports the token.
-  ///
-  /// Only rebuilds when the token actually changes, so ordinary typing outside
-  /// a mention costs nothing.
-  void _onMentionQuery(MentionQuery? query) {
-    if (query == _mentionQuery) return;
-    setState(() => _mentionQuery = query);
-  }
-
-  /// Notes offerable for [currentNoteId], newest first.
-  ///
-  /// Excludes the note being edited — a note linking to itself is not a link —
-  /// and anything in the trash. The overlay does the query filtering.
-  List<Note> _mentionCandidates(String currentNoteId) {
-    final candidates = widget.appState.notes
-        .where((n) => n.id != currentNoteId && n.deletedAt == null)
-        .toList();
-    candidates.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-    return candidates;
-  }
-
-  /// Replaces the composing `@query` with a Markdown link to [note].
-  void _commitMention(Note note) {
-    final trigger = _mentionQuery;
-    if (trigger == null) return;
-
-    final editorState = GlobalObjectKey<NoteMarkdownEditorState>(
-      '${widget.appState.currentNote?.id}#$_reloadCount',
-    ).currentState;
-
-    setState(() => _mentionQuery = null);
-
-    editorState?.commitMention(
-      trigger: trigger,
-      noteId: note.id,
-      displayText: note.title,
-    );
-  }
 
   /// Navigate to the note targeted by a `notex://<id>` internal link tap.
   void _openInternalNote(String noteId) {
@@ -513,26 +461,17 @@ class _NoteEditorPageState extends State<NoteEditorPage> {
                           },
                           onInternalLink: _openInternalNote,
                           onExternalLink: (url) => launchUrl(Uri.parse(url)),
-                          onMentionQuery: _onMentionQuery,
+                          onMentionQuery: onMentionQuery,
                         ),
-                        if (_mentionQuery != null)
-                          Positioned(
-                            left: 0,
-                            bottom: 0,
-                            child: MentionOverlay(
-                              key: _mentionOverlayKey,
-                              notes: _mentionCandidates(note.id),
-                              query: _mentionQuery!.query,
-                              onSelect: _commitMention,
-                              onDismiss: () =>
-                                  setState(() => _mentionQuery = null),
-                              accentColor: accentColor,
-                              bgColor: theme.colorScheme.surface,
-                              borderColor: chipBorder,
-                              textColor: theme.colorScheme.onSurface,
-                              mutedColor: theme.colorScheme.onSurfaceVariant,
-                            ),
-                          ),
+                        buildMentionOverlay(
+                          notes: widget.appState.notes,
+                          currentNoteId: note.id,
+                          accentColor: accentColor,
+                          bgColor: theme.colorScheme.surface,
+                          borderColor: chipBorder,
+                          textColor: theme.colorScheme.onSurface,
+                          mutedColor: theme.colorScheme.onSurfaceVariant,
+                        ),
                       ],
                     ),
                   ),
