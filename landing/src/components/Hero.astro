@@ -1,8 +1,19 @@
 ---
 import { site } from '../data/site';
-import GithubLink from './GithubLink.astro';
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+
+/*
+  The value-prop strip the landing pattern places directly under the hero.
+  Four claims, each one a reason not to hesitate — and each one true, which is
+  the only kind worth printing.
+*/
+const proof = [
+  { label: 'Free forever', detail: 'MIT licensed' },
+  { label: 'No account', detail: 'Works offline' },
+  { label: 'Local-first', detail: 'Your own database' },
+  { label: '4 platforms', detail: 'One release' },
+];
 ---
 
 <header class="relative isolate overflow-hidden">
@@ -24,33 +35,7 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
   </div>
 
   <div class="mx-auto max-w-6xl px-6">
-    <nav class="flex items-center justify-between py-6" aria-label="Main">
-      <span class="text-lg font-bold tracking-tight">{site.name}</span>
-
-      <div class="flex items-center gap-6 text-sm">
-        <a
-          href="#features"
-          class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
-        >
-          Features
-        </a>
-        <a
-          href="#tour"
-          class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
-        >
-          Tour
-        </a>
-        <a
-          href="#faq"
-          class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
-        >
-          FAQ
-        </a>
-        <GithubLink />
-      </div>
-    </nav>
-
-    <div class="pt-16 pb-10 text-center sm:pt-24">
+    <div class="pt-32 pb-10 text-center sm:pt-40">
       <p
         data-reveal
         class="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/70"
@@ -108,6 +93,18 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
       <p data-reveal class="mt-6 text-sm text-white/45" style="transition-delay:300ms">
         Windows · macOS · Linux · Android — no account required
       </p>
+
+      <!-- Scroll cue: tells you there is more, without a paragraph saying so. -->
+      <div
+        data-reveal
+        class="mt-14 flex justify-center sm:mt-16"
+        style="transition-delay:360ms"
+        aria-hidden="true"
+      >
+        <span class="scroll-cue flex h-9 w-5 items-start justify-center rounded-full border border-white/20 p-1">
+          <span class="h-1.5 w-1 rounded-full bg-white/50"></span>
+        </span>
+      </div>
     </div>
 
     <!--
@@ -147,7 +144,35 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
           <source src={`${base}/video/hero.mp4`} type="video/mp4" />
         </video>
       </div>
+
+      <!--
+        A soft pool of light under the window. Without it the frame floats in
+        a void; with it, it sits on something. Pure decoration, so it is
+        hidden from assistive technology.
+      -->
+      <div
+        class="mx-auto mt-1 h-24 max-w-3xl rounded-[50%] bg-clay-400/12 blur-3xl"
+        aria-hidden="true"
+      >
+      </div>
     </div>
+
+    <!-- Value-prop strip: the pattern's section 2, kept inside the fold's tail. -->
+    <ul
+      data-reveal-stagger
+      class="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-white/8 bg-white/8 pb-px sm:grid-cols-4"
+    >
+      {
+        proof.map((item) => (
+          <li class="bg-ink-950 px-5 py-6 text-center">
+            <p class="font-semibold text-white/90">{item.label}</p>
+            <p class="mt-1 text-sm text-white/45">{item.detail}</p>
+          </li>
+        ))
+      }
+    </ul>
+
+    <div class="pb-24"></div>
   </div>
 </header>
 
@@ -176,8 +201,26 @@ const base = import.meta.env.BASE_URL.replace(/\/$/, '');
     }
   }
 
+  /* Nudges downward, the way a finger would. */
+  .scroll-cue span {
+    animation: cue 2s var(--ease-power1-out) infinite;
+  }
+
+  @keyframes cue {
+    0%,
+    100% {
+      transform: translateY(0);
+      opacity: 0.5;
+    }
+    50% {
+      transform: translateY(0.55rem);
+      opacity: 1;
+    }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .ambient {
+    .ambient,
+    .scroll-cue span {
       animation: none;
     }
   }

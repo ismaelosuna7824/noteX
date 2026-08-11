@@ -1,0 +1,94 @@
+---
+import { site } from '../data/site';
+import GithubLink from './GithubLink.astro';
+
+/*
+  The landing pattern calls for the primary CTA in two places: dominant in the
+  hero, and again in a sticky nav. Once someone has scrolled past the hero the
+  download button is otherwise a scroll-to-top away, which is exactly the
+  moment they have decided they want it.
+
+  Transparent over the hero so it does not compete with the headline; it earns
+  its glass background only once there is content behind it.
+*/
+---
+
+<!-- Sentinel: while this is in view we are still in the hero. -->
+<div id="header-sentinel" aria-hidden="true" class="absolute top-0 h-px w-full"></div>
+
+<header
+  id="site-header"
+  class="fixed inset-x-0 top-0 z-40 transition-[background-color,border-color,backdrop-filter] duration-300"
+>
+  <div class="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+    <a
+      href="#main"
+      class="cursor-pointer text-lg font-bold tracking-tight transition hover:text-clay-200"
+    >
+      {site.name}
+    </a>
+
+    <div class="flex items-center gap-6 text-sm">
+      <a
+        href="#features"
+        class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
+      >
+        Features
+      </a>
+      <a
+        href="#tour"
+        class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
+      >
+        Tour
+      </a>
+      <a
+        href="#faq"
+        class="hidden cursor-pointer text-white/70 transition duration-200 hover:text-white sm:block"
+      >
+        FAQ
+      </a>
+
+      <GithubLink />
+
+      <!--
+        Hidden until the hero scrolls away. Width and opacity animate together
+        so it grows out of the nav rather than popping in and shoving the
+        other items sideways.
+      -->
+      <a
+        href="#download"
+        id="header-cta"
+        class="pointer-events-none hidden max-w-0 cursor-pointer overflow-hidden rounded-full bg-clay-400 py-2 text-center font-semibold whitespace-nowrap text-ink-950 opacity-0 transition-all duration-300 hover:bg-clay-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-clay-300 sm:block"
+      >
+        Download
+      </a>
+    </div>
+  </div>
+</header>
+
+<style>
+  #site-header.is-stuck {
+    background-color: color-mix(in srgb, var(--color-ink-950) 72%, transparent);
+    backdrop-filter: blur(16px);
+    border-bottom: 1px solid color-mix(in srgb, white 8%, transparent);
+  }
+
+  #site-header.is-stuck #header-cta {
+    max-width: 10rem;
+    padding-inline: 1.25rem;
+    opacity: 1;
+    pointer-events: auto;
+  }
+</style>
+
+<script>
+  const header = document.getElementById('site-header');
+  const sentinel = document.getElementById('header-sentinel');
+
+  if (header && sentinel && 'IntersectionObserver' in window) {
+    new IntersectionObserver(
+      ([entry]) => header.classList.toggle('is-stuck', !entry.isIntersecting),
+      { rootMargin: '-120px 0px 0px 0px' },
+    ).observe(sentinel);
+  }
+</script>
