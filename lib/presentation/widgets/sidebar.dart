@@ -34,6 +34,7 @@ class Sidebar extends StatelessWidget {
     (3, _SidebarItem(Icons.calendar_month_rounded, 'Calendar')),
     (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
     (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
+    (9, _SidebarItem(Icons.hub_rounded, 'Graph')),
     (7, _SidebarItem(Icons.notifications_rounded, 'Reminders')),
     (8, _SidebarItem(Icons.delete_outline_rounded, 'Trash')),
     (6, _SidebarItem(Icons.settings_rounded, 'Settings')),

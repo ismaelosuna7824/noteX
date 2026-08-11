@@ -20,6 +20,7 @@ import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
 import 'reminder_page.dart';
+import 'graph_page.dart';
 import 'trash_page.dart';
 import 'goodbye_screen.dart';
 import '../../injection.dart';
@@ -700,6 +701,12 @@ class _AppShellState extends State<AppShell> with WindowListener {
       case 8:
         return TrashPage(
           key: const ValueKey('trash'),
+          appState: widget.appState,
+          themeState: widget.themeState,
+        );
+      case 9:
+        return GraphPage(
+          key: const ValueKey('graph'),
           appState: widget.appState,
           themeState: widget.themeState,
         );
