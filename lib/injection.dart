@@ -181,7 +181,10 @@ Future<void> setupDependencies() async {
     ),
   );
   getIt.registerFactory<UpdateNoteUseCase>(
-    () => UpdateNoteUseCase(getIt<NoteRepository>()),
+    () => UpdateNoteUseCase(
+      getIt<NoteRepository>(),
+      getIt<IndexNoteLinksUseCase>(),
+    ),
   );
   getIt.registerFactory<GetNotesUseCase>(
     () => GetNotesUseCase(getIt<NoteRepository>()),
@@ -288,7 +291,10 @@ Future<void> setupDependencies() async {
     () => RestoreNoteUseCase(getIt<NoteRepository>()),
   );
   getIt.registerFactory<PermanentDeleteNoteUseCase>(
-    () => PermanentDeleteNoteUseCase(getIt<NoteRepository>()),
+    () => PermanentDeleteNoteUseCase(
+      getIt<NoteRepository>(),
+      getIt<IndexNoteLinksUseCase>(),
+    ),
   );
 
   // Application - Reminder Use Cases
