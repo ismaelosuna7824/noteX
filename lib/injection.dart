@@ -325,6 +325,7 @@ Future<void> setupDependencies() async {
       auth: getIt<AuthRepository>(),
       syncService: getIt<SyncService>(),
       connectivity: getIt<ConnectivityService>(),
+      indexLinks: getIt<IndexNoteLinksUseCase>(),
     ),
   );
   getIt.registerSingleton<AutoSaveService>(
