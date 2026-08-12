@@ -180,7 +180,9 @@ export const en: Content = {
     body: 'Free, open source and installed in a minute. No account, no trial, nothing to cancel later.',
     cta: 'Download',
     platforms: {
-      macos: { platform: 'macOS', note: 'Apple silicon & Intel' },
+      // The version floor belongs on the button, not in an FAQ: someone on an
+      // older Mac should learn it before downloading, not after.
+      macos: { platform: 'macOS', note: 'Apple silicon & Intel · macOS 11+' },
       windows: { platform: 'Windows', note: 'Installer, 64-bit' },
       linux: { platform: 'Linux', note: 'Debian & Ubuntu' },
     },

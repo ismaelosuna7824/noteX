@@ -188,7 +188,7 @@ export const es: Content = {
     body: 'Gratis, de código abierto e instalada en un minuto. Sin cuenta, sin prueba, sin nada que cancelar después.',
     cta: 'Descargar',
     platforms: {
-      macos: { platform: 'macOS', note: 'Apple Silicon e Intel' },
+      macos: { platform: 'macOS', note: 'Apple Silicon e Intel · macOS 11+' },
       windows: { platform: 'Windows', note: 'Instalador, 64 bits' },
       linux: { platform: 'Linux', note: 'Debian y Ubuntu' },
     },
