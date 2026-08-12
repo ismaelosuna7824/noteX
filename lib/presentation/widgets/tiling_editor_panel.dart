@@ -9,6 +9,7 @@ import '../state/theme_state.dart';
 import '../state/tiling_state.dart';
 import 'mention_picker_host.dart';
 import 'note_markdown_editor.dart';
+import 'save_sweep.dart';
 
 /// A self-contained editor panel for one note inside the tiling layout.
 ///
@@ -225,22 +226,7 @@ class _TilingEditorPanelState extends State<TilingEditorPanel>
                   // below; this row keeps only the save indicator and close.
                   const Spacer(),
                   // Save indicator
-                  ValueListenableBuilder<String>(
-                    valueListenable: _saveStatus,
-                    builder: (context, status, _) {
-                      if (status == 'saved') {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 4),
-                          child: Icon(Icons.check_circle_outline_rounded,
-                              size: 12,
-                              color: isDark
-                                  ? Colors.green.shade300
-                                  : Colors.green.shade600),
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
+
                   // Close button
                   SizedBox(
                     width: 24,
@@ -293,6 +279,16 @@ class _TilingEditorPanelState extends State<TilingEditorPanel>
                       textColor: Theme.of(context).colorScheme.onSurface,
                       mutedColor: Theme.of(context).colorScheme.onSurfaceVariant,
                     ),
+                  // Each pane confirms its own save. Removing the tick
+                  // from the header without this would have left a pane with
+                  // no acknowledgement at all.
+                  Positioned.fill(
+                    child: ValueListenableBuilder<String>(
+                      valueListenable: _saveStatus,
+                      builder: (context, status, _) =>
+                          SaveSweep(saved: status == 'saved'),
+                    ),
+                  ),
                   ],
                 ),
               ),

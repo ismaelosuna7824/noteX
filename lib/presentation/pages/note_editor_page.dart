@@ -15,6 +15,7 @@ import '../state/security_state.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/editor_text_controls.dart';
 import '../widgets/note_markdown_editor.dart';
+import '../widgets/save_sweep.dart';
 import '../state/tiling_state.dart';
 import '../widgets/tiling_layout.dart';
 
@@ -434,93 +435,112 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                                 }
                               },
                             )
-                          : Container(
-                              decoration: BoxDecoration(
-                                color: editorBg.withValues(alpha: bgAlpha),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: chipBorder, width: 1),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(
-                                      alpha: isDark ? 0.25 : 0.05,
+                          : Stack(
+                              children: [
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: editorBg.withValues(alpha: bgAlpha),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: chipBorder,
+                                      width: 1,
                                     ),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 4),
-                                  ),
-                                ],
-                              ),
-                              // Tight top padding: the font-size / line-height controls
-                              // moved into the editor toolbar row (via `trailing`), so no
-                              // extra top chrome is needed above the editor.
-                              padding: EdgeInsets.fromLTRB(
-                                isZen ? 32 : (isCompact ? 8 : 24),
-                                isZen ? 16 : (isCompact ? 4 : 8),
-                                isZen ? 32 : (isCompact ? 8 : 24),
-                                isZen ? 32 : (isCompact ? 8 : 24),
-                              ),
-                              // Shared markdown editor widget: renders its own toolbar
-                              // (full, or minimal in compact mode) + the editor. The
-                              // font-size / line-height controls ride in the toolbar row
-                              // via `trailing` (hidden in compact mode, as before).
-                              //
-                              // The Stack exists only to float the @mention picker over
-                              // the editor; with no mention open it adds a single child
-                              // and the layout is unchanged.
-                              child: Stack(
-                                children: [
-                                  NoteMarkdownEditor(
-                                    // GlobalObjectKey, not ValueKey: it keeps the same
-                                    // per-note identity that forces a rebuild on note switch
-                                    // AND exposes currentState so the picker can commit a
-                                    // mention back into the editor.
-                                    key: _editorKey,
-                                    initialContent: note.content,
-                                    initialViewMode:
-                                        EditorViewModeName.fromName(
-                                          widget.themeState.editorViewMode,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: isDark ? 0.25 : 0.05,
                                         ),
-                                    onViewModeChanged: (mode) => widget
-                                        .themeState
-                                        .setEditorViewMode(mode.name),
-                                    autofocus: true,
-                                    toolbar: isCompact
-                                        ? EditorToolbarProfile.minimal
-                                        : EditorToolbarProfile.full,
-                                    fontSize: widget.themeState.editorFontSize,
-                                    lineHeight:
-                                        widget.themeState.editorLineHeight,
-                                    textColor: noteColor != null
-                                        ? (noteColor.computeLuminance() > 0.5
-                                              ? Colors.black87
-                                              : Colors.white)
-                                        : widget.themeState.editorTextColor,
-                                    trailing: isCompact
-                                        ? null
-                                        : EditorTextControls(
-                                            themeState: widget.themeState,
-                                            noteColor: noteColor,
-                                          ),
-                                    onChanged: (markdown) {
-                                      _latestMarkdown = markdown;
-                                      _onUserEdit();
-                                    },
-                                    onInternalLink: _openInternalNote,
-                                    onExternalLink: (url) =>
-                                        launchUrl(Uri.parse(url)),
-                                    onMentionQuery: onMentionQuery,
+                                        blurRadius: 20,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
-                                  buildMentionOverlay(
-                                    notes: widget.appState.notes,
-                                    currentNoteId: note.id,
-                                    accentColor: accentColor,
-                                    bgColor: theme.colorScheme.surface,
-                                    borderColor: chipBorder,
-                                    textColor: theme.colorScheme.onSurface,
-                                    mutedColor:
-                                        theme.colorScheme.onSurfaceVariant,
+                                  // Tight top padding: the font-size / line-height controls
+                                  // moved into the editor toolbar row (via `trailing`), so no
+                                  // extra top chrome is needed above the editor.
+                                  padding: EdgeInsets.fromLTRB(
+                                    isZen ? 32 : (isCompact ? 8 : 24),
+                                    isZen ? 16 : (isCompact ? 4 : 8),
+                                    isZen ? 32 : (isCompact ? 8 : 24),
+                                    isZen ? 32 : (isCompact ? 8 : 24),
                                   ),
-                                ],
-                              ),
+                                  // Shared markdown editor widget: renders its own toolbar
+                                  // (full, or minimal in compact mode) + the editor. The
+                                  // font-size / line-height controls ride in the toolbar row
+                                  // via `trailing` (hidden in compact mode, as before).
+                                  //
+                                  // The Stack exists only to float the @mention picker over
+                                  // the editor; with no mention open it adds a single child
+                                  // and the layout is unchanged.
+                                  child: Stack(
+                                    children: [
+                                      NoteMarkdownEditor(
+                                        // GlobalObjectKey, not ValueKey: it keeps the same
+                                        // per-note identity that forces a rebuild on note switch
+                                        // AND exposes currentState so the picker can commit a
+                                        // mention back into the editor.
+                                        key: _editorKey,
+                                        initialContent: note.content,
+                                        initialViewMode:
+                                            EditorViewModeName.fromName(
+                                              widget.themeState.editorViewMode,
+                                            ),
+                                        onViewModeChanged: (mode) => widget
+                                            .themeState
+                                            .setEditorViewMode(mode.name),
+                                        autofocus: true,
+                                        toolbar: isCompact
+                                            ? EditorToolbarProfile.minimal
+                                            : EditorToolbarProfile.full,
+                                        fontSize:
+                                            widget.themeState.editorFontSize,
+                                        lineHeight:
+                                            widget.themeState.editorLineHeight,
+                                        textColor: noteColor != null
+                                            ? (noteColor.computeLuminance() >
+                                                      0.5
+                                                  ? Colors.black87
+                                                  : Colors.white)
+                                            : widget.themeState.editorTextColor,
+                                        trailing: isCompact
+                                            ? null
+                                            : EditorTextControls(
+                                                themeState: widget.themeState,
+                                                noteColor: noteColor,
+                                              ),
+                                        onChanged: (markdown) {
+                                          _latestMarkdown = markdown;
+                                          _onUserEdit();
+                                        },
+                                        onInternalLink: _openInternalNote,
+                                        onExternalLink: (url) =>
+                                            launchUrl(Uri.parse(url)),
+                                        onMentionQuery: onMentionQuery,
+                                      ),
+                                      buildMentionOverlay(
+                                        notes: widget.appState.notes,
+                                        currentNoteId: note.id,
+                                        accentColor: accentColor,
+                                        bgColor: theme.colorScheme.surface,
+                                        borderColor: chipBorder,
+                                        textColor: theme.colorScheme.onSurface,
+                                        mutedColor:
+                                            theme.colorScheme.onSurfaceVariant,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                // On the card's own border, above it in the stack
+                                // and outside its padding, so the light runs the
+                                // edge the reader actually sees.
+                                Positioned.fill(
+                                  child: ValueListenableBuilder<String>(
+                                    valueListenable: _saveStatus,
+                                    builder: (context, status, _) =>
+                                        SaveSweep(saved: status == 'saved'),
+                                  ),
+                                ),
+                              ],
                             ),
                     ),
 
@@ -945,23 +965,6 @@ class _NoteEditorPageState extends State<NoteEditorPage>
                   chipBorder: chipBorder,
                 ),
               ],
-              // Save indicator
-              ValueListenableBuilder<String>(
-                valueListenable: _saveStatus,
-                builder: (context, status, _) {
-                  if (status != 'saved') return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(left: 6),
-                    child: Icon(
-                      Icons.check_circle_outline_rounded,
-                      size: 14,
-                      color: isDark
-                          ? Colors.green.shade300
-                          : Colors.green.shade600,
-                    ),
-                  );
-                },
-              ),
             ],
           );
         },
