@@ -490,6 +490,8 @@ class _AppShellState extends State<AppShell> with WindowListener {
                         return UpdateBanner(
                           update: widget.appState.availableUpdate!,
                           accentColor: widget.themeState.accentColor,
+                          surfaceColor: widget.themeState.editorBgColor,
+                          textColor: widget.themeState.editorTextColor,
                           onDismiss: widget.appState.dismissUpdateBanner,
                           appState: widget.appState,
                         );

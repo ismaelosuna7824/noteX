@@ -9,6 +9,19 @@ import '../state/app_state.dart';
 class UpdateBanner extends StatefulWidget {
   final UpdateInfo update;
   final Color accentColor;
+
+  /// The theme's editor surface, blended under this banner.
+  ///
+  /// Without it the banner was a wash of accent at 8-18% opacity — effectively
+  /// transparent, which is fine over a flat page and unreadable over the photo
+  /// a user picked as their wallpaper. Every other card in the app sits at
+  /// 0.72-0.82 for exactly this reason.
+  final Color surfaceColor;
+
+  /// The theme's editor text colour, computed against that surface. Fixed
+  /// white or black cannot know what it is sitting on.
+  final Color textColor;
+
   final VoidCallback onDismiss;
   final AppState appState;
 
@@ -16,6 +29,8 @@ class UpdateBanner extends StatefulWidget {
     super.key,
     required this.update,
     required this.accentColor,
+    required this.surfaceColor,
+    required this.textColor,
     required this.onDismiss,
     required this.appState,
   });
@@ -69,9 +84,16 @@ class _UpdateBannerState extends State<UpdateBanner>
               margin: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               decoration: BoxDecoration(
-                color: isDark
-                    ? widget.accentColor.withValues(alpha: 0.18)
-                    : widget.accentColor.withValues(alpha: 0.08),
+                // Opaque enough to be a surface, then tinted. Blended against
+                // black or white rather than left translucent, so the ground is
+                // the theme's and not whatever photo happens to be behind it.
+                color: Color.alphaBlend(
+                  widget.accentColor.withValues(alpha: 0.10),
+                  Color.alphaBlend(
+                    widget.surfaceColor.withValues(alpha: 0.86),
+                    isDark ? Colors.black : Colors.white,
+                  ),
+                ),
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: widget.accentColor.withValues(alpha: 0.3),
@@ -97,7 +119,7 @@ class _UpdateBannerState extends State<UpdateBanner>
                           style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: isDark ? Colors.white : Colors.black87,
+                            color: widget.textColor,
                           ),
                         ),
                       ),
@@ -132,8 +154,7 @@ class _UpdateBannerState extends State<UpdateBanner>
                             child: Icon(
                               Icons.close_rounded,
                               size: 16,
-                              color:
-                                  isDark ? Colors.white54 : Colors.grey.shade500,
+                              color: widget.textColor.withValues(alpha: 0.5),
                             ),
                           ),
                         ),
