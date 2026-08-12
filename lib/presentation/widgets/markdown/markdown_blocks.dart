@@ -1,7 +1,12 @@
-import 'package:duskmoon_mermaid_renderer/duskmoon_mermaid_renderer.dart';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:markdown/markdown.dart' as md;
 import 'package:markdown_widget/markdown_widget.dart';
+import 'package:merman/merman.dart';
+
+import 'mermaid_svg.dart';
 
 /// The Markdown blocks noteX renders that markdown_widget does not know about.
 ///
@@ -161,14 +166,79 @@ class FootnoteSectionNode extends ElementNode {
 
 // ── Mermaid ─────────────────────────────────────────────────────────────────
 
+/// The engine, opened once.
+///
+/// [Merman.open] resolves a native library, so calling it per widget would open
+/// it once per diagram in a note. It is also absent under `flutter test`, where
+/// no app bundle exists — hence a nullable result rather than a throw.
+class _MermaidEngine {
+  static Merman? _instance;
+  static bool _tried = false;
+
+  static Merman? get instance {
+    if (_tried) return _instance;
+    _tried = true;
+    try {
+      _instance = Merman.open();
+    } catch (_) {
+      _instance = null;
+    }
+    return _instance;
+  }
+}
+
+/// Mermaid source to SVG a Flutter renderer can actually draw, or null.
+String? renderMermaidSvg({
+  required String source,
+  required bool isDark,
+  required Color background,
+}) {
+  final engine = _MermaidEngine.instance;
+  if (engine == null) return null;
+
+  String hex(Color color) =>
+      '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
+
+  try {
+    final svg = engine.renderSvg(
+      source,
+      optionsJson: jsonEncode({
+        'svg': {
+          // The default parity output carries browser-only constructs —
+          // foreignObject above all — that take labels with them when dropped.
+          'pipeline': 'resvg-safe',
+          // Without this the SVG has no ground of its own and the note's
+          // wallpaper shows straight through the diagram.
+          'root_background_color': hex(background),
+        },
+        // Mermaid's own themes, and specifically these two.
+        //
+        // `default` is the wrong light theme here: its gitGraph palette is
+        // hsl(60,100%) and hsl(240,100%) — a saturated yellow and blue that
+        // read as decoration rather than as branches. `neutral` paints the
+        // same diagram in greys, which is what makes it legible. `dark` is the
+        // palette mermaid's own documentation uses.
+        //
+        // Tied to the app's brightness so a light note never holds a black
+        // card, nor a dark note a white one.
+        'site_config': {'theme': isDark ? 'dark' : 'neutral'},
+      }),
+    );
+
+    // Mermaid writes for a browser. This is what makes it drawable here.
+    return flattenMermaidSvg(svg);
+  } catch (_) {
+    // Includes source that does not parse yet, and any SVG we could not
+    // rewrite — either way the block shows the author's text instead.
+    return null;
+  }
+}
+
 /// A ```mermaid fence, drawn as a diagram.
 ///
-/// Rendering is pure Dart — no WebView. That is not a preference: webview
-/// packages do not cover Linux, and noteX ships Linux.
-///
-/// A diagram that fails to parse falls back to showing its source. Someone
-/// mid-sentence in a diagram should see what they typed, not an empty box or a
-/// stack trace: the fallback IS the editing experience, not an error path.
+/// A diagram that fails to render falls back to showing its source. Someone
+/// mid-sentence in a diagram should see what they typed, not an empty box: for
+/// most keystrokes of writing one, it does not parse yet.
 class MermaidBlock extends StatefulWidget {
   const MermaidBlock({
     super.key,
@@ -176,60 +246,49 @@ class MermaidBlock extends StatefulWidget {
     required this.isDark,
     required this.codeStyle,
     required this.decoration,
+    required this.background,
   });
 
   final String source;
   final bool isDark;
   final TextStyle codeStyle;
   final BoxDecoration decoration;
+  final Color background;
 
   @override
   State<MermaidBlock> createState() => _MermaidBlockState();
 }
 
 class _MermaidBlockState extends State<MermaidBlock> {
-  String? _error;
+  String? _svg;
   bool _hovering = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _render();
+  }
 
   @override
   void didUpdateWidget(covariant MermaidBlock old) {
     super.didUpdateWidget(old);
-    // New source deserves a fresh verdict — otherwise a diagram that failed
-    // once stays broken for the rest of the session while the user fixes it.
-    if (old.source != widget.source) _error = null;
+    if (old.source != widget.source || old.isDark != widget.isDark) _render();
+  }
+
+  /// Done here rather than in build: it crosses into native code and rewrites a
+  /// document, and scrolling a note should not redo that for every diagram.
+  void _render() {
+    _svg = renderMermaidSvg(
+      source: widget.source,
+      isDark: widget.isDark,
+      background: widget.background,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_error != null) return _fallback();
-
-    // The renderer under-reports its own width: a message label is centred on
-    // its arrow and widened to fit the text, but the scene size is computed
-    // from the diagram's columns and never grows to include a label that
-    // overhangs them. Measured at roughly 7% of the width per side on a
-    // sequence diagram with one long message, so the drawing is inset to leave
-    // that room — it stays inside its box instead of running out over the
-    // note. The box also clips now, so a worse case is contained rather than
-    // painted across the paragraph beside it.
-    //
-    // This is an upstream limitation, not something that can be measured from
-    // here: the render object keeps its scene private, so the true extent is
-    // not readable. The viewer is the escape hatch — it does not clip.
-    const overhangInset = 0.86;
-
-    final diagram = DmMermaidView(
-      source: widget.source,
-      options: MermaidRenderOptions(
-        theme: widget.isDark ? MermaidTheme.dark : MermaidTheme.light,
-      ),
-      // setState during layout would loop; defer to after the frame.
-      onError: (error) {
-        if (!mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _error = error.toString());
-        });
-      },
-    );
+    final svg = _svg;
+    if (svg == null) return _fallback();
 
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
@@ -239,43 +298,28 @@ class _MermaidBlockState extends State<MermaidBlock> {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.all(12),
         decoration: widget.decoration,
-        clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
-            // The diagram itself takes no gestures. It sits inside a scrolling
-            // note, and a pannable canvas here would swallow the drag that was
-            // meant to scroll the page — the reader would hit a dead zone in
-            // the middle of their own document. Zooming happens in the viewer.
-            Align(
-              child: FractionallySizedBox(
-                widthFactor: overhangInset,
-                child: diagram,
-              ),
-            ),
+            // No gestures. The block sits inside a scrolling note, and a
+            // pannable canvas would swallow the drag meant to scroll the page,
+            // leaving a dead zone in the reader's own document.
+            SvgPicture.string(svg, fit: BoxFit.contain),
             Positioned(
               top: 0,
               right: 0,
               child: _ExpandButton(
                 color: widget.codeStyle.color ?? Colors.grey,
                 prominent: _hovering,
-                onPressed: _openViewer,
+                onPressed: () => showDialog<void>(
+                  context: context,
+                  barrierColor: Colors.black.withValues(alpha: 0.72),
+                  builder: (_) =>
+                      MermaidViewer(svg: svg, isDark: widget.isDark),
+                ),
               ),
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _openViewer() {
-    showDialog<void>(
-      context: context,
-      // Barrier over a full-screen surface: the diagram is the task now, and
-      // the note behind it stays visible enough to keep your place.
-      barrierColor: Colors.black.withValues(alpha: 0.72),
-      builder: (_) => MermaidViewer(
-        source: widget.source,
-        isDark: widget.isDark,
       ),
     );
   }
@@ -362,9 +406,10 @@ class _ExpandButton extends StatelessWidget {
 /// drag meant to scroll the page. Here there is no page to scroll, so the
 /// canvas can have every gesture it wants.
 class MermaidViewer extends StatefulWidget {
-  const MermaidViewer({super.key, required this.source, required this.isDark});
+  const MermaidViewer({super.key, required this.svg, required this.isDark});
 
-  final String source;
+  /// Already rendered. Vector, so zooming stays sharp at any scale.
+  final String svg;
   final bool isDark;
 
   @override
@@ -438,13 +483,7 @@ class _MermaidViewerState extends State<MermaidViewer> {
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.all(24),
-                      child: DmMermaidView(
-                        source: widget.source,
-                        options: MermaidRenderOptions(
-                          theme:
-                              isDark ? MermaidTheme.dark : MermaidTheme.light,
-                        ),
-                      ),
+                      child: SvgPicture.string(widget.svg),
                     ),
                   ),
                 ),

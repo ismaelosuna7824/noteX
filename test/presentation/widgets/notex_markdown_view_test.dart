@@ -42,6 +42,7 @@ Future<void> _pump(
               lineHeight: 1.5,
               textColor: isDark ? Colors.white : Colors.black,
               accentColor: const Color(0xFFD9A892),
+              surfaceColor: isDark ? const Color(0xFF16161B) : Colors.white,
             ),
           ),
         ),
@@ -196,7 +197,10 @@ flowchart TD
       );
     });
 
-    testWidgets('the expand button opens a zoomable viewer', (tester) async {
+    testWidgets('without the native renderer, the source is shown', (tester) async {
+      // flutter_test builds no app bundle, so merman's library is absent. That
+      // path must degrade to the author's text, which is the same fallback a
+      // half-typed diagram relies on.
       await _pump(tester, '''
 ```mermaid
 flowchart TD
@@ -204,36 +208,40 @@ flowchart TD
 ```
 ''');
 
-      await tester.tap(find.byIcon(Icons.open_in_full_rounded));
-      await tester.pumpAndSettle();
+      expect(find.byType(MermaidBlock), findsOneWidget);
+      expect(_renders(tester, 'flowchart TD'), isTrue);
+    });
 
-      expect(find.byType(MermaidViewer), findsOneWidget);
+    // The viewer is pumped directly: opening it needs a rendered diagram, and
+    // the native renderer is not present here. Its zoom behaviour is worth
+    // pinning regardless of what produced the drawing.
+    Future<void> pumpViewer(WidgetTester tester) async {
+      const svg =
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60">'
+          '<rect width="100" height="60" fill="#888"/></svg>';
+      await tester.pumpWidget(const MaterialApp(
+        home: Scaffold(body: MermaidViewer(svg: svg, isDark: true)),
+      ));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the viewer opens at 1:1 and says so', (tester) async {
+      await pumpViewer(tester);
+
       expect(find.byType(InteractiveViewer), findsOneWidget);
-      // Opens at 1:1, and says so.
       expect(_renders(tester, '100%'), isTrue);
     });
 
-    testWidgets('zooming in reports the new scale and enables reset',
+    testWidgets('zooming in reports the new scale and reset returns to 1:1',
         (tester) async {
-      await _pump(tester, '''
-```mermaid
-flowchart TD
-    A[Start] --> B[End]
-```
-''');
-      await tester.tap(find.byIcon(Icons.open_in_full_rounded));
-      await tester.pumpAndSettle();
-
-      expect(_renders(tester, '100%'), isTrue);
+      await pumpViewer(tester);
 
       await tester.tap(find.byIcon(Icons.add_rounded));
       await tester.pumpAndSettle();
-
       expect(_renders(tester, '130%'), isTrue);
 
       await tester.tap(find.byIcon(Icons.fit_screen_rounded));
       await tester.pumpAndSettle();
-
       expect(_renders(tester, '100%'), isTrue);
     });
 

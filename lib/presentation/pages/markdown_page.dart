@@ -1217,6 +1217,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                       lineHeight: widget.themeState.markdownLineHeight,
                       textColor: widget.themeState.editorTextColor,
                       accentColor: widget.themeState.accentColor,
+                      surfaceColor: widget.themeState.editorBgColor,
                     ),
                   ),
                 ),
