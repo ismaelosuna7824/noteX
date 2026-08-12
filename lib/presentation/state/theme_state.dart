@@ -65,6 +65,13 @@ class ThemeState extends ChangeNotifier {
   /// (an empty note still opens editable — the editor downgrades preview→edit).
   String _editorViewMode = 'preview';
 
+  /// 'list' or 'calendar' for the timer page.
+  ///
+  /// Lives here, with the editor's view mode, because this is already where
+  /// persisted preferences are kept — a second store for one string would be
+  /// a second thing to load, migrate and forget.
+  String _timerViewMode = 'list';
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -132,6 +139,7 @@ class ThemeState extends ChangeNotifier {
 
   /// Last-used editor view mode ('edit', 'preview', or 'split').
   String get editorViewMode => _editorViewMode;
+  String get timerViewMode => _timerViewMode;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -341,6 +349,7 @@ class ThemeState extends ChangeNotifier {
 
       _notesDisplayMode = json['notesDisplayMode'] as String? ?? 'list';
       _editorViewMode = json['editorViewMode'] as String? ?? 'preview';
+      _timerViewMode = json['timerViewMode'] as String? ?? 'list';
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -381,6 +390,7 @@ class ThemeState extends ChangeNotifier {
         'sidebarIconColor': _sidebarIconColor?.toARGB32(),
         'notesDisplayMode': _notesDisplayMode,
         'editorViewMode': _editorViewMode,
+        'timerViewMode': _timerViewMode,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -406,6 +416,16 @@ class ThemeState extends ChangeNotifier {
     if (_editorViewMode == mode) return;
     _editorViewMode = mode;
     _saveToDisk();
+  }
+
+  /// Unlike the editor's mode, this one notifies: the timer page is rebuilt
+  /// from it, so a silent write would leave the button toggled and the view
+  /// unchanged.
+  void setTimerViewMode(String mode) {
+    if (_timerViewMode == mode) return;
+    _timerViewMode = mode;
+    _saveToDisk();
+    notifyListeners();
   }
 
   /// Change the font family and persist.
