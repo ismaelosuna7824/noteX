@@ -39,8 +39,25 @@ jobs:
       # name. Left alone, dyld looks for /Users/runner/work/merman/... at
       # launch and the app dies immediately. Must run after `pub get`, which
       # can restore the original file.
-      - name: Patch the merman install name
-        run: ./scripts/patch_merman_dylib.sh
+      - name: Repair merman
+        run: ./scripts/patch_merman.sh
+
+      # Same treatment the release workflow applies: the runner has no "Apple
+      # Development" certificate, so xcodebuild must be told not to look for
+      # one. The app is ad-hoc signed after the build.
+      - name: Disable code signing for CI
+        run: |
+          python3 - << 'EOF'
+          import pathlib
+          pbx = pathlib.Path('macos/Runner.xcodeproj/project.pbxproj')
+          txt = pbx.read_text()
+          txt = txt.replace('DEVELOPMENT_TEAM = 2CAK428VHF;', 'DEVELOPMENT_TEAM = "";')
+          txt = txt.replace('CODE_SIGN_STYLE = Automatic;', 'CODE_SIGN_STYLE = Manual;')
+          txt = txt.replace('CODE_SIGN_IDENTITY = "Apple Development";', 'CODE_SIGN_IDENTITY = "-";')
+          txt = txt.replace('"CODE_SIGN_IDENTITY[sdk=macosx*]" = "Apple Development";',
+                            '"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";')
+          pbx.write_text(txt)
+          EOF
 
       - name: Create dart defines file
         env:
@@ -127,6 +144,9 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      - name: Repair merman
+        run: ./scripts/patch_merman.sh
 
       - name: Create dart defines file
         env:
