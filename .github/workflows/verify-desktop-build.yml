@@ -40,7 +40,7 @@ jobs:
       # launch and the app dies immediately. Must run after `pub get`, which
       # can restore the original file.
       - name: Patch the merman install name
-        run: ./tool/patch_merman_dylib.sh
+        run: ./scripts/patch_merman_dylib.sh
 
       - name: Create dart defines file
         env:
@@ -135,7 +135,9 @@ jobs:
         run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
 
       - name: Build
-        run: flutter build linux --release --dart-define-from-file=dart_defines.json
+        # Verbose because Flutter's progress line overwrites the linker's own
+        # error, leaving only "linker command failed" with no cause.
+        run: flutter build linux --release --verbose --dart-define-from-file=dart_defines.json
 
       - name: Verify the native library is bundled
         run: |

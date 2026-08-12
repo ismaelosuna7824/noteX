@@ -8,7 +8,6 @@ list(APPEND FLUTTER_PLUGIN_LIST
   flutter_acrylic
   media_kit_libs_windows_video
   media_kit_video
-  merman
   screen_retriever
   sqlite3_flutter_libs
   url_launcher_windows
