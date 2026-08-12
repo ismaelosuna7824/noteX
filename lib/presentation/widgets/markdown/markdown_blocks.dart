@@ -203,6 +203,20 @@ class _MermaidBlockState extends State<MermaidBlock> {
   Widget build(BuildContext context) {
     if (_error != null) return _fallback();
 
+    // The renderer under-reports its own width: a message label is centred on
+    // its arrow and widened to fit the text, but the scene size is computed
+    // from the diagram's columns and never grows to include a label that
+    // overhangs them. Measured at roughly 7% of the width per side on a
+    // sequence diagram with one long message, so the drawing is inset to leave
+    // that room — it stays inside its box instead of running out over the
+    // note. The box also clips now, so a worse case is contained rather than
+    // painted across the paragraph beside it.
+    //
+    // This is an upstream limitation, not something that can be measured from
+    // here: the render object keeps its scene private, so the true extent is
+    // not readable. The viewer is the escape hatch — it does not clip.
+    const overhangInset = 0.86;
+
     final diagram = DmMermaidView(
       source: widget.source,
       options: MermaidRenderOptions(
@@ -225,13 +239,19 @@ class _MermaidBlockState extends State<MermaidBlock> {
         margin: const EdgeInsets.symmetric(vertical: 8),
         padding: const EdgeInsets.all(12),
         decoration: widget.decoration,
+        clipBehavior: Clip.antiAlias,
         child: Stack(
           children: [
             // The diagram itself takes no gestures. It sits inside a scrolling
             // note, and a pannable canvas here would swallow the drag that was
             // meant to scroll the page — the reader would hit a dead zone in
             // the middle of their own document. Zooming happens in the viewer.
-            diagram,
+            Align(
+              child: FractionallySizedBox(
+                widthFactor: overhangInset,
+                child: diagram,
+              ),
+            ),
             Positioned(
               top: 0,
               right: 0,
@@ -395,7 +415,10 @@ class _MermaidViewerState extends State<MermaidViewer> {
     return Dialog(
       backgroundColor: surface,
       insetPadding: const EdgeInsets.all(32),
-      clipBehavior: Clip.antiAlias,
+      // Deliberately unclipped, unlike the inline block: this is where a label
+      // that overhangs the diagram's reported width has to remain readable.
+      // Panning reaches anything the initial framing misses.
+      clipBehavior: Clip.none,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: LayoutBuilder(
         builder: (context, constraints) {
