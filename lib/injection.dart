@@ -46,6 +46,7 @@ import 'application/use_cases/timer/create_project_use_case.dart';
 import 'application/use_cases/timer/get_projects_use_case.dart';
 import 'application/use_cases/timer/delete_project_use_case.dart';
 import 'application/use_cases/timer/start_timer_use_case.dart';
+import 'application/use_cases/timer/log_time_entry_use_case.dart';
 import 'application/use_cases/timer/stop_timer_use_case.dart';
 import 'application/use_cases/timer/get_time_entries_use_case.dart';
 import 'application/use_cases/timer/delete_time_entry_use_case.dart';
@@ -243,6 +244,9 @@ Future<void> setupDependencies() async {
   getIt.registerFactory<StopTimerUseCase>(
     () => StopTimerUseCase(getIt<TimeEntryRepository>()),
   );
+  getIt.registerFactory<LogTimeEntryUseCase>(
+    () => LogTimeEntryUseCase(getIt<TimeEntryRepository>()),
+  );
   getIt.registerFactory<GetTimeEntriesUseCase>(
     () => GetTimeEntriesUseCase(getIt<TimeEntryRepository>()),
   );
@@ -392,6 +396,7 @@ Future<void> setupDependencies() async {
       deleteProject: getIt<DeleteProjectUseCase>(),
       startTimer: getIt<StartTimerUseCase>(),
       stopTimer: getIt<StopTimerUseCase>(),
+      logEntry: getIt<LogTimeEntryUseCase>(),
       getEntries: getIt<GetTimeEntriesUseCase>(),
       deleteEntry: getIt<DeleteTimeEntryUseCase>(),
       updateEntry: getIt<UpdateTimeEntryUseCase>(),
