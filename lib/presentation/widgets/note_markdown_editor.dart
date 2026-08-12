@@ -435,6 +435,53 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     _wrapSelection('```\n', '\n```');
   }
 
+  /// Inserts a mermaid block — a working one, not an empty fence.
+  ///
+  /// The syntax is the whole barrier here: someone who has never written a
+  /// diagram cannot start from ``` and a blank line. A two-node flowchart
+  /// renders the moment it lands, so the preview teaches the shape by example
+  /// and the labels are there to be typed over.
+  ///
+  /// An existing selection is wrapped instead, because the other reason to
+  /// press this button is having just pasted mermaid source from somewhere
+  /// else.
+  void _insertMermaid() {
+    final value = _controller.value;
+    final selection = value.selection;
+
+    if (selection.isValid && !selection.isCollapsed) {
+      _wrapSelection('```mermaid\n', '\n```');
+      return;
+    }
+
+    const label = 'Start';
+    const block = '```mermaid\nflowchart TD\n    A[$label] --> B[End]\n```';
+
+    final text = value.text;
+    final at = selection.isValid ? selection.start : text.length;
+
+    // Fences need their own line, or the block is swallowed by the paragraph
+    // above it.
+    final before = at > 0 && !text.substring(0, at).endsWith('\n') ? '\n' : '';
+    final after = at < text.length && !text.substring(at).startsWith('\n')
+        ? '\n'
+        : '';
+
+    final replacement = '$before$block$after';
+    final newText = text.replaceRange(at, at, replacement);
+
+    // Land on the first label rather than after the block: the next useful
+    // keystroke is renaming a node, and it is already selected.
+    final labelStart = at + before.length + block.indexOf(label);
+    _apply(
+      newText,
+      TextSelection(
+        baseOffset: labelStart,
+        extentOffset: labelStart + label.length,
+      ),
+    );
+  }
+
   /// Wraps the current selection as a Markdown link `[selected](url)` and
   /// selects the `url` placeholder so the user can immediately type the target.
   void _insertLink() {
@@ -824,6 +871,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       _prefixButton(Icons.checklist, 'Checklist', (_) => '- [ ] '),
       const VerticalDivider(width: 1),
       _iconButton(Icons.data_object, 'Code block', _wrapCodeBlock),
+      _iconButton(Icons.account_tree, 'Mermaid diagram', _insertMermaid),
       _prefixButton(Icons.format_quote, 'Blockquote', (_) => '> '),
       _iconButton(Icons.link, 'Link', _insertLink),
     ];

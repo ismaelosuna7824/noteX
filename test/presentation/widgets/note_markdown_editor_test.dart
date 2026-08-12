@@ -569,4 +569,110 @@ void main() {
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(NoteXMarkdownView), findsNothing);
   });
+
+  group('the mermaid button', () {
+    Future<TextEditingController> pumpEditor(
+      WidgetTester tester, {
+      String initial = '',
+    }) async {
+      var text = initial;
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
+        home: Scaffold(
+          body: NoteMarkdownEditor(
+            initialContent: initial,
+            onChanged: (value) => text = value,
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.account_tree));
+      await tester.pumpAndSettle();
+
+      return TextEditingController(text: text);
+    }
+
+    testWidgets('inserts a diagram that already renders', (tester) async {
+      // An empty fence teaches nothing. Someone who has never written mermaid
+      // needs to see one work before they can edit it.
+      final controller = await pumpEditor(tester);
+
+      expect(controller.text, contains('```mermaid'));
+      expect(controller.text, contains('flowchart TD'));
+      expect(controller.text, contains('-->'));
+    });
+
+    testWidgets('selects the first label, ready to be typed over',
+        (tester) async {
+      await pumpEditor(tester);
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      final selection = field.controller!.selection;
+      final selected = field.controller!.text
+          .substring(selection.start, selection.end);
+
+      expect(selected, 'Start',
+          reason: 'the next useful keystroke is renaming a node');
+    });
+
+    testWidgets('wraps a selection instead of replacing it', (tester) async {
+      // The other reason to press this is having just pasted mermaid source
+      // from elsewhere.
+      const pasted = 'pie title Fruit';
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
+        home: Scaffold(
+          body: NoteMarkdownEditor(
+            initialContent: pasted,
+            onChanged: (_) {},
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      field.controller!.selection =
+          const TextSelection(baseOffset: 0, extentOffset: pasted.length);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.account_tree));
+      await tester.pumpAndSettle();
+
+      final result = tester.widget<TextField>(find.byType(TextField))
+          .controller!
+          .text;
+      expect(result, contains(pasted));
+      expect(result, contains('```mermaid'));
+      expect(result, isNot(contains('flowchart TD')));
+    });
+
+    testWidgets('never opens a fence mid-paragraph', (tester) async {
+      // A fence that does not start its own line is swallowed by the text
+      // above it and renders as nothing.
+      await tester.pumpWidget(MaterialApp(
+        theme: ThemeData(splashFactory: NoSplash.splashFactory),
+        home: Scaffold(
+          body: NoteMarkdownEditor(
+            initialContent: 'some prose',
+            onChanged: (_) {},
+          ),
+        ),
+      ));
+      await tester.pump();
+
+      final field = tester.widget<TextField>(find.byType(TextField));
+      field.controller!.selection =
+          const TextSelection.collapsed(offset: 'some prose'.length);
+      await tester.pump();
+
+      await tester.tap(find.byIcon(Icons.account_tree));
+      await tester.pumpAndSettle();
+
+      final result = tester.widget<TextField>(find.byType(TextField))
+          .controller!
+          .text;
+      expect(result, contains('prose\n```mermaid'));
+    });
+  });
 }
