@@ -287,10 +287,14 @@ jobs:
       # pull requests and this repository pushes straight to main — every
       # release shipped with an empty body and a compare link.
       #
-      # Needs the tags, which a shallow checkout does not fetch.
+      # Needs the tags, which a shallow checkout does not fetch. --force
+      # because checkout already left a local tag pointing at the commit, and
+      # the annotated tag it collides with is the one the remote considers
+      # authoritative; without it git refuses the clobber and fails the step.
       - name: Build release notes
         run: |
-          git fetch --prune --unshallow --tags 2>/dev/null || git fetch --tags
+          git fetch --prune --unshallow --tags --force 2>/dev/null \
+            || git fetch --tags --force
           ./scripts/release_notes.sh "${GITHUB_REF_NAME}" > release_notes.md
           cat release_notes.md
 
