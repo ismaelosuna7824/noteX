@@ -1,5 +1,11 @@
+import 'dart:ui' show FontFeature;
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
+import '../../domain/services/project_breakdown.dart';
+import '../../domain/services/time_entry_grouping.dart';
+import '../widgets/time_entry_editor.dart';
 
 import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
@@ -9,6 +15,7 @@ import '../state/timer_state.dart';
 import '../widgets/glassmorphic_container.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/timer_calendar_view.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Preset colors for new projects
@@ -104,6 +111,7 @@ class _TimerPageState extends State<TimerPage> {
                 descController: _descController,
                 onProjectSelected: (id) =>
                     setState(() => _filterProjectId = id),
+                filterProjectId: _filterProjectId,
               ),
               const SizedBox(height: 10),
 
@@ -118,16 +126,46 @@ class _TimerPageState extends State<TimerPage> {
               Expanded(
                 child: _timerState.isLoading
                     ? const Center(child: CircularProgressIndicator())
-                    : _EntriesList(
-                        timerState: _timerState,
-                        themeState: widget.themeState,
-                        filterProjectId: _filterProjectId,
-                      ),
+                    : widget.themeState.timerViewMode == 'calendar'
+                        ? TimerCalendarView(
+                            entriesByDay: _timerState.entriesByDay,
+                            timerState: _timerState,
+                            themeState: widget.themeState,
+                            onEntryTap: (entry) => _editEntry(context, entry),
+                          )
+                        : _EntriesList(
+                            timerState: _timerState,
+                            themeState: widget.themeState,
+                            filterProjectId: _filterProjectId,
+                          ),
               ),
             ],
           ),
         );
       },
+    );
+  }
+
+  /// A block on the grid opens the same editor as a row in the list.
+  Future<void> _editEntry(BuildContext context, TimeEntry entry) async {
+    final result = await showDialog<TimeEntryEdit>(
+      context: context,
+      builder: (_) => TimeEntryEditor(
+        entry: entry,
+        projects: _timerState.projects,
+        accentColor: widget.themeState.accentColor,
+        surfaceColor: widget.themeState.editorBgColor,
+        textColor: widget.themeState.editorTextColor,
+      ),
+    );
+    if (result == null) return;
+
+    await _timerState.updateEntry(
+      entryId: entry.id,
+      description: result.description,
+      projectId: result.projectId,
+      startTime: result.startTime,
+      endTime: result.endTime,
     );
   }
 }
@@ -141,12 +179,14 @@ class _TimerBar extends StatelessWidget {
   final ThemeState themeState;
   final TextEditingController descController;
   final ValueChanged<String?> onProjectSelected;
+  final String? filterProjectId;
 
   const _TimerBar({
     required this.timerState,
     required this.themeState,
     required this.descController,
     required this.onProjectSelected,
+    required this.filterProjectId,
   });
 
   @override
@@ -200,6 +240,7 @@ class _TimerBar extends StatelessWidget {
 
           // Project chip
           _ProjectChip(
+            filterProjectId: filterProjectId,
             timerState: timerState,
             themeState: themeState,
             enabled: !isRunning,
@@ -220,10 +261,30 @@ class _TimerBar extends StatelessWidget {
           ),
           const SizedBox(width: 16),
 
-          // Play / Stop button
+          // Timer or manual. Offered as a choice rather than hidden behind a
+          // menu because the two are used at different moments: one when the
+          // work is about to start, the other when it is already over and the
+          // timer was never touched.
+          //
+          // Hidden while a timer runs: logging a past hour is fine mid-run,
+          // but a mode switch beside a running clock invites the reading that
+          // it will stop it.
+          if (!isRunning) ...[
+            _ModeToggle(
+              manual: timerState.manualMode,
+              accent: accent,
+              themeState: themeState,
+              onChanged: timerState.setManualMode,
+            ),
+            const SizedBox(width: 12),
+          ],
+
+          // Play / Stop / Add button
           GestureDetector(
             onTap: isRunning
                 ? () => timerState.stopTimer()
+                : timerState.manualMode
+                ? () => _logManually(context)
                 : () {
                     timerState.setDraftDescription(descController.text);
                     timerState.startTimer();
@@ -244,13 +305,385 @@ class _TimerBar extends StatelessWidget {
                 ],
               ),
               child: Icon(
-                isRunning ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                isRunning
+                    ? Icons.stop_rounded
+                    : timerState.manualMode
+                    ? Icons.add_rounded
+                    : Icons.play_arrow_rounded,
                 color: Colors.white,
                 size: 24,
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _logManually(BuildContext context) async {
+    final now = DateTime.now();
+
+    // Defaults to the hour just gone, which is what someone reaching for
+    // manual entry is almost always recording. A zero-length default would be
+    // technically neutral and useless in practice.
+    final draft = TimeEntry(
+      id: '',
+      description: descController.text.trim(),
+      projectId: timerState.draftProjectId,
+      startTime: now.subtract(const Duration(hours: 1)),
+      endTime: now,
+      updatedAt: now,
+    );
+
+    final result = await showDialog<TimeEntryEdit>(
+      context: context,
+      builder: (_) => TimeEntryEditor(
+        entry: draft,
+        projects: timerState.projects,
+        accentColor: themeState.accentColor,
+        surfaceColor: themeState.editorBgColor,
+        textColor: themeState.editorTextColor,
+      ),
+    );
+    if (result == null || result.endTime == null) return;
+
+    await timerState.logEntry(
+      description: result.description,
+      projectId: result.projectId,
+      startTime: result.startTime,
+      endTime: result.endTime!,
+    );
+    descController.clear();
+  }
+}
+
+/// The week total, and — on click — where it went.
+///
+/// The number alone says whether a week happened, not what it was. Fifty hours
+/// is a different week depending on whether three of them were unassigned or
+/// forty-seven were, and that answer is one tap away instead of a page away.
+class _WeekTotal extends StatelessWidget {
+  const _WeekTotal({
+    required this.entries,
+    required this.projects,
+    required this.total,
+    required this.themeState,
+  });
+
+  final List<TimeEntry> entries;
+  final List<Project> projects;
+  final Duration total;
+  final ThemeState themeState;
+
+  @override
+  Widget build(BuildContext context) {
+    final shares = breakdownByProject(entries, projects);
+    final accent = themeState.accentColor;
+
+    final label = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          'WEEK TOTAL',
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            color: themeState.editorMutedTextColor,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(width: 6),
+        Text(
+          _formatDuration(total),
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: accent,
+            letterSpacing: 0.5,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+        if (shares.length > 1) ...[
+          const SizedBox(width: 6),
+          Icon(
+            Icons.expand_more_rounded,
+            size: 15,
+            color: themeState.editorMutedTextColor,
+          ),
+        ],
+      ],
+    );
+
+    // One project is its own breakdown. Offering to expand it would promise
+    // something the click cannot deliver.
+    if (shares.length < 2) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        child: label,
+      );
+    }
+
+    return PopupMenuButton<void>(
+      tooltip: 'Breakdown by project',
+      offset: const Offset(0, 28),
+      color: themeState.editorBgColor,
+      elevation: 8,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: BorderSide(
+          color: themeState.editorTextColor.withValues(alpha: 0.08),
+        ),
+      ),
+      itemBuilder: (_) => [
+        PopupMenuItem<void>(
+          enabled: false,
+          padding: EdgeInsets.zero,
+          child: _BreakdownPanel(shares: shares, themeState: themeState),
+        ),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: themeState.editorTextColor.withValues(alpha: 0.04),
+        ),
+        child: label,
+      ),
+    );
+  }
+}
+
+class _BreakdownPanel extends StatelessWidget {
+  const _BreakdownPanel({required this.shares, required this.themeState});
+
+  final List<ProjectShare> shares;
+  final ThemeState themeState;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 260,
+      padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // The whole week as one bar, before the numbers: proportion is read
+          // faster than it is calculated.
+          ClipRRect(
+            borderRadius: BorderRadius.circular(3),
+            child: SizedBox(
+              height: 6,
+              child: Row(
+                children: shares
+                    .map((share) => Expanded(
+                          flex: (share.fraction * 1000).round().clamp(1, 1000),
+                          child: ColoredBox(color: _colorFor(share)),
+                        ))
+                    .toList(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ...shares.map((share) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 9,
+                      height: 9,
+                      decoration: BoxDecoration(
+                        color: _colorFor(share),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        share.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: share.project == null
+                              ? themeState.editorMutedTextColor
+                              : themeState.editorTextColor,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '${(share.fraction * 100).round()}%',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: themeState.editorMutedTextColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      _formatDuration(share.total),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: themeState.editorTextColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+              )),
+        ],
+      ),
+    );
+  }
+
+  Color _colorFor(ProjectShare share) =>
+      share.project?.color ??
+      themeState.editorMutedTextColor.withValues(alpha: 0.45);
+}
+
+/// List or calendar, remembered across restarts.
+class _ViewToggle extends StatelessWidget {
+  const _ViewToggle({required this.themeState});
+
+  final ThemeState themeState;
+
+  @override
+  Widget build(BuildContext context) {
+    final calendar = themeState.timerViewMode == 'calendar';
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: themeState.editorTextColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ViewToggleButton(
+            icon: Icons.view_list_rounded,
+            tooltip: 'List view',
+            selected: !calendar,
+            themeState: themeState,
+            onTap: () => themeState.setTimerViewMode('list'),
+          ),
+          _ViewToggleButton(
+            icon: Icons.calendar_view_week_rounded,
+            tooltip: 'Calendar view',
+            selected: calendar,
+            themeState: themeState,
+            onTap: () => themeState.setTimerViewMode('calendar'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ViewToggleButton extends StatelessWidget {
+  const _ViewToggleButton({
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.themeState,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final ThemeState themeState;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected
+            ? themeState.accentColor.withValues(alpha: 0.18)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          // Comfortably clickable without making a header control loom over
+          // the week total it sits beside.
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Icon(
+              icon,
+              size: 16,
+              color: selected
+                  ? themeState.accentColor
+                  : themeState.editorMutedTextColor,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Timer or manual, as two halves of one control.
+class _ModeToggle extends StatelessWidget {
+  const _ModeToggle({
+    required this.manual,
+    required this.accent,
+    required this.themeState,
+    required this.onChanged,
+  });
+
+  final bool manual;
+  final Color accent;
+  final ThemeState themeState;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: themeState.editorTextColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _half(Icons.timer_outlined, 'Timer', !manual, () => onChanged(false)),
+          _half(
+            Icons.edit_calendar_outlined,
+            'Manual',
+            manual,
+            () => onChanged(true),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _half(IconData icon, String tooltip, bool selected, VoidCallback tap) {
+    return Tooltip(
+      message: tooltip,
+      child: GestureDetector(
+        onTap: tap,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: selected ? accent.withValues(alpha: 0.22) : null,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(
+            icon,
+            size: 16,
+            color: selected
+                ? accent
+                : themeState.editorMutedTextColor.withValues(alpha: 0.8),
+          ),
+        ),
       ),
     );
   }
@@ -265,8 +698,10 @@ class _ProjectChip extends StatelessWidget {
   final ThemeState themeState;
   final bool enabled;
   final ValueChanged<String?> onProjectSelected;
+  final String? filterProjectId;
 
   const _ProjectChip({
+    required this.filterProjectId,
     required this.timerState,
     required this.themeState,
     required this.enabled,
@@ -355,8 +790,9 @@ class _ProjectChip extends StatelessWidget {
       Rect.fromPoints(
         button.localToGlobal(Offset.zero, ancestor: overlay),
         button.localToGlobal(
-            button.size.bottomRight(Offset.zero),
-            ancestor: overlay),
+          button.size.bottomRight(Offset.zero),
+          ancestor: overlay,
+        ),
       ),
       Offset.zero & overlay.size,
     );
@@ -365,34 +801,66 @@ class _ProjectChip extends StatelessWidget {
     final currentDraftId = timerState.draftProjectId;
 
     Widget checkIfActive(String? id) => SizedBox(
-          width: 18,
-          child: currentDraftId == id
-              ? Icon(Icons.check_rounded,
-                  size: 14, color: themeState.accentColor)
-              : null,
-        );
+      width: 18,
+      child: currentDraftId == id
+          ? Icon(Icons.check_rounded, size: 14, color: themeState.accentColor)
+          : null,
+    );
 
     final result = await showMenu<String?>(
       context: context,
       position: position,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
       items: [
-        // No Project option (also acts as "clear filter")
+        // Every other row narrows the list; without this one there is no way
+        // back to the whole week once a project has been picked.
+        PopupMenuItem<String?>(
+          value: '__all__',
+          child: Row(
+            children: [
+              SizedBox(
+                width: 18,
+                child: filterProjectId == null
+                    ? Icon(Icons.check_rounded,
+                        size: 14, color: themeState.accentColor)
+                    : null,
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                Icons.all_inclusive_rounded,
+                size: 16,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'All projects',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(),
+        // No Project option
         PopupMenuItem<String?>(
           value: '__none__',
           child: Row(
             children: [
               checkIfActive(null),
               const SizedBox(width: 4),
-              Icon(Icons.folder_outlined, size: 16, color: Colors.grey.shade400),
+              Icon(
+                Icons.folder_outlined,
+                size: 16,
+                color: Colors.grey.shade400,
+              ),
               const SizedBox(width: 8),
-              Text('No Project',
-                  style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
+              Text(
+                'No Project',
+                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+              ),
             ],
           ),
         ),
-        if (projects.isNotEmpty)
-          const PopupMenuDivider(),
+        if (projects.isNotEmpty) const PopupMenuDivider(),
         ...projects.map(
           (p) => PopupMenuItem<String?>(
             value: p.id,
@@ -419,8 +887,11 @@ class _ProjectChip extends StatelessWidget {
                   },
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.delete_outline_rounded,
-                        size: 15, color: Colors.red.shade300),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 15,
+                      color: Colors.red.shade300,
+                    ),
                   ),
                 ),
               ],
@@ -436,12 +907,14 @@ class _ProjectChip extends StatelessWidget {
               const SizedBox(width: 22), // align with others
               Icon(Icons.add_rounded, size: 16, color: themeState.accentColor),
               const SizedBox(width: 8),
-              Text('New Project',
-                  style: TextStyle(
-                    color: themeState.accentColor,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  )),
+              Text(
+                'New Project',
+                style: TextStyle(
+                  color: themeState.accentColor,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
+              ),
             ],
           ),
         ),
@@ -449,7 +922,11 @@ class _ProjectChip extends StatelessWidget {
     );
 
     if (result == null) return;
-    if (result == '__new__' && context.mounted) {
+    if (result == '__all__') {
+      // Only the filter. The draft project is what the next entry will be
+      // tagged with, and widening the view is not a decision about that.
+      onProjectSelected(null);
+    } else if (result == '__new__' && context.mounted) {
       await _showNewProjectDialog(context);
       // After creation, timerState.draftProjectId holds the new project id.
       // Propagate to filter.
@@ -471,9 +948,13 @@ class _ProjectChip extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('New Project',
-              style: TextStyle(fontWeight: FontWeight.w700)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'New Project',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -491,11 +972,14 @@ class _ProjectChip extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              const Text('Color',
-                  style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey)),
+              const Text(
+                'Color',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -517,13 +1001,18 @@ class _ProjectChip extends StatelessWidget {
                         boxShadow: isSelected
                             ? [
                                 BoxShadow(
-                                    color: c.withValues(alpha: 0.5),
-                                    blurRadius: 6)
+                                  color: c.withValues(alpha: 0.5),
+                                  blurRadius: 6,
+                                ),
                               ]
                             : null,
                       ),
                       child: isSelected
-                          ? const Icon(Icons.check, size: 14, color: Colors.white)
+                          ? const Icon(
+                              Icons.check,
+                              size: 14,
+                              color: Colors.white,
+                            )
                           : null,
                     ),
                   );
@@ -602,7 +1091,6 @@ class _WeekNavBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = themeState.accentColor;
     final label = timerState.isCurrentWeek
         ? 'This week · W${timerState.weekNumber}'
         : _weekRangeLabel(timerState.weekStart);
@@ -614,89 +1102,86 @@ class _WeekNavBar extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         children: [
-          // Previous week
-          InkWell(
-            onTap: timerState.goToPreviousWeek,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(Icons.chevron_left_rounded,
-                  color: themeState.editorTextColor),
-            ),
-          ),
-          const SizedBox(width: 4),
-
-          // Week label → opens calendar picker
-          Flexible(
-            child: GestureDetector(
-              onTap: () => _showWeekPicker(context),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.calendar_today_rounded,
-                    size: 13,
-                    color: themeState.editorMutedTextColor,
+          Expanded(
+            child: Row(
+              children: [
+              // Previous week
+              InkWell(
+                onTap: timerState.goToPreviousWeek,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.chevron_left_rounded,
+                    color: themeState.editorTextColor,
                   ),
-                  const SizedBox(width: 6),
-                  Flexible(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: themeState.editorTextColor,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                  ),
-                  const SizedBox(width: 3),
-                  Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: themeState.editorMutedTextColor,
-                  ),
-                ],
+                ),
               ),
-            ),
-          ),
+              const SizedBox(width: 4),
 
-          const SizedBox(width: 4),
-          // Next week
-          InkWell(
-            onTap: timerState.goToNextWeek,
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.all(4),
-              child: Icon(Icons.chevron_right_rounded,
-                  color: themeState.editorTextColor),
-            ),
-          ),
+              // Week label → opens calendar picker
+              Flexible(
+                child: GestureDetector(
+                  onTap: () => _showWeekPicker(context),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.calendar_today_rounded,
+                        size: 13,
+                        color: themeState.editorMutedTextColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: themeState.editorTextColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 16,
+                        color: themeState.editorMutedTextColor,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
 
-          const SizedBox(width: 8),
+              const SizedBox(width: 4),
+              // Next week
+              InkWell(
+                onTap: timerState.goToNextWeek,
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    color: themeState.editorTextColor,
+                  ),
+                ),
+              ),
 
-          // Week total
-          Text(
-            'WEEK TOTAL',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: themeState.editorMutedTextColor,
-              letterSpacing: 0.5,
+              const SizedBox(width: 8),
+              // Week total, and what it was spent on
+              _WeekTotal(
+                entries: timerState.weekEntries,
+                projects: timerState.projects,
+                total: timerState.weekTotal,
+                themeState: themeState,
+              ),
+              ],
             ),
           ),
-          const SizedBox(width: 6),
-          Text(
-            _formatDuration(timerState.weekTotal),
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w800,
-              color: accent,
-              letterSpacing: 0.5,
-              fontFeatures: const [FontFeature.tabularFigures()],
-            ),
-          ),
+          const SizedBox(width: 12),
+          _ViewToggle(themeState: themeState),
         ],
       ),
     );
@@ -751,7 +1236,9 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
     super.initState();
     _selectedWeekStart = widget.currentWeekStart;
     _displayMonth = DateTime(
-        widget.currentWeekStart.year, widget.currentWeekStart.month);
+      widget.currentWeekStart.year,
+      widget.currentWeekStart.month,
+    );
   }
 
   static DateTime _isoMonday(DateTime date) {
@@ -784,9 +1271,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildShortcutsPanel(ts, accent),
-              VerticalDivider(
-                  width: 1,
-                  color: ts.editorBorderColor),
+              VerticalDivider(width: 1, color: ts.editorBorderColor),
               Expanded(child: _buildCalendarPanel(ts, accent)),
             ],
           ),
@@ -840,7 +1325,9 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: isHighlighted
                           ? accent.withValues(alpha: 0.12)
@@ -854,9 +1341,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                         fontWeight: isHighlighted
                             ? FontWeight.w700
                             : FontWeight.w500,
-                        color: isHighlighted
-                            ? accent
-                            : ts.editorTextColor,
+                        color: isHighlighted ? accent : ts.editorTextColor,
                       ),
                     ),
                   ),
@@ -885,7 +1370,9 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                 iconColor: ts.editorTextColor,
                 onTap: () => setState(() {
                   _displayMonth = DateTime(
-                      _displayMonth.year, _displayMonth.month - 1);
+                    _displayMonth.year,
+                    _displayMonth.month - 1,
+                  );
                 }),
               ),
               Expanded(
@@ -905,7 +1392,9 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                 iconColor: ts.editorTextColor,
                 onTap: () => setState(() {
                   _displayMonth = DateTime(
-                      _displayMonth.year, _displayMonth.month + 1);
+                    _displayMonth.year,
+                    _displayMonth.month + 1,
+                  );
                 }),
               ),
             ],
@@ -942,19 +1431,23 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
   }
 
   List<Widget> _buildWeekRows(ThemeState ts, Color accent) {
-    final firstOfMonth =
-        DateTime(_displayMonth.year, _displayMonth.month, 1);
-    DateTime monday =
-        firstOfMonth.subtract(Duration(days: firstOfMonth.weekday - 1));
-    final lastOfMonth =
-        DateTime(_displayMonth.year, _displayMonth.month + 1, 0);
+    final firstOfMonth = DateTime(_displayMonth.year, _displayMonth.month, 1);
+    DateTime monday = firstOfMonth.subtract(
+      Duration(days: firstOfMonth.weekday - 1),
+    );
+    final lastOfMonth = DateTime(
+      _displayMonth.year,
+      _displayMonth.month + 1,
+      0,
+    );
     final today = DateTime.now();
     final todayMidnight = DateTime(today.year, today.month, today.day);
 
     final rows = <Widget>[];
     for (var i = 0; i < 6; i++) {
-      if (monday.isAfter(lastOfMonth) &&
-          monday.month != _displayMonth.month) { break; }
+      if (monday.isAfter(lastOfMonth) && monday.month != _displayMonth.month) {
+        break;
+      }
       rows.add(_buildWeekRow(monday, ts, accent, todayMidnight));
       monday = monday.add(const Duration(days: 7));
     }
@@ -962,7 +1455,11 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
   }
 
   Widget _buildWeekRow(
-      DateTime monday, ThemeState ts, Color accent, DateTime todayMidnight) {
+    DateTime monday,
+    ThemeState ts,
+    Color accent,
+    DateTime todayMidnight,
+  ) {
     final isSelected = monday.isAtSameMomentAs(_selectedWeekStart);
     final weekNum = _weekNumber(monday);
 
@@ -1009,10 +1506,7 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                     width: 30,
                     height: 30,
                     decoration: isToday
-                        ? BoxDecoration(
-                            color: accent,
-                            shape: BoxShape.circle,
-                          )
+                        ? BoxDecoration(color: accent, shape: BoxShape.circle)
                         : null,
                     child: Center(
                       child: Text(
@@ -1022,13 +1516,13 @@ class _WeekPickerDialogState extends State<_WeekPickerDialog> {
                           fontWeight: isToday
                               ? FontWeight.w800
                               : (isSelected
-                                  ? FontWeight.w600
-                                  : FontWeight.w400),
+                                    ? FontWeight.w600
+                                    : FontWeight.w400),
                           color: isToday
                               ? Colors.white
                               : isCurrentMonth
-                                  ? ts.editorTextColor
-                                  : ts.editorMutedTextColor.withValues(alpha: 0.4),
+                              ? ts.editorTextColor
+                              : ts.editorMutedTextColor.withValues(alpha: 0.4),
                         ),
                       ),
                     ),
@@ -1049,8 +1543,11 @@ class _NavBtn extends StatelessWidget {
   final Color iconColor;
   final VoidCallback onTap;
 
-  const _NavBtn(
-      {required this.icon, required this.iconColor, required this.onTap});
+  const _NavBtn({
+    required this.icon,
+    required this.iconColor,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1096,7 +1593,8 @@ class _EntriesListState extends State<_EntriesList> {
   }
 
   Map<DateTime, List<TimeEntry>> _applyFilter(
-      Map<DateTime, List<TimeEntry>> grouped) {
+    Map<DateTime, List<TimeEntry>> grouped,
+  ) {
     if (widget.filterProjectId == null) return grouped;
     final result = <DateTime, List<TimeEntry>>{};
     for (final entry in grouped.entries) {
@@ -1123,18 +1621,17 @@ class _EntriesListState extends State<_EntriesList> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.timer_outlined,
-                  size: 56,
-                  color: ts.editorMutedTextColor.withValues(alpha: 0.5)),
+              Icon(
+                Icons.timer_outlined,
+                size: 56,
+                color: ts.editorMutedTextColor.withValues(alpha: 0.5),
+              ),
               const SizedBox(height: 12),
               Text(
                 widget.filterProjectId != null
                     ? 'No entries for this filter'
                     : 'No time tracked this week',
-                style: TextStyle(
-                  color: ts.editorMutedTextColor,
-                  fontSize: 15,
-                ),
+                style: TextStyle(color: ts.editorMutedTextColor, fontSize: 15),
               ),
               const SizedBox(height: 6),
               Text(
@@ -1253,13 +1750,21 @@ class _DayGroup extends StatelessWidget {
           ),
         ),
 
-        // Entry tiles
-        ...entries.map(
-          (entry) => _EntryTile(
-            entry: entry,
-            timerState: timerState,
-            themeState: themeState,
-          ),
+        // One row per distinct piece of work, not per run of the timer. A task
+        // started and stopped four times was four identical rows, and the one
+        // number worth having — how long it took today — was the number missing.
+        ...groupTimeEntries(entries).map(
+          (group) => group.isSingle
+              ? _EntryTile(
+                  entry: group.first,
+                  timerState: timerState,
+                  themeState: themeState,
+                )
+              : _EntryGroupTile(
+                  group: group,
+                  timerState: timerState,
+                  themeState: themeState,
+                ),
         ),
 
         const SizedBox(height: 8),
@@ -1314,93 +1819,131 @@ class _EntryTile extends StatelessWidget {
               ]
             : null,
         border: isRunning
-            ? Border.all(
-                color: accent.withValues(alpha: 0.4),
-                width: 1.5,
-              )
+            ? Border.all(color: accent.withValues(alpha: 0.4), width: 1.5)
             : null,
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            // Color dot (pulsing when running)
-            _ColorDot(color: project?.color ?? Colors.grey.shade400, pulse: isRunning),
-            const SizedBox(width: 12),
+      // Material + InkWell rather than GestureDetector: the row already looks
+      // like a card, so it should also answer like one. The delete button
+      // inside keeps its own tap — an InkWell above it does not swallow a
+      // child's gesture.
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () => _edit(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                // Color dot (pulsing when running)
+                _ColorDot(
+                  color: project?.color ?? Colors.grey.shade400,
+                  pulse: isRunning,
+                ),
+                const SizedBox(width: 12),
 
-            // Description + project label
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    entry.description.isEmpty ? '(no description)' : entry.description,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: entry.description.isEmpty
-                          ? themeState.editorMutedTextColor
-                          : themeState.editorTextColor,
-                      fontStyle: entry.description.isEmpty
-                          ? FontStyle.italic
-                          : FontStyle.normal,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                // Description + project label
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        entry.description.isEmpty
+                            ? '(no description)'
+                            : entry.description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: entry.description.isEmpty
+                              ? themeState.editorMutedTextColor
+                              : themeState.editorTextColor,
+                          fontStyle: entry.description.isEmpty
+                              ? FontStyle.italic
+                              : FontStyle.normal,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      if (project != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          project.name,
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: project.color,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  if (project != null) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      project.name,
-                      style: TextStyle(
-                        fontSize: 11,
-                        color: project.color,
-                        fontWeight: FontWeight.w600,
+                ),
+
+                // Time range
+                Text(
+                  _timeRange(entry),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: themeState.editorMutedTextColor,
+                  ),
+                ),
+                const SizedBox(width: 16),
+
+                // Duration
+                Text(
+                  _formatDuration(entry.elapsed),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: isRunning ? accent : themeState.editorTextColor,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                ),
+                const SizedBox(width: 8),
+
+                // Delete
+                InkWell(
+                  onTap: () => _confirmDelete(context),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 16,
+                      color: themeState.editorMutedTextColor.withValues(
+                        alpha: 0.5,
                       ),
                     ),
-                  ],
-                ],
-              ),
-            ),
-
-            // Time range
-            Text(
-              _timeRange(entry),
-              style: TextStyle(
-                fontSize: 12,
-                color: themeState.editorMutedTextColor,
-              ),
-            ),
-            const SizedBox(width: 16),
-
-            // Duration
-            Text(
-              _formatDuration(entry.elapsed),
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: isRunning ? accent : themeState.editorTextColor,
-                fontFeatures: const [FontFeature.tabularFigures()],
-              ),
-            ),
-            const SizedBox(width: 8),
-
-            // Delete
-            InkWell(
-              onTap: () => _confirmDelete(context),
-              borderRadius: BorderRadius.circular(8),
-              child: Padding(
-                padding: const EdgeInsets.all(4),
-                child: Icon(
-                  Icons.delete_outline_rounded,
-                  size: 16,
-                  color: themeState.editorMutedTextColor.withValues(alpha: 0.5),
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
+    );
+  }
+
+  Future<void> _edit(BuildContext context) async {
+    final result = await showDialog<TimeEntryEdit>(
+      context: context,
+      builder: (_) => TimeEntryEditor(
+        entry: entry,
+        projects: timerState.projects,
+        accentColor: themeState.accentColor,
+        surfaceColor: themeState.editorBgColor,
+        textColor: themeState.editorTextColor,
+      ),
+    );
+    if (result == null) return;
+
+    await timerState.updateEntry(
+      entryId: entry.id,
+      description: result.description,
+      projectId: result.projectId,
+      startTime: result.startTime,
+      endTime: result.endTime,
     );
   }
 
@@ -1417,17 +1960,21 @@ class _EntryTile extends StatelessWidget {
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Text('Delete Entry',
-            style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text(
+          'Delete Entry',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
         content: const Text('Are you sure you want to delete this time entry?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
           FilledButton(
-              style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Delete')),
+            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
         ],
       ),
     );
@@ -1463,9 +2010,10 @@ class _ColorDotState extends State<_ColorDot>
       vsync: this,
       duration: const Duration(milliseconds: 900),
     );
-    _anim = Tween(begin: 0.4, end: 1.0).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
+    _anim = Tween(
+      begin: 0.4,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
     if (widget.pulse) {
       _ctrl.repeat(reverse: true);
     }
@@ -1495,10 +2043,7 @@ class _ColorDotState extends State<_ColorDot>
       child: Container(
         width: 10,
         height: 10,
-        decoration: BoxDecoration(
-          color: widget.color,
-          shape: BoxShape.circle,
-        ),
+        decoration: BoxDecoration(color: widget.color, shape: BoxShape.circle),
       ),
     );
   }
@@ -1524,4 +2069,188 @@ String _formatDurationShort(Duration d) {
     return '${d.inMinutes}m ${d.inSeconds % 60}s';
   }
   return '${d.inSeconds}s';
+}
+
+/// Several runs of the same work, shown as one row that opens.
+///
+/// Collapsed it answers the question a day's list is usually being read for —
+/// how long did this take — and the individual runs stay one click away for
+/// when the answer is "that cannot be right".
+class _EntryGroupTile extends StatefulWidget {
+  const _EntryGroupTile({
+    required this.group,
+    required this.timerState,
+    required this.themeState,
+  });
+
+  final TimeEntryGroup group;
+  final TimerState timerState;
+  final ThemeState themeState;
+
+  @override
+  State<_EntryGroupTile> createState() => _EntryGroupTileState();
+}
+
+class _EntryGroupTileState extends State<_EntryGroupTile> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final group = widget.group;
+    final themeState = widget.themeState;
+    final accent = themeState.accentColor;
+    final project = widget.timerState.projectForId(group.projectId);
+    final isLight = themeState.editorBgColor.computeLuminance() > 0.5;
+
+    final total = group.totalAt(DateTime.now());
+    final start = DateFormat('HH:mm').format(group.earliestStart);
+    final end = group.latestEnd == null
+        ? '–'
+        : DateFormat('HH:mm').format(group.latestEnd!);
+
+    return Column(
+      children: [
+        Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          decoration: BoxDecoration(
+            color: isLight
+                ? Colors.white.withValues(alpha: 0.85)
+                : Colors.white.withValues(alpha: 0.07),
+            borderRadius: BorderRadius.circular(14),
+            border: group.hasRunning
+                ? Border.all(color: accent.withValues(alpha: 0.4), width: 1.5)
+                : null,
+          ),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              onTap: () => setState(() => _open = !_open),
+              borderRadius: BorderRadius.circular(14),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 12,
+                ),
+                child: Row(
+                  children: [
+                    // The count doubles as the affordance: a row carrying a
+                    // number is visibly not the same kind of row as its
+                    // neighbours, before anyone reads the arrow.
+                    Container(
+                      width: 22,
+                      height: 22,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: accent.withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                      child: Text(
+                        '${group.entries.length}',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: accent,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.description.isEmpty
+                                ? '(no description)'
+                                : group.description,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: group.description.isEmpty
+                                  ? themeState.editorMutedTextColor
+                                  : themeState.editorTextColor,
+                              fontStyle: group.description.isEmpty
+                                  ? FontStyle.italic
+                                  : FontStyle.normal,
+                            ),
+                          ),
+                          if (project != null)
+                            Text(
+                              project.name,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: project.color,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    Text(
+                      '$start – $end',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: themeState.editorMutedTextColor,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Text(
+                      _formatDuration(total),
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: themeState.editorTextColor,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    AnimatedRotation(
+                      turns: _open ? 0.5 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 20,
+                        color: themeState.editorMutedTextColor.withValues(
+                          alpha: 0.7,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+
+        // Indented, so an open group reads as a branch of its row rather than
+        // as more rows in the day.
+        if (_open)
+          Padding(
+            padding: const EdgeInsets.only(left: 22),
+            child: Column(
+              children: group.entries
+                  .map(
+                    (entry) => _EntryTile(
+                      entry: entry,
+                      timerState: widget.timerState,
+                      themeState: themeState,
+                    ),
+                  )
+                  .toList(),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours.toString().padLeft(2, '0');
+    final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+    final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+    return '$h:$m:$s';
+  }
 }
