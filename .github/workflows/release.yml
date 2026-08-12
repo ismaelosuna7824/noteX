@@ -63,8 +63,20 @@ jobs:
           flutter-version: 3.44.9
           cache: true
 
+      # merman's SPM manifest points at ../MermanFFI.xcframework, and Flutter
+      # symlinks a plugin's SPM directory into .packages/, so that relative
+      # path escapes it and resolves to nothing. CocoaPods is unaffected.
+      # https://github.com/Latias94/merman/issues/57
+      - name: Use CocoaPods rather than SPM
+        run: flutter config --no-enable-swift-package-manager
+
       - name: Install dependencies
         run: flutter pub get
+
+      # After pub get, which restores the pristine files this repairs.
+      # Without it the build succeeds and the app dies at launch.
+      - name: Repair merman
+        run: ./scripts/patch_merman.sh
 
       - name: Create dart defines file
         env:
@@ -138,6 +150,12 @@ jobs:
 
       - name: Install dependencies
         run: flutter pub get
+
+      # merman's Linux CMake links flutter_wrapper_plugin, a target Flutter
+      # defines only on Windows, so the link fails outright without this.
+      # https://github.com/Latias94/merman/issues/56
+      - name: Repair merman
+        run: ./scripts/patch_merman.sh
 
       - name: Create dart defines file
         env:

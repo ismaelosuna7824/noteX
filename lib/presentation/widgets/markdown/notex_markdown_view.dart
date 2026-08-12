@@ -16,6 +16,7 @@ class NoteXMarkdownStyle {
     required this.lineHeight,
     required this.textColor,
     required this.accentColor,
+    required this.surfaceColor,
   });
 
   final bool isDark;
@@ -23,6 +24,10 @@ class NoteXMarkdownStyle {
   final double lineHeight;
   final Color textColor;
   final Color accentColor;
+
+  /// The panel the preview is drawn on. Diagrams are themed against it so a
+  /// rendered SVG does not arrive carrying its own white page.
+  final Color surfaceColor;
 
   double get _scale => baseFontSize / 16;
 
@@ -243,6 +248,7 @@ class _MermaidNode extends ElementNode {
           isDark: mdStyle.isDark,
           codeStyle: mdStyle._codeText,
           decoration: mdStyle._codeBox,
+          background: mdStyle.surfaceColor,
         ),
       );
 }

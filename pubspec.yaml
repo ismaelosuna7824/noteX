@@ -81,6 +81,9 @@ dependencies:
   markdown_widget: ^2.3.2+8
   duskmoon_mermaid_renderer: ^1.8.0
   flutter_highlight: ^0.7.0
+  merman: ^0.7.0
+  flutter_svg: ^2.3.0
+  xml: ^7.0.1
 
 dev_dependencies:
   flutter_test:

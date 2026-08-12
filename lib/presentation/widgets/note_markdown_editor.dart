@@ -778,6 +778,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
             lineHeight: widget.lineHeight ?? 1.5,
             textColor: color,
             accentColor: theme.colorScheme.primary,
+            surfaceColor: theme.colorScheme.surface,
           ),
         ),
       ),
