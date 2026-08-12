@@ -1,0 +1,152 @@
+name: Verify desktop build
+
+# Proves a change builds and bundles correctly on all three desktop platforms
+# BEFORE it is merged and tagged, because a release tag is the wrong place to
+# discover that macOS ships a library it cannot load.
+#
+# Deliberately manual and release-free: it produces artifacts to inspect, never
+# a GitHub Release.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      # merman's Swift Package Manager manifest points at
+      # `../MermanFFI.xcframework`, but Flutter symlinks a plugin's SPM
+      # directory into .packages/, so that relative path escapes it and
+      # resolves to nothing. CocoaPods has no such problem.
+      - name: Use CocoaPods rather than SPM
+        run: flutter config --no-enable-swift-package-manager
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # merman ships its dylib with the publisher's CI path as the install
+      # name. Left alone, dyld looks for /Users/runner/work/merman/... at
+      # launch and the app dies immediately. Must run after `pub get`, which
+      # can restore the original file.
+      - name: Patch the merman install name
+        run: ./tool/patch_merman_dylib.sh
+
+      - name: Create dart defines file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
+
+      - name: Build
+        run: flutter build macos --release --dart-define-from-file=dart_defines.json
+
+      # Building is not the question — loading is. This asserts the library is
+      # inside the bundle AND that its install name was actually rewritten, so
+      # a silently skipped patch cannot pass as success.
+      - name: Verify the native library is bundled and loadable
+        run: |
+          app=build/macos/Build/Products/Release/notex.app
+          lib="$app/Contents/Frameworks/libmerman_ffi.dylib"
+          test -f "$lib" || { echo "::error::libmerman_ffi.dylib missing from the bundle"; exit 1; }
+          name=$(otool -D "$lib" | sed -n '2p')
+          echo "install name: $name"
+          case "$name" in
+            @rpath/*) echo "loadable";;
+            *) echo "::error::install name is '$name' — dyld will not find it"; exit 1;;
+          esac
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verify-macos
+          path: build/macos/Build/Products/Release/notex.app
+          retention-days: 3
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create dart defines file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
+
+      - name: Build
+        run: flutter build windows --release --dart-define-from-file=dart_defines.json
+
+      - name: Verify the native library is bundled
+        shell: bash
+        run: |
+          dll=$(find build/windows -name 'merman_ffi.dll' | head -1)
+          test -n "$dll" || { echo "::error::merman_ffi.dll missing from the build"; exit 1; }
+          echo "found: $dll"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verify-windows
+          path: build/windows/x64/runner/Release
+          retention-days: 3
+
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.9
+          cache: true
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y ninja-build libgtk-3-dev libsqlite3-dev \
+            libasound2-dev libmpv-dev pkg-config
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Create dart defines file
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: python3 -c "import json,os; json.dump({'SUPABASE_URL':os.environ['SUPABASE_URL'].strip(),'SUPABASE_ANON_KEY':os.environ['SUPABASE_ANON_KEY'].strip()},open('dart_defines.json','w'))"
+
+      - name: Build
+        run: flutter build linux --release --dart-define-from-file=dart_defines.json
+
+      - name: Verify the native library is bundled
+        run: |
+          so=$(find build/linux -name 'libmerman_ffi.so' | head -1)
+          test -n "$so" || { echo "::error::libmerman_ffi.so missing from the bundle"; exit 1; }
+          echo "found: $so"
+          # A DT_NEEDED nobody can satisfy fails at launch, not at build.
+          ldd "$so" | grep 'not found' && { echo "::error::unresolved dependencies"; exit 1; } || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: verify-linux
+          path: build/linux/x64/release/bundle
+          retention-days: 3
