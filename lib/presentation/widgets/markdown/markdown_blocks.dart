@@ -196,21 +196,13 @@ String? renderMermaidSvg({
   final engine = _MermaidEngine.instance;
   if (engine == null) return null;
 
-  String hex(Color color) =>
-      '#${(color.toARGB32() & 0xFFFFFF).toRadixString(16).padLeft(6, '0')}';
-
   try {
     final svg = engine.renderSvg(
       source,
       optionsJson: jsonEncode({
-        'svg': {
-          // The default parity output carries browser-only constructs —
-          // foreignObject above all — that take labels with them when dropped.
-          'pipeline': 'resvg-safe',
-          // Without this the SVG has no ground of its own and the note's
-          // wallpaper shows straight through the diagram.
-          'root_background_color': hex(background),
-        },
+        // The default parity output carries browser-only constructs —
+        // foreignObject above all — that take labels with them when dropped.
+        'svg': {'pipeline': 'resvg-safe'},
         // Mermaid's own themes, and specifically these two.
         //
         // `default` is the wrong light theme here: its gitGraph palette is

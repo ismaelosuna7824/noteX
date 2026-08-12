@@ -428,20 +428,23 @@ String _n(double value) {
 
 // ── the background ──────────────────────────────────────────────────────────
 
-/// Turns the root's `background-color` into a rectangle that actually exists.
+/// Drops the root's `background-color`, without replacing it.
 ///
-/// SVG has no background property of its own; `background-color` on the root is
-/// CSS, which a browser honours and a plain SVG renderer does not. Left as-is
-/// the diagram is transparent, and in a notes app that means the user's
-/// wallpaper shows through the middle of it.
+/// SVG has no background property; `background-color` on the root is CSS,
+/// which a browser honours and a plain SVG renderer ignores. Removing it is
+/// therefore cosmetic here — but it is removed rather than left, so a renderer
+/// that *does* honour it cannot paint a slab the app never asked for.
+///
+/// Nothing is painted in its place on purpose: the diagram sits inside the
+/// block's own card, which already provides the ground, the border and the
+/// rounded corners. A second opaque rectangle inside that card reads as a hard
+/// slab with square corners over a translucent panel.
 void _paintBackground(XmlElement root) {
   final style = root.getAttribute('style');
   if (style == null) return;
 
-  final declarations = _parseDeclarations(style);
-  final colour = declarations.remove('background-color');
+  final declarations = _parseDeclarations(style)..remove('background-color');
 
-  // Rewritten without it either way, so nothing downstream tries again.
   final remaining =
       declarations.entries.map((e) => '${e.key}:${e.value}').join(';');
   if (remaining.isEmpty) {
@@ -449,31 +452,7 @@ void _paintBackground(XmlElement root) {
   } else {
     root.setAttribute('style', remaining);
   }
-
-  if (colour == null || colour == 'none' || colour == 'transparent') return;
-
-  final box = (root.getAttribute('viewBox') ?? '')
-      .trim()
-      .split(RegExp(r'[\s,]+'))
-      .map(double.tryParse)
-      .toList();
-  if (box.length != 4 || box.any((v) => v == null)) return;
-
-  // First child, so it sits behind everything without needing z-order.
-  root.children.insert(
-    0,
-    XmlElement(XmlName('rect'), [
-      XmlAttribute(XmlName('x'), _n(box[0]!)),
-      XmlAttribute(XmlName('y'), _n(box[1]!)),
-      XmlAttribute(XmlName('width'), _n(box[2]!)),
-      XmlAttribute(XmlName('height'), _n(box[3]!)),
-      XmlAttribute(XmlName('fill'), colour),
-    ]),
-  );
 }
-
-
-// ── text placement ──────────────────────────────────────────────────────────
 
 /// Turns `dy` line advances into explicit coordinates.
 ///

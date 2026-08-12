@@ -244,20 +244,24 @@ void main() {
   });
 
   group('the background', () {
-    test('becomes a rectangle instead of a CSS property', () {
-      // Merman writes the background as `background-color` on the root, which
-      // is a CSS concept with no SVG equivalent: browsers honour it, plain SVG
-      // renderers do not. Left alone the diagram is transparent, and in a note
-      // that means the user's wallpaper shows through the middle of it.
+    test('is dropped, and nothing is painted in its place', () {
+      // `background-color` on the root is CSS, which a browser honours and a
+      // plain SVG renderer ignores. It is removed rather than left, so a
+      // renderer that does honour it cannot paint a slab the app never asked
+      // for — and nothing replaces it, because the diagram sits inside the
+      // block's own card, which already has the ground and the rounded
+      // corners. An opaque rectangle inside that card reads as a hard slab.
       expect(_fixture, contains('background-color'));
 
       final flattened = _flattened();
-      final first = flattened.rootElement.childElements.first;
 
-      expect(first.localName, 'rect');
-      expect(first.getAttribute('fill'), isNotNull);
-      expect(first.getAttribute('width'), isNotNull);
       expect(flattened.rootElement.getAttribute('style'), isNull);
+      expect(
+        flattened.toXmlString(),
+        isNot(contains('background-color')),
+      );
+      expect(flattened.rootElement.childElements.first.localName, isNot('rect'),
+          reason: 'a background rect would square off the card it sits in');
     });
   });
 
