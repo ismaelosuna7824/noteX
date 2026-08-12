@@ -283,10 +283,21 @@ jobs:
         with:
           path: artifacts
 
+      # Built from the commits, because GitHub's own generator reads merged
+      # pull requests and this repository pushes straight to main — every
+      # release shipped with an empty body and a compare link.
+      #
+      # Needs the tags, which a shallow checkout does not fetch.
+      - name: Build release notes
+        run: |
+          git fetch --prune --unshallow --tags 2>/dev/null || git fetch --tags
+          ./scripts/release_notes.sh "${GITHUB_REF_NAME}" > release_notes.md
+          cat release_notes.md
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          generate_release_notes: true
+          body_path: release_notes.md
           files: |
             artifacts/NoteX-windows/NoteX-windows-setup.exe
             artifacts/NoteX-macos/NoteX-macos.zip
