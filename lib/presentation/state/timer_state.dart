@@ -8,6 +8,7 @@ import '../../application/use_cases/timer/create_project_use_case.dart';
 import '../../application/use_cases/timer/get_projects_use_case.dart';
 import '../../application/use_cases/timer/delete_project_use_case.dart';
 import '../../application/use_cases/timer/start_timer_use_case.dart';
+import '../../application/use_cases/timer/log_time_entry_use_case.dart';
 import '../../application/use_cases/timer/stop_timer_use_case.dart';
 import '../../application/use_cases/timer/get_time_entries_use_case.dart';
 import '../../application/use_cases/timer/delete_time_entry_use_case.dart';
@@ -25,6 +26,7 @@ class TimerState extends ChangeNotifier {
   final GetTimeEntriesUseCase _getEntries;
   final DeleteTimeEntryUseCase _deleteEntry;
   final UpdateTimeEntryUseCase _updateEntry;
+  final LogTimeEntryUseCase _logEntry;
 
   // ── Data ─────────────────────────────────────────────────────────────────
   TimeEntry? _runningEntry;
@@ -37,6 +39,13 @@ class TimerState extends ChangeNotifier {
   // ── Draft input (timer bar) ───────────────────────────────────────────────
   String _draftDescription = '';
   String? _draftProjectId;
+
+  /// Manual entry rather than the running clock.
+  ///
+  /// Held here rather than in the bar's own state because the bar rebuilds
+  /// every second while a timer runs, and a mode that resets itself on a tick
+  /// is a mode nobody can use.
+  bool _manualMode = false;
 
   // ── Misc ─────────────────────────────────────────────────────────────────
   bool _isLoading = false;
@@ -52,14 +61,16 @@ class TimerState extends ChangeNotifier {
     required GetTimeEntriesUseCase getEntries,
     required DeleteTimeEntryUseCase deleteEntry,
     required UpdateTimeEntryUseCase updateEntry,
-  })  : _createProject = createProject,
-        _getProjects = getProjects,
-        _deleteProject = deleteProject,
-        _startTimer = startTimer,
-        _stopTimer = stopTimer,
-        _getEntries = getEntries,
-        _deleteEntry = deleteEntry,
-        _updateEntry = updateEntry;
+    required LogTimeEntryUseCase logEntry,
+  }) : _createProject = createProject,
+       _getProjects = getProjects,
+       _deleteProject = deleteProject,
+       _startTimer = startTimer,
+       _stopTimer = stopTimer,
+       _getEntries = getEntries,
+       _deleteEntry = deleteEntry,
+       _updateEntry = updateEntry,
+       _logEntry = logEntry;
 
   // ── Getters ───────────────────────────────────────────────────────────────
 
@@ -72,12 +83,18 @@ class TimerState extends ChangeNotifier {
   DateTime get weekEnd => _weekStart.add(const Duration(days: 7));
   String get draftDescription => _draftDescription;
   String? get draftProjectId => _draftProjectId;
+  bool get manualMode => _manualMode;
+
+  void setManualMode(bool value) {
+    if (_manualMode == value) return;
+    _manualMode = value;
+    notifyListeners();
+  }
 
   /// ISO 8601 week number for [_weekStart].
   int get weekNumber {
     final jan4 = DateTime(_weekStart.year, 1, 4);
-    final startOfWeek1 =
-        jan4.subtract(Duration(days: jan4.weekday - 1));
+    final startOfWeek1 = jan4.subtract(Duration(days: jan4.weekday - 1));
     final diff = _weekStart.difference(startOfWeek1).inDays;
     return (diff / 7).floor() + 1;
   }
@@ -94,10 +111,8 @@ class TimerState extends ChangeNotifier {
   Duration get liveElapsed => _runningEntry?.elapsed ?? Duration.zero;
 
   /// Total duration for all entries in the current week.
-  Duration get weekTotal => _weekEntries.fold(
-        Duration.zero,
-        (acc, e) => acc + e.elapsed,
-      );
+  Duration get weekTotal =>
+      _weekEntries.fold(Duration.zero, (acc, e) => acc + e.elapsed);
 
   /// Entries grouped by calendar date (midnight), newest date first.
   Map<DateTime, List<TimeEntry>> get entriesByDay {
@@ -128,9 +143,9 @@ class TimerState extends ChangeNotifier {
   Project? projectForId(String? id) {
     if (id == null) return null;
     return _projects.cast<Project?>().firstWhere(
-          (p) => p?.id == id,
-          orElse: () => null,
-        );
+      (p) => p?.id == id,
+      orElse: () => null,
+    );
   }
 
   // ── Initialization ────────────────────────────────────────────────────────
@@ -243,6 +258,24 @@ class TimerState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Records work that already happened, without touching a running timer.
+  Future<void> logEntry({
+    required String description,
+    String? projectId,
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    await _logEntry.execute(
+      id: const Uuid().v4(),
+      description: description,
+      projectId: projectId,
+      startTime: startTime,
+      endTime: endTime,
+    );
+    await _loadWeekEntries();
+    notifyListeners();
+  }
+
   Future<void> updateEntry({
     required String entryId,
     String? description,
@@ -316,8 +349,11 @@ class TimerState extends ChangeNotifier {
 
   static DateTime _currentWeekMonday() {
     final now = DateTime.now();
-    return DateTime(now.year, now.month, now.day)
-        .subtract(Duration(days: now.weekday - 1));
+    return DateTime(
+      now.year,
+      now.month,
+      now.day,
+    ).subtract(Duration(days: now.weekday - 1));
   }
 
   @override
