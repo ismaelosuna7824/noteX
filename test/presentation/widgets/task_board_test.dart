@@ -236,12 +236,15 @@ void main() {
       ResolveTaskNoteLinkUseCase(noteRepository),
     );
 
-    // The in-place note preview's own save path
-    // (_TaskDetailDialog._flushPreview) resolves UpdateNoteUseCase via
-    // GetIt directly — a REAL instance over the same in-memory note
-    // repository as [appState]'s own (registered separately here,
-    // mirroring [updateNoteUseCase] above), never a stand-in, and never
-    // through AppState's own wrapped verbs.
+    // "New note" (_TaskDetailDialog._createLinkedNote) and the in-place
+    // note preview's own save path (_TaskDetailDialog._flushPreview)
+    // resolve CreateNoteUseCase/UpdateNoteUseCase via GetIt directly — REAL
+    // instances over the same in-memory note repository as [appState]'s own
+    // (registered separately here, mirroring [updateNoteUseCase] above),
+    // never a stand-in, and never through AppState's own wrapped verbs.
+    GetIt.instance.registerSingleton<CreateNoteUseCase>(
+      CreateNoteUseCase(noteRepository),
+    );
     GetIt.instance.registerSingleton<UpdateNoteUseCase>(updateNoteUseCase);
 
     // The "Start timer" button (_TaskDetailDialog._startTimer) resolves
@@ -757,9 +760,49 @@ void main() {
   });
 
   group(
-      'preview/edit a linked note without leaving the task (settled '
-      'decision: "hacer en preview para que no se salgan de esa tarea")',
-      () {
+      'notes section — create a note in place, and preview/edit a linked '
+      'note without leaving the task (settled decision: "crear notas desde '
+      'ahí, y también hacer preview")', () {
+    testWidgets(
+        '"New note" creates a note, links it to the task in one gesture, '
+        'and the note is immediately writable without leaving the dialog',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Blank task'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Blank task'));
+      await tester.pumpAndSettle();
+
+      // Before creating: only the "New note"/"Link note" pair, no preview.
+      expect(find.text('New note'), findsOneWidget);
+      expect(find.byKey(const Key('task-note-preview')), findsNothing);
+
+      await tester.tap(find.text('New note'));
+      await tester.pumpAndSettle();
+
+      // The dialog never left the task — the Title field is still on
+      // screen alongside the note preview that just opened in place.
+      expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+      final previewField = find.descendant(
+        of: find.byKey(const Key('task-note-preview')),
+        matching: find.byType(TextField),
+      );
+      expect(previewField, findsOneWidget);
+
+      await tester.enterText(previewField, 'Written from the task');
+      await tester.tap(find.byTooltip('Back to notes'));
+      await tester.pumpAndSettle();
+
+      // Persisted through CreateNoteUseCase + LinkNoteToTaskUseCase —
+      // noteIds grew by exactly one, and the new note itself carries the
+      // content typed while still inside the task dialog.
+      final persisted = await repository.getById('r1');
+      expect(persisted!.noteIds, hasLength(1));
+      final note = await noteRepository.getById(persisted.noteIds.first);
+      expect(note!.content, 'Written from the task');
+    });
+
     testWidgets(
         "editing a note in the preview persists through the note's own "
         'path (UpdateNoteUseCase) and does not mark the task dirty',

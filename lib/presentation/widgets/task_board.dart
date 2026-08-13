@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 
+import '../../application/use_cases/create_note_use_case.dart';
 import '../../application/use_cases/task/resolve_task_note_link_use_case.dart';
 import '../../application/use_cases/timer/get_time_entries_use_case.dart';
 import '../../application/use_cases/update_note_use_case.dart';
@@ -1056,6 +1058,36 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     }
   }
 
+  /// Creates a brand-new note and links it to this task in one gesture —
+  /// additive alongside "Link note"/"Link another note", which stay
+  /// exactly as they are. Goes through [CreateNoteUseCase] then
+  /// [TaskState.linkNoteToTask] (wrapping `LinkNoteToTaskUseCase`) — never
+  /// a direct write to `Task.noteIds` or the notes table, same rule
+  /// [_linkNote] already follows. Opens the new note immediately in the
+  /// in-place preview/edit surface ([_openPreview]) so the user can start
+  /// writing without leaving the task — a create flow that forced them out
+  /// to the full editor would defeat the point of asking for this
+  /// alongside the preview/edit capability.
+  Future<void> _createLinkedNote() async {
+    final note =
+        await GetIt.instance<CreateNoteUseCase>().execute(id: const Uuid().v4());
+    if (!mounted) return;
+
+    final updated =
+        await widget.taskState.linkNoteToTask(widget.task.id, note.id);
+    if (!mounted) return;
+    setState(() {
+      _noteIds =
+          List<String>.from(updated?.noteIds ?? [..._noteIds, note.id]);
+      // Constructed directly rather than round-tripped through
+      // [ResolveTaskNoteLinkUseCase] — the note was just created above, so
+      // its "found" status is certain without another DB read.
+      _noteResolutions[note.id] = NoteLinkResolution(NoteLinkStatus.found, note);
+    });
+
+    await _openPreview(note);
+  }
+
   /// Shows [note]'s content in place of the linked-notes list — the
   /// "preview/edit without leaving the task" surface. Flushes whatever was
   /// previously being previewed first (defensive: normally there is
@@ -1326,14 +1358,32 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// thumb is the unmistakable "there is more" affordance.
   Widget _buildLinkedNotesSection(bool isDark) {
     if (_noteIds.isEmpty) {
-      return OutlinedButton.icon(
-        onPressed: _linkNote,
-        icon: const Icon(Icons.link, size: 16),
-        label: const Text('Link note'),
-        style: OutlinedButton.styleFrom(
-          foregroundColor: widget.accentColor,
-          minimumSize: const Size(0, 44),
-        ),
+      // `Wrap`, not `Row`: the sidebar column is narrow enough that two
+      // full-width-ish buttons side by side can exceed it on a stacked
+      // narrow window — same reasoning as [_buildTimerControl]'s Wrap.
+      return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          OutlinedButton.icon(
+            onPressed: _createLinkedNote,
+            icon: const Icon(Icons.note_add_outlined, size: 16),
+            label: const Text('New note'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: widget.accentColor,
+              minimumSize: const Size(0, 44),
+            ),
+          ),
+          OutlinedButton.icon(
+            onPressed: _linkNote,
+            icon: const Icon(Icons.link, size: 16),
+            label: const Text('Link note'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: widget.accentColor,
+              minimumSize: const Size(0, 44),
+            ),
+          ),
+        ],
       );
     }
     final visibleRows = _noteIds.length < _maxVisibleNoteRows
@@ -1380,14 +1430,29 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           ),
         ),
         const SizedBox(height: 8),
-        TextButton.icon(
-          onPressed: _linkNote,
-          icon: const Icon(Icons.add_link, size: 16),
-          label: const Text('Link another note'),
-          style: TextButton.styleFrom(
-            foregroundColor: widget.accentColor,
-            minimumSize: const Size(0, 44),
-          ),
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          children: [
+            TextButton.icon(
+              onPressed: _createLinkedNote,
+              icon: const Icon(Icons.note_add_outlined, size: 16),
+              label: const Text('New note'),
+              style: TextButton.styleFrom(
+                foregroundColor: widget.accentColor,
+                minimumSize: const Size(0, 44),
+              ),
+            ),
+            TextButton.icon(
+              onPressed: _linkNote,
+              icon: const Icon(Icons.add_link, size: 16),
+              label: const Text('Link another note'),
+              style: TextButton.styleFrom(
+                foregroundColor: widget.accentColor,
+                minimumSize: const Size(0, 44),
+              ),
+            ),
+          ],
         ),
       ],
     );
