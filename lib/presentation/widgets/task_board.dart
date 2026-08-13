@@ -1190,11 +1190,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// The left content column: the things the user WRITES — title,
-  /// description, linked notes — in that order (reference issue-detail
-  /// layout). In the stacked layout ([stacked] = true, used inside a
-  /// `SingleChildScrollView`) the description gets a fixed height instead
-  /// of `Expanded`, since `Expanded` requires a bounded incoming height.
+  /// The left content column: the things the user WRITES — title, then
+  /// description. Linked notes now live in the right sidebar (they are a
+  /// reference/attachment, like Project or Scheduled date, not prose) — so
+  /// the description is the last thing here and its `Expanded` (see below)
+  /// can honestly own the full remaining height instead of leaving room for
+  /// a section that used to follow it. In the stacked layout ([stacked] =
+  /// true, used inside a `SingleChildScrollView`) the description still
+  /// gets a fixed height instead of `Expanded`, since `Expanded` requires a
+  /// bounded incoming height.
   Widget _buildLeftColumn(bool isDark, {required bool stacked}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1204,8 +1208,6 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         stacked
             ? _buildDescriptionSection(isDark, height: 260)
             : Expanded(child: _buildDescriptionSection(isDark)),
-        const SizedBox(height: 20),
-        _buildNotesSection(isDark),
       ],
     );
   }
@@ -1256,8 +1258,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// null — display-only, matching the flat list's own read-only
   /// scheduling), Blocked reason (only while blocked — design D3's
   /// display-scoping rule: the value stays in the data, only its ROW is
-  /// hidden otherwise), Time tracked (the timer control), and a Notes
-  /// count.
+  /// hidden otherwise), and Time tracked (the timer control). No Notes row
+  /// here — that count now lives in the "Notes · N" section header itself,
+  /// immediately above the linked-notes list, so it is not duplicated.
   Widget _buildDetailsPanel(bool isDark) {
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
     final scheduledDate = widget.task.scheduledDate;
@@ -1280,12 +1283,30 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
             child: _buildBlockedReasonField(),
           ),
         _buildDetailRow('Time tracked', _buildTimerControl(isDark), isDark),
-        _buildDetailRow(
-          'Notes',
-          Text('${_noteIds.length}', style: TextStyle(fontSize: 13, color: mutedColor)),
-          isDark,
-        ),
       ],
+    );
+  }
+
+  /// Wraps [_buildDetailsPanel] in a bordered card — the app's existing
+  /// subtle-surface treatment (same rounded corners/border already used
+  /// elsewhere in this file: the board columns, the notes list, the
+  /// description editor), not a new style. Without a real container here,
+  /// the whitespace below a short Details panel reads as a rendering fault
+  /// rather than intentional spacing; a card that ends where its own
+  /// content ends reads as deliberate.
+  Widget _buildDetailsCard(bool isDark) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white.withValues(alpha: 0.04) : Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.10)
+              : Colors.grey.shade200,
+        ),
+      ),
+      child: _buildDetailsPanel(isDark),
     );
   }
 
@@ -1348,13 +1369,21 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// The right sidebar column: the things the user SETS — the status
-  /// control at the top, the Details panel, then the timestamps at the
-  /// bottom (reference layout). No `Expanded`/`Spacer` here, deliberately
-  /// — this same column is reused unchanged in both the side-by-side
-  /// layout (bounded height, inside a Row's `Expanded`) and the stacked
-  /// layout (unbounded height, inside a `SingleChildScrollView`), and a
-  /// `Spacer` would throw under the unbounded one.
+  /// The right sidebar column: the things the user SETS and the things
+  /// ATTACHED to the task — the status control at the top, the Details
+  /// card, the linked-notes section, then the timestamps at the bottom
+  /// (reference layout). Linked notes live here rather than in the left
+  /// content column: they are references attached to the task, like
+  /// Project or Scheduled date, not prose the user writes — and keeping
+  /// them out of the left column lets its description editor own the full
+  /// remaining height there instead of sharing it.
+  ///
+  /// No `Expanded`/`Spacer` here, deliberately — this same column is reused
+  /// unchanged in both the side-by-side layout (bounded height, inside a
+  /// `SingleChildScrollView` within a Row's `Expanded` — see [_buildBody] —
+  /// so a long notes list scrolls independently instead of overflowing) and
+  /// the stacked layout (unbounded height, inside the body's own
+  /// `SingleChildScrollView`), and a `Spacer` would throw under either.
   Widget _buildSidebar(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1362,8 +1391,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         _buildStatusControl(isDark),
         const SizedBox(height: 20),
         _sectionHeader('Details', isDark),
-        _buildDetailsPanel(isDark),
-        const SizedBox(height: 12),
+        _buildDetailsCard(isDark),
+        const SizedBox(height: 20),
+        _buildNotesSection(isDark),
+        const SizedBox(height: 20),
         _buildTimestamps(isDark),
       ],
     );
@@ -1401,6 +1432,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// [_stackBreakpointWidth]: the sidebar renders below the content column
   /// instead of squeezing beside it (a `RenderFlex overflow` on a narrow,
   /// resizable desktop window is a real bug, not a test artifact).
+  ///
+  /// In the side-by-side layout the sidebar is wrapped in its own
+  /// `SingleChildScrollView` — with a bounded-height `Expanded` ancestor
+  /// (from the Row) and no scroll wrapper, a long linked-notes list plus
+  /// the rest of the sidebar's content could exceed the available height
+  /// and overflow; scrolling it independently keeps the left column's own
+  /// height (and the description editor's `Expanded`) unaffected. The
+  /// stacked layout already scrolls both columns together, so it needs no
+  /// separate wrapper here.
   Widget _buildBody(bool isDark, {required bool stacked}) {
     if (stacked) {
       return SingleChildScrollView(
@@ -1419,7 +1459,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       children: [
         Expanded(flex: 2, child: _buildLeftColumn(isDark, stacked: false)),
         const SizedBox(width: 28),
-        Expanded(child: _buildSidebar(isDark)),
+        Expanded(
+          child: SingleChildScrollView(child: _buildSidebar(isDark)),
+        ),
       ],
     );
   }

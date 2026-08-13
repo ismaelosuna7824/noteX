@@ -1238,13 +1238,13 @@ void main() {
       await tester.tap(find.text('Two column task'));
       await tester.pumpAndSettle();
 
-      // Left column content.
+      // Left column content — title and description only. Linked notes no
+      // longer render here; they moved to the right sidebar (see below).
       expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
       expect(find.text('DESCRIPTION'), findsOneWidget);
-      expect(find.text('NOTES · 1'), findsOneWidget);
 
-      // Right sidebar content — the status control, the Details panel's
-      // label/value rows, and the timestamps.
+      // Right sidebar content — the status control, the Details card's
+      // label/value rows, the linked-notes section, and the timestamps.
       expect(
         find.text('To Do'),
         findsOneWidget,
@@ -1265,7 +1265,10 @@ void main() {
             'scheduledDate',
       );
       expect(find.text('Time tracked'), findsOneWidget);
-      expect(find.text('Notes'), findsOneWidget);
+      // No redundant "Notes" count row in the Details panel anymore — the
+      // count lives solely in the "NOTES · N" section header below it.
+      expect(find.text('Notes'), findsNothing);
+      expect(find.text('NOTES · 1'), findsOneWidget);
       expect(find.textContaining('Created'), findsOneWidget);
       expect(find.textContaining('Updated'), findsOneWidget);
 
@@ -1278,6 +1281,16 @@ void main() {
         lessThan(statusX),
         reason: 'on a wide window the sidebar must render beside the '
             'content column, not below it',
+      );
+
+      // The notes section itself must render inside the sidebar column,
+      // not the left content column — the move this test guards.
+      final notesX = tester.getTopLeft(find.text('NOTES · 1')).dx;
+      expect(
+        notesX,
+        greaterThan(titleX),
+        reason: 'the linked-notes section must render in the right '
+            'sidebar, not the left content column',
       );
     });
 
