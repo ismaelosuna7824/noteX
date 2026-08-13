@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../domain/entities/task.dart';
+import '../../domain/value_objects/task_status.dart';
 import '../state/app_state.dart';
 import '../state/task_state.dart';
 import '../state/theme_state.dart';
@@ -54,7 +55,7 @@ class _TaskPageState extends State<TaskPage> {
               borderRadius: BorderRadius.circular(20),
             ),
             title: const Text(
-              'New Reminder',
+              'New Task',
               style: TextStyle(fontWeight: FontWeight.w700),
             ),
             content: SizedBox(
@@ -67,7 +68,7 @@ class _TaskPageState extends State<TaskPage> {
                     autofocus: true,
                     decoration: InputDecoration(
                       labelText: 'Title',
-                      hintText: 'What do you need to remember?',
+                      hintText: 'What do you need to do?',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
@@ -230,13 +231,13 @@ class _TaskPageState extends State<TaskPage> {
                 Row(
                   children: [
                     Icon(
-                      Icons.notifications_rounded,
+                      Icons.task_alt_rounded,
                       size: 22,
                       color: accentColor,
                     ),
                     const SizedBox(width: 10),
                     Text(
-                      'Reminders',
+                      'Tasks',
                       style: theme.textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.w700,
                       ),
@@ -250,7 +251,7 @@ class _TaskPageState extends State<TaskPage> {
                               context, _reminderState, widget.themeState)
                           : _showAddReminderDialog(context),
                       icon: const Icon(Icons.add, size: 18),
-                      label: const Text('New Reminder'),
+                      label: const Text('New Task'),
                       style: FilledButton.styleFrom(
                         backgroundColor: accentColor,
                         shape: RoundedRectangleBorder(
@@ -324,7 +325,7 @@ class _TaskPageState extends State<TaskPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(
-            Icons.notifications_none_rounded,
+            Icons.task_alt_outlined,
             size: 48,
             color: isDark
                 ? Colors.white.withValues(alpha: 0.20)
@@ -332,7 +333,7 @@ class _TaskPageState extends State<TaskPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'No reminders yet',
+            'No tasks yet',
             style: TextStyle(
               color: isDark
                   ? Colors.white.withValues(alpha: 0.40)
@@ -343,7 +344,7 @@ class _TaskPageState extends State<TaskPage> {
           FilledButton.icon(
             onPressed: () => _showAddReminderDialog(context),
             icon: const Icon(Icons.add, size: 18),
-            label: const Text('Create Reminder'),
+            label: const Text('Create Task'),
             style: FilledButton.styleFrom(
               backgroundColor: accentColor,
               shape: RoundedRectangleBorder(
@@ -392,6 +393,9 @@ class _TaskPageState extends State<TaskPage> {
       reminder: reminder,
       isDark: isDark,
       accentColor: accentColor,
+      taskState: _reminderState,
+      timerState: _timerState,
+      surfaceColor: widget.themeState.editorBgColor,
       onComplete: () => _reminderState.completeReminder(reminder.id),
       onDelete: () => _reminderState.deleteReminder(reminder.id),
     );
@@ -399,13 +403,47 @@ class _TaskPageState extends State<TaskPage> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Reminder tile with hover animation (lift + accent border glow).
+// Reminder tile — brought up to the same task model the Kanban board's own
+// card shows (status, project, linked-notes count, tracked time), so the
+// flat list is no longer a checkbox+title+date view of a richer model it
+// otherwise hides. Still a LIST, not a second board: one row per task, no
+// columns, no drag.
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Status label text, matching `TaskBoard`'s own column labels (that map is
+/// private to `task_board.dart` — Dart privacy is per-library/per-file — so
+/// this is a deliberate, small duplication rather than a new shared export
+/// for four literals).
+const _statusLabels = {
+  TaskStatus.todo: 'To Do',
+  TaskStatus.doing: 'Doing',
+  TaskStatus.blocked: 'Blocked',
+  TaskStatus.done: 'Done',
+};
+
+/// A quiet status accent — never the sole signal (the label text is always
+/// rendered alongside it), matching the board sidebar's status control
+/// (task_board.dart's `_buildStatusControl`).
+Color _statusColor(TaskStatus status, Color accentColor) {
+  switch (status) {
+    case TaskStatus.todo:
+      return Colors.grey;
+    case TaskStatus.doing:
+      return accentColor;
+    case TaskStatus.blocked:
+      return Colors.red;
+    case TaskStatus.done:
+      return Colors.green;
+  }
+}
 
 class _ReminderTile extends StatefulWidget {
   final Task reminder;
   final bool isDark;
   final Color accentColor;
+  final TaskState taskState;
+  final TimerState timerState;
+  final Color surfaceColor;
   final VoidCallback onComplete;
   final VoidCallback onDelete;
 
@@ -413,6 +451,9 @@ class _ReminderTile extends StatefulWidget {
     required this.reminder,
     required this.isDark,
     required this.accentColor,
+    required this.taskState,
+    required this.timerState,
+    required this.surfaceColor,
     required this.onComplete,
     required this.onDelete,
   });
@@ -429,6 +470,16 @@ class _ReminderTileState extends State<_ReminderTile> {
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
   ];
 
+  void _openDetail() {
+    showTaskDetailDialog(
+      context,
+      widget.reminder,
+      widget.taskState,
+      widget.accentColor,
+      surfaceColor: widget.surfaceColor,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final reminder = widget.reminder;
@@ -437,18 +488,23 @@ class _ReminderTileState extends State<_ReminderTile> {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    // This flat list has no affordance yet to create a task with no date
-    // (that lands with the Kanban board) — the fallback below is a forced
-    // null-safety compile fix, not a new behavior; every task reachable
-    // here today is always dated.
-    final reminderScheduledDate = reminder.scheduledDate ?? now;
-    final scheduled = DateTime(
-      reminderScheduledDate.year,
-      reminderScheduledDate.month,
-      reminderScheduledDate.day,
-    );
-    final isOverdue = !reminder.isDone && scheduled.isBefore(today);
-    final isToday = scheduled.isAtSameMomentAs(today);
+    final scheduledDate = reminder.scheduledDate;
+    final scheduled = scheduledDate == null
+        ? null
+        : DateTime(scheduledDate.year, scheduledDate.month, scheduledDate.day);
+    final isOverdue =
+        !reminder.isDone && scheduled != null && scheduled.isBefore(today);
+    final isToday = scheduled != null && scheduled.isAtSameMomentAs(today);
+
+    final project = reminder.projectId == null
+        ? null
+        : widget.timerState.projectForId(reminder.projectId);
+    final runningEntry = widget.timerState.runningEntry;
+    final isTimerRunning =
+        runningEntry != null && runningEntry.taskId == reminder.id;
+
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final statusColor = _statusColor(reminder.status, accentColor);
 
     final itemBg = isDark
         ? Colors.white.withValues(alpha: _hovered ? 0.10 : 0.07)
@@ -468,16 +524,33 @@ class _ReminderTileState extends State<_ReminderTile> {
           duration: const Duration(milliseconds: 150),
           curve: Curves.easeOut,
           transform: Matrix4.translationValues(0, _hovered ? -2 : 0, 0),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           decoration: BoxDecoration(
             color: itemBg,
             borderRadius: BorderRadius.circular(12),
             border: Border.all(color: itemBorder, width: 1),
           ),
-          child: Row(
-            children: [
-              // Checkbox
-              SizedBox(
+          // Material + InkWell (via ListTile's own tap handling) rather
+          // than a bare GestureDetector — the row already looks like a
+          // card, so it should also answer like one, matching
+          // `timer_page.dart`'s `_EntryTile`. Without this Material
+          // ancestor, ListTile paints its ink splashes on whatever
+          // Material sits ABOVE this decorated, colour-filled box instead
+          // of on the box itself — invisible feedback, and a debug-mode
+          // assertion ("ListTile background color or ink splashes may be
+          // invisible... wrapped in a DecoratedBox that has a background
+          // color").
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+            clipBehavior: Clip.antiAlias,
+            child: ListTile(
+              onTap: _openDetail,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              leading: SizedBox(
                 width: 24,
                 height: 24,
                 child: Checkbox(
@@ -491,70 +564,157 @@ class _ReminderTileState extends State<_ReminderTile> {
                   ),
                 ),
               ),
-              const SizedBox(width: 12),
-
-              // Title
-              Expanded(
-                child: Text(
-                  reminder.title,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    decoration: reminder.isDone
-                        ? TextDecoration.lineThrough
-                        : null,
-                    color: reminder.isDone
-                        ? (isDark ? Colors.white38 : Colors.grey.shade400)
-                        : null,
+              title: Text(
+                reminder.title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  decoration:
+                      reminder.isDone ? TextDecoration.lineThrough : null,
+                  color: reminder.isDone
+                      ? (isDark ? Colors.white38 : Colors.grey.shade400)
+                      : null,
+                ),
+              ),
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: 4),
+                child: Wrap(
+                  spacing: 10,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    // Status — always paired with its label, never colour
+                    // alone (accessibility constraint).
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: statusColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _statusLabels[reminder.status]!,
+                          style: TextStyle(fontSize: 11, color: mutedColor),
+                        ),
+                      ],
+                    ),
+                    if (project != null)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.folder_outlined,
+                              size: 11, color: project.color),
+                          const SizedBox(width: 4),
+                          Text(
+                            project.name,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: project.color,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    if (reminder.noteIds.isNotEmpty)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.description_outlined,
+                              size: 11, color: mutedColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            reminder.noteIds.length == 1
+                                ? '1 note'
+                                : '${reminder.noteIds.length} notes',
+                            style: TextStyle(fontSize: 11, color: mutedColor),
+                          ),
+                        ],
+                      ),
+                    if (isTimerRunning)
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.timer_rounded,
+                              size: 11, color: accentColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Tracking',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: accentColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Date badge — a backlog task (no scheduledDate) shows
+                  // "Backlog" rather than being mislabelled as "Today",
+                  // matching the board card's own treatment
+                  // (task_board.dart's `_CardBody`).
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: isOverdue
+                          ? Colors.red.withValues(alpha: 0.12)
+                          : isToday
+                              ? accentColor.withValues(alpha: 0.12)
+                              : (isDark
+                                  ? Colors.white.withValues(alpha: 0.05)
+                                  : Colors.grey.shade100),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      scheduledDate == null
+                          ? 'Backlog'
+                          : isToday
+                              ? 'Today'
+                              : '${_monthNames[scheduledDate.month - 1]} ${scheduledDate.day}',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        fontStyle: scheduledDate == null
+                            ? FontStyle.italic
+                            : FontStyle.normal,
+                        color: isOverdue
+                            ? Colors.red
+                            : isToday
+                                ? accentColor
+                                : (isDark
+                                    ? Colors.white54
+                                    : Colors.grey.shade600),
+                      ),
+                    ),
                   ),
-                ),
-              ),
+                  const SizedBox(width: 4),
 
-              // Date badge
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: isOverdue
-                      ? Colors.red.withValues(alpha: 0.12)
-                      : isToday
-                          ? accentColor.withValues(alpha: 0.12)
-                          : (isDark
-                              ? Colors.white.withValues(alpha: 0.05)
-                              : Colors.grey.shade100),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  isToday
-                      ? 'Today'
-                      : '${_monthNames[reminderScheduledDate.month - 1]} ${reminderScheduledDate.day}',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: isOverdue
-                        ? Colors.red
-                        : isToday
-                            ? accentColor
-                            : (isDark
-                                ? Colors.white54
-                                : Colors.grey.shade600),
+                  // Delete button — its own tap target; an ancestor
+                  // InkWell/ListTile does not swallow a descendant's
+                  // gesture (same precedent as `_EntryTile`).
+                  IconButton(
+                    onPressed: widget.onDelete,
+                    icon: Icon(
+                      Icons.close_rounded,
+                      size: 16,
+                      color: isDark ? Colors.white38 : Colors.grey.shade400,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    tooltip: 'Delete',
                   ),
-                ),
+                ],
               ),
-              const SizedBox(width: 8),
-
-              // Delete button
-              IconButton(
-                onPressed: widget.onDelete,
-                icon: Icon(
-                  Icons.close_rounded,
-                  size: 16,
-                  color: isDark ? Colors.white38 : Colors.grey.shade400,
-                ),
-                visualDensity: VisualDensity.compact,
-                tooltip: 'Delete',
-              ),
-            ],
+            ),
           ),
         ),
       ),
