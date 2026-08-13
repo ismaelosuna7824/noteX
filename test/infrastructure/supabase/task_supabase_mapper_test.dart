@@ -14,6 +14,11 @@ void main() {
     bool statusPendingPush = true,
     DateTime? completedAt,
     String? blockedReason,
+    String? externalProvider,
+    String? externalId,
+    String? externalUrl,
+    String? externalCachedTitle,
+    DateTime? externalLastSyncedAt,
   }) {
     return Task(
       id: 'r1',
@@ -26,6 +31,11 @@ void main() {
       blockedReason: blockedReason,
       description: 'get oat milk',
       noteId: 'note-1',
+      externalProvider: externalProvider,
+      externalId: externalId,
+      externalUrl: externalUrl,
+      externalCachedTitle: externalCachedTitle,
+      externalLastSyncedAt: externalLastSyncedAt,
       createdAt: DateTime(2026, 1, 1, 8),
       updatedAt: DateTime(2026, 1, 2, 9),
       version: 3,
@@ -290,12 +300,19 @@ void main() {
 
   group('round trip', () {
     test('fromMap(toMap(t)) preserves every field except statusPendingPush, '
-        'which is always false inbound', () {
+        'which is always false inbound — including the five external-'
+        'reference fields, previously untested with a real (non-null) '
+        'value', () {
       final original = buildTask(
         status: TaskStatus.blocked,
         statusChangedAt: DateTime(2026, 3, 1),
         blockedReason: 'waiting on approval',
         statusPendingPush: true,
+        externalProvider: 'jira',
+        externalId: 'PROJ-123',
+        externalUrl: 'https://example.atlassian.net/browse/PROJ-123',
+        externalCachedTitle: 'Buy milk (cached)',
+        externalLastSyncedAt: DateTime(2026, 2, 28, 10),
       );
 
       final roundTripped = TaskSupabaseMapper.fromMap(
@@ -320,6 +337,15 @@ void main() {
       expect(roundTripped.description, original.description);
       expect(roundTripped.blockedReason, original.blockedReason);
       expect(roundTripped.noteId, original.noteId);
+      expect(roundTripped.externalProvider, original.externalProvider);
+      expect(roundTripped.externalId, original.externalId);
+      expect(roundTripped.externalUrl, original.externalUrl);
+      expect(roundTripped.externalCachedTitle, original.externalCachedTitle);
+      expect(
+        roundTripped.externalLastSyncedAt!
+            .isAtSameMomentAs(original.externalLastSyncedAt!),
+        isTrue,
+      );
       expect(
         roundTripped.createdAt.isAtSameMomentAs(original.createdAt),
         isTrue,

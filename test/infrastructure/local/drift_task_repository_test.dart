@@ -22,9 +22,20 @@ void main() {
     String title = 'Task',
     DateTime? scheduledDate,
     TaskStatus status = TaskStatus.todo,
+    DateTime? statusChangedAt,
+    bool statusPendingPush = false,
     DateTime? completedAt,
+    String description = '',
+    String? blockedReason,
+    String? noteId,
+    String? externalProvider,
+    String? externalId,
+    String? externalUrl,
+    String? externalCachedTitle,
+    DateTime? externalLastSyncedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    int version = 1,
     DateTime? deletedAt,
     SyncStatus syncStatus = SyncStatus.localOnly,
     String? userId,
@@ -34,9 +45,20 @@ void main() {
       title: title,
       scheduledDate: scheduledDate,
       status: status,
+      statusChangedAt: statusChangedAt,
+      statusPendingPush: statusPendingPush,
       completedAt: completedAt,
+      description: description,
+      blockedReason: blockedReason,
+      noteId: noteId,
+      externalProvider: externalProvider,
+      externalId: externalId,
+      externalUrl: externalUrl,
+      externalCachedTitle: externalCachedTitle,
+      externalLastSyncedAt: externalLastSyncedAt,
       createdAt: createdAt ?? _fixedCreatedAt,
       updatedAt: updatedAt ?? _fixedCreatedAt,
+      version: version,
       deletedAt: deletedAt,
       syncStatus: syncStatus,
       userId: userId,
@@ -53,15 +75,28 @@ void main() {
   });
 
   group('save + getById — round trip', () {
-    test('every field survives a save/read round trip', () async {
+    test('every field survives a save/read round trip, including the '
+        'external-reference fields and the local-only statusPendingPush '
+        'flag', () async {
       final task = buildTask(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4, 12),
         status: TaskStatus.done,
+        statusChangedAt: DateTime(2026, 3, 3, 8),
+        statusPendingPush: true,
         completedAt: DateTime(2026, 3, 3, 9),
+        description: '# Groceries\n- milk\n- eggs',
+        blockedReason: 'waiting on the store to open',
+        noteId: 'note-42',
+        externalProvider: 'jira',
+        externalId: 'PROJ-123',
+        externalUrl: 'https://example.atlassian.net/browse/PROJ-123',
+        externalCachedTitle: 'Buy milk (cached)',
+        externalLastSyncedAt: DateTime(2026, 3, 2, 7),
         createdAt: DateTime(2026, 1, 1, 8),
         updatedAt: DateTime(2026, 1, 2, 9),
+        version: 3,
         syncStatus: SyncStatus.pendingSync,
         userId: 'user-1',
       );
@@ -74,10 +109,21 @@ void main() {
       expect(fetched.title, task.title);
       expect(fetched.scheduledDate, task.scheduledDate);
       expect(fetched.status, task.status);
+      expect(fetched.statusChangedAt, task.statusChangedAt);
+      expect(fetched.statusPendingPush, task.statusPendingPush);
       expect(fetched.isDone, task.isDone);
       expect(fetched.completedAt, task.completedAt);
+      expect(fetched.description, task.description);
+      expect(fetched.blockedReason, task.blockedReason);
+      expect(fetched.noteId, task.noteId);
+      expect(fetched.externalProvider, task.externalProvider);
+      expect(fetched.externalId, task.externalId);
+      expect(fetched.externalUrl, task.externalUrl);
+      expect(fetched.externalCachedTitle, task.externalCachedTitle);
+      expect(fetched.externalLastSyncedAt, task.externalLastSyncedAt);
       expect(fetched.createdAt, task.createdAt);
       expect(fetched.updatedAt, task.updatedAt);
+      expect(fetched.version, task.version);
       expect(fetched.syncStatus, task.syncStatus);
       expect(fetched.userId, task.userId);
     });
