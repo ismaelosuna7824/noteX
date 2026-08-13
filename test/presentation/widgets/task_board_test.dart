@@ -1470,4 +1470,129 @@ void main() {
       );
     });
   });
+
+  group('creating a project from the task detail dialog\'s project '
+      'selector', () {
+    testWidgets(
+        'picking "New project…", naming it and confirming creates it '
+        'through CreateProjectUseCase and assigns it to the task '
+        'immediately', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Needs a project'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Needs a project'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New project…').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('New Project'), findsOneWidget,
+          reason: 'the inline project-creation dialog must open');
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Project name'),
+        'Freelance client',
+      );
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      // Went through CreateProjectUseCase / TimerState.createProject — a
+      // real project now exists, not a direct write.
+      expect(
+        timerState.projects.any((p) => p.name == 'Freelance client'),
+        isTrue,
+        reason: 'the project must have been created via TimerState',
+      );
+
+      final createdProject =
+          timerState.projects.firstWhere((p) => p.name == 'Freelance client');
+      final persisted = await repository.getById('r1');
+      expect(
+        persisted!.projectId,
+        createdProject.id,
+        reason: 'the newly created project must be assigned to the task '
+            'immediately',
+      );
+      expect(
+        find.text('Freelance client'),
+        findsWidgets,
+        reason: 'the selector must now show the newly created project',
+      );
+    });
+
+    testWidgets(
+        'an empty or whitespace-only name does nothing — no project is '
+        'created, the dialog stays open', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Blank name task'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Blank name task'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New project…').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Project name'),
+        '   ',
+      );
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('New Project'),
+        findsOneWidget,
+        reason: 'a blank name must not close the dialog or create a '
+            'project',
+      );
+      expect(timerState.projects, isEmpty);
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.projectId, isNull);
+    });
+
+    testWidgets('cancelling the creation dialog does nothing', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Cancel me'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Cancel me'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New project…').last);
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Project name'),
+        'Never created',
+      );
+      // Both dialogs (the task detail dialog behind, this "New Project"
+      // dialog in front) render their own "Cancel" button — scope to the
+      // one inside the "New Project" dialog specifically.
+      final newProjectDialog = find.ancestor(
+        of: find.text('New Project'),
+        matching: find.byType(AlertDialog),
+      );
+      await tester.tap(find.descendant(
+        of: newProjectDialog,
+        matching: find.text('Cancel'),
+      ));
+      await tester.pumpAndSettle();
+
+      expect(timerState.projects, isEmpty);
+      final persisted = await repository.getById('r1');
+      expect(persisted!.projectId, isNull);
+    });
+  });
 }

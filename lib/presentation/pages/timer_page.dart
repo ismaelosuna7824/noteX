@@ -15,23 +15,8 @@ import '../state/timer_state.dart';
 import '../widgets/glassmorphic_container.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/project_colors.dart';
 import '../widgets/timer_calendar_view.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Preset colors for new projects
-// ─────────────────────────────────────────────────────────────────────────────
-const _projectColors = [
-  Color(0xFF6C5CE7), // Purple
-  Color(0xFF0984E3), // Blue
-  Color(0xFF00B894), // Teal
-  Color(0xFFE17055), // Coral
-  Color(0xFFF5A623), // Amber
-  Color(0xFFE84393), // Pink
-  Color(0xFF2D3436), // Dark
-  Color(0xFF00CEC9), // Cyan
-  Color(0xFFD63031), // Red
-  Color(0xFF6AB04C), // Green
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Timer Page
@@ -942,7 +927,7 @@ class _ProjectChip extends StatelessWidget {
 
   Future<void> _showNewProjectDialog(BuildContext context) async {
     final nameController = TextEditingController();
-    int selectedColorValue = _projectColors.first.toARGB32();
+    int selectedColorValue = kProjectColors.first.toARGB32();
 
     await showAnimatedDialog(
       context: context,
@@ -984,7 +969,7 @@ class _ProjectChip extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _projectColors.map((c) {
+                children: kProjectColors.map((c) {
                   final isSelected = c.toARGB32() == selectedColorValue;
                   return GestureDetector(
                     onTap: () =>

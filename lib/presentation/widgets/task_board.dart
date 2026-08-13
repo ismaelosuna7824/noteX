@@ -19,6 +19,7 @@ import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import 'animated_dialog.dart';
 import 'note_markdown_editor.dart';
+import 'project_colors.dart';
 
 /// Kanban view of tasks, grouped into four columns by [TaskStatus].
 ///
@@ -821,6 +822,25 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     await widget.taskState.setTaskProject(widget.task.id, projectId);
   }
 
+  /// Opens a lightweight project-creation dialog directly from the project
+  /// selector, so a project can be created without leaving the task
+  /// (settled decision: "en project que se puedan crear proyectos desde
+  /// ahí también"). Goes through [TimerState.createProject] — which wraps
+  /// `CreateProjectUseCase` — never a direct write, mirroring
+  /// `timer_page.dart`'s own "New Project" dialog (same fields, same
+  /// shared [kProjectColors] palette). An empty/whitespace name does
+  /// nothing rather than creating a blank project; Cancel does nothing.
+  /// On success, the new project is assigned to this task immediately via
+  /// [_assignProject], same as picking an existing one.
+  Future<void> _createProjectFromSelector() async {
+    final newProjectId = await showAnimatedDialog<String>(
+      context: context,
+      builder: (_) => const _CreateProjectDialog(),
+    );
+    if (newProjectId == null || !mounted) return;
+    await _assignProject(newProjectId);
+  }
+
   /// Changes this task's status from the sidebar control — the one
   /// deliberate new behavior this dialog gains (previously status only
   /// changed by dragging a card between board columns). Always through
@@ -1078,6 +1098,12 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// entry keeps the dropdown's selected value valid instead of throwing on
   /// Flutter's "exactly one item must match" assertion, or silently
   /// clearing the reference.
+  /// Sentinel dropdown value for the "New project…" row — distinct from
+  /// every real project id (a UUID), so selecting it can never collide
+  /// with an actual project. Never persisted: selecting it opens
+  /// [_createProjectFromSelector] instead of calling [_assignProject].
+  static const String _newProjectValue = '__new_project__';
+
   Widget _buildProjectSelector(bool isDark) {
     final timerState = GetIt.instance<TimerState>();
     final projects = timerState.projects;
@@ -1102,7 +1128,11 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
             // tabbing TO the control still sees its own focus ring; only
             // the auto-reclaim once a choice has been made is suppressed.
             _suppressFocusReclaim(_projectFocusNode);
-            unawaited(_assignProject(value));
+            if (value == _newProjectValue) {
+              unawaited(_createProjectFromSelector());
+            } else {
+              unawaited(_assignProject(value));
+            }
           },
           items: [
             const DropdownMenuItem<String?>(
@@ -1116,6 +1146,23 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
               ),
             for (final p in projects)
               DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
+            DropdownMenuItem<String?>(
+              value: _newProjectValue,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.add_rounded, size: 14, color: widget.accentColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    'New project…',
+                    style: TextStyle(
+                      color: widget.accentColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ],
         ),
       ],
@@ -1572,6 +1619,133 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           onPressed: _save,
           style: FilledButton.styleFrom(backgroundColor: widget.accentColor),
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+/// The "New Project" dialog opened from the task detail dialog's project
+/// selector (settled decision: "en project que se puedan crear proyectos
+/// desde ahí también") — same fields and shared [kProjectColors] palette as
+/// `timer_page.dart`'s own "New Project" dialog. Goes through
+/// [TimerState.createProject] (wrapping `CreateProjectUseCase`), never a
+/// direct write. An empty/whitespace name does nothing rather than
+/// creating a blank project; Cancel does nothing.
+///
+/// A dedicated `StatefulWidget` — not a `TextEditingController` owned by
+/// the caller's async method — deliberately: [showAnimatedDialog]'s
+/// returned Future resolves as soon as `Navigator.pop` is called, roughly
+/// 250ms before its exit transition finishes removing this widget from
+/// the tree. A controller disposed by the CALLER immediately after that
+/// Future resolves would still be attached to a TextField that keeps
+/// rebuilding during the exit animation, throwing "used after being
+/// disposed". Owning the controller here ties its disposal to this
+/// widget's own [dispose], which the framework only calls once the exit
+/// animation actually finishes and the route is removed.
+class _CreateProjectDialog extends StatefulWidget {
+  const _CreateProjectDialog();
+
+  @override
+  State<_CreateProjectDialog> createState() => _CreateProjectDialogState();
+}
+
+class _CreateProjectDialogState extends State<_CreateProjectDialog> {
+  final TextEditingController _nameController = TextEditingController();
+  int _selectedColorValue = kProjectColors.first.toARGB32();
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _create() async {
+    final name = _nameController.text.trim();
+    if (name.isEmpty) return;
+    final project = await GetIt.instance<TimerState>().createProject(
+      name: name,
+      colorValue: _selectedColorValue,
+    );
+    if (mounted) Navigator.pop(context, project.id);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        'New Project',
+        style: TextStyle(fontWeight: FontWeight.w700),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          TextField(
+            controller: _nameController,
+            autofocus: true,
+            decoration: InputDecoration(
+              hintText: 'Project name',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide.none,
+              ),
+              filled: true,
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            'Color',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: kProjectColors.map((c) {
+              final isSelected = c.toARGB32() == _selectedColorValue;
+              return GestureDetector(
+                onTap: () => setState(() => _selectedColorValue = c.toARGB32()),
+                child: Container(
+                  width: 28,
+                  height: 28,
+                  decoration: BoxDecoration(
+                    color: c,
+                    shape: BoxShape.circle,
+                    border: isSelected
+                        ? Border.all(color: Colors.white, width: 2)
+                        : null,
+                    boxShadow: isSelected
+                        ? [
+                            BoxShadow(
+                              color: c.withValues(alpha: 0.5),
+                              blurRadius: 6,
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: isSelected
+                      ? const Icon(Icons.check, size: 14, color: Colors.white)
+                      : null,
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _create,
+          child: const Text('Create'),
         ),
       ],
     );
