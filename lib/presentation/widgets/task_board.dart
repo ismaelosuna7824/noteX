@@ -625,6 +625,27 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// ScrollPosition and asserts on every frame the thumb is visible.
   final ScrollController _notesScrollController = ScrollController();
 
+  /// Explicit focus nodes for the status and project dropdowns — needed to
+  /// fix diagnosed problem #1 (a lingering focus rectangle after a
+  /// selection).
+  ///
+  /// `DropdownButton` calls its own `focusNode.requestFocus()` when
+  /// opening. While its menu is open, the menu ROUTE's own overlay holds
+  /// primary focus instead — so unfocusing inside `onChanged` (which fires
+  /// once the route has already popped, but is disposed asynchronously,
+  /// still one frame later) has nothing to undo yet: the anchor only
+  /// reclaims focus automatically AFTER `onChanged` returns, when Flutter's
+  /// focus manager falls back to it as the popped route's overlay is torn
+  /// down. A plain `unfocus()`/`canRequestFocus` toggle inside `onChanged`
+  /// therefore runs too early and gets silently overridden a frame later.
+  /// [_suppressFocusReclaim] instead reacts to that hand-back directly: it
+  /// listens for this node actually regaining focus and immediately drops
+  /// it again, for a short window after a selection. A keyboard user who
+  /// tabs TO the control afterward is unaffected — the listener is gone
+  /// well before then.
+  final FocusNode _statusFocusNode = FocusNode(debugLabel: 'task-status');
+  final FocusNode _projectFocusNode = FocusNode(debugLabel: 'task-project');
+
   // Local mirror of the task's linked notes, updated as the user links or
   // unlinks within this dialog session (decision
   // architecture/task-note-linking-model — linking appends and the dialog
@@ -672,7 +693,27 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _titleController.dispose();
     _blockedReasonController.dispose();
     _notesScrollController.dispose();
+    _statusFocusNode.dispose();
+    _projectFocusNode.dispose();
     super.dispose();
+  }
+
+  /// Reacts to a [DropdownButton]'s automatic "hand focus back to the
+  /// anchor" once its menu route finishes popping (see [_statusFocusNode]'s
+  /// doc) — the fix for diagnosed problem #1. Call right after a selection
+  /// is applied: for a short window afterward, if [node] regains focus, it
+  /// is immediately dropped again. The listener removes itself once that
+  /// window passes, so it never interferes with a later, legitimate
+  /// keyboard/mouse focus on the same control.
+  void _suppressFocusReclaim(FocusNode node) {
+    void reclaimGuard() {
+      if (node.hasFocus) node.unfocus();
+    }
+
+    node.addListener(reclaimGuard);
+    Future.delayed(const Duration(milliseconds: 500), () {
+      node.removeListener(reclaimGuard);
+    });
   }
 
   /// Resolves every linked note's affordance state up front (design D9),
@@ -1050,10 +1091,19 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         const SizedBox(width: 8),
         DropdownButton<String?>(
           value: _projectId,
+          focusNode: _projectFocusNode,
           isDense: true,
           underline: const SizedBox.shrink(),
           style: TextStyle(fontSize: 12.5, color: mutedColor),
-          onChanged: _assignProject,
+          onChanged: (value) {
+            // Suppress the lingering focus rectangle after a selection
+            // (diagnosed problem #1) — see [_projectFocusNode]'s doc for
+            // why a plain `unfocus()` here does not stick. A keyboard user
+            // tabbing TO the control still sees its own focus ring; only
+            // the auto-reclaim once a choice has been made is suppressed.
+            _suppressFocusReclaim(_projectFocusNode);
+            unawaited(_assignProject(value));
+          },
           items: [
             const DropdownMenuItem<String?>(
               value: null,
@@ -1330,10 +1380,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       child: DropdownButtonHideUnderline(
         child: DropdownButton<TaskStatus>(
           value: _status,
+          focusNode: _statusFocusNode,
           isExpanded: true,
           icon: Icon(Icons.expand_more_rounded, color: accent),
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: accent),
           onChanged: (next) {
+            // Same focus-reclaim fix as the project selector (diagnosed
+            // problem #1) — see [_statusFocusNode]'s doc for why a plain
+            // `unfocus()` here does not stick.
+            _suppressFocusReclaim(_statusFocusNode);
             if (next != null) unawaited(_changeStatus(next));
           },
           items: [

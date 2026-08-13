@@ -1407,4 +1407,67 @@ void main() {
       );
     });
   });
+
+  group('status/project dropdowns release focus after a selection — '
+      'diagnosed problem #1', () {
+    testWidgets(
+        'choosing a status releases focus so no rectangle lingers on the '
+        'control', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Focus check'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Focus check'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<TaskStatus>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Doing').last);
+      await tester.pumpAndSettle();
+
+      // Some node always holds ambient focus in a live app (the dialog's
+      // own modal scope, here) — the meaningful assertion is that it is
+      // NOT this specific control's own focus node (identified by its
+      // debugLabel) any more, since that is the node whose decoration
+      // paints the lingering rectangle.
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('task-status'),
+        reason: 'the status dropdown must release focus after a selection, '
+            'or it keeps painting a focus rectangle around itself',
+      );
+    });
+
+    testWidgets(
+        'choosing a project releases focus so no rectangle lingers on the '
+        'control', (tester) async {
+      await projectRepository.save(Project(
+        id: 'proj-1',
+        name: 'Client work',
+        colorValue: 0xFF00FF00,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await repository.save(Task.create(id: 'r1', title: 'Focus check 2'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Focus check 2'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Client work').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        FocusManager.instance.primaryFocus?.debugLabel,
+        isNot('task-project'),
+        reason: 'the project dropdown must release focus after a '
+            'selection, or it keeps painting a focus rectangle around '
+            'itself',
+      );
+    });
+  });
 }
