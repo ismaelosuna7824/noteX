@@ -159,6 +159,11 @@ class TaskBoard extends StatelessWidget {
 /// "create a task with no schedule" scenario needed, deliberately kept off
 /// the flat list so its tiles never have to render a dateless task (see
 /// design D5 / slice-2 apply notes).
+///
+/// On a successful create, [_submitAddTask] closes this dialog and opens
+/// the newly created task's own detail dialog immediately via
+/// [showTaskDetailDialog] — the settled decision that the user should
+/// never have to find the new card on the board and click it themselves.
 Future<void> showAddTaskDialog(
   BuildContext context,
   TaskState taskState,
@@ -209,12 +214,14 @@ Future<void> showAddTaskDialog(
                       borderSide: BorderSide(color: accentColor, width: 2),
                     ),
                   ),
-                  onSubmitted: (_) => _submitAddTask(
+                  onSubmitted: (_) => unawaited(_submitAddTask(
+                    context,
                     ctx,
                     taskState,
+                    themeState,
                     titleController,
                     backlog ? null : selectedDate,
-                  ),
+                  )),
                 ),
                 const SizedBox(height: 12),
                 CheckboxListTile(
@@ -291,12 +298,14 @@ Future<void> showAddTaskDialog(
               child: const Text('Cancel'),
             ),
             FilledButton(
-              onPressed: () => _submitAddTask(
+              onPressed: () => unawaited(_submitAddTask(
+                context,
                 ctx,
                 taskState,
+                themeState,
                 titleController,
                 backlog ? null : selectedDate,
-              ),
+              )),
               style: FilledButton.styleFrom(
                 backgroundColor: accentColor,
                 // Same fix as the accent-coloured buttons elsewhere (task
@@ -348,16 +357,49 @@ Future<void> showTaskDetailDialog(
   );
 }
 
-void _submitAddTask(
+/// Creates the task, closes the create dialog, then opens the REAL created
+/// task's own detail dialog immediately via [showTaskDetailDialog] — the
+/// same single entry point every other caller uses, never a
+/// locally-constructed stand-in, so the detail dialog's own save-on-close
+/// path always writes against the actual persisted id. [context] is the
+/// board's own context (captured by [showAddTaskDialog] before the create
+/// dialog opened) — it outlives [dialogContext], which is popped first. On
+/// failure, nothing opens and the error is surfaced via `SnackBar`, the
+/// same convention [_TaskDetailDialogState._closeDialog] already
+/// established for a save failure — the create dialog is left open so the
+/// user's typed title/date are not silently discarded.
+Future<void> _submitAddTask(
+  BuildContext context,
   BuildContext dialogContext,
   TaskState taskState,
+  ThemeState themeState,
   TextEditingController titleController,
   DateTime? scheduledDate,
-) {
+) async {
   final title = titleController.text.trim();
   if (title.isEmpty) return;
-  taskState.createReminder(title: title, scheduledDate: scheduledDate);
-  Navigator.of(dialogContext).pop();
+
+  final messenger = ScaffoldMessenger.of(context);
+  final Task created;
+  try {
+    created =
+        await taskState.createReminder(title: title, scheduledDate: scheduledDate);
+  } catch (e) {
+    messenger.showSnackBar(
+      SnackBar(content: Text('Could not create task: $e')),
+    );
+    return;
+  }
+
+  if (dialogContext.mounted) Navigator.of(dialogContext).pop();
+  if (!context.mounted) return;
+  await showTaskDetailDialog(
+    context,
+    created,
+    taskState,
+    themeState.accentColor,
+    surfaceColor: themeState.editorBgColor,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────

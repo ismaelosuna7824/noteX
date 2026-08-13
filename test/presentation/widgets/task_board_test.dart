@@ -56,6 +56,7 @@ import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/state/timer_state.dart';
 import 'package:notex/presentation/widgets/markdown/notex_markdown_view.dart';
+import 'package:notex/presentation/widgets/note_markdown_editor.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
 
 /// Minimal fakes satisfying [SyncEngine]'s collaborators — this suite never
@@ -378,6 +379,13 @@ void main() {
       await tester.tap(find.text('Create'));
       await tester.pumpAndSettle();
 
+      // Creating a task now opens its detail dialog immediately (item 4) —
+      // close it first so this test stays scoped to the backlog leak the
+      // group name describes; the auto-open behavior itself is covered in
+      // its own dedicated group below.
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
       // The leak the spec forbids: a null-scheduledDate task must never
       // reach the daily list the home card and flat list both read from.
       expect(
@@ -393,8 +401,9 @@ void main() {
   });
 
   group(
-      '"New Task" dialog follows the theme (bug report: off-theme brown '
-      'surface)', () {
+      '"New Task" dialog — follows the theme, and creating opens the new '
+      "task's detail dialog immediately (bug reports: brown off-theme "
+      'surface; extra click needed to find the new card)', () {
     testWidgets(
         "the create dialog's background is derived from "
         "ThemeState.editorBgColor, and its Create button's foreground "
@@ -441,6 +450,64 @@ void main() {
       expect(
         createButton.style?.backgroundColor?.resolve(<WidgetState>{}),
         themeState.accentColor,
+      );
+    });
+
+    testWidgets(
+        'tapping Create closes the create dialog and opens the newly '
+        "created task's OWN detail dialog — not a locally-constructed "
+        'stand-in — without the user having to find the card on the board',
+        (tester) async {
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.add));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'Write the report',
+      );
+      await tester.tap(find.text('Create'));
+      await tester.pumpAndSettle();
+
+      // The create dialog is gone, replaced by the detail dialog — never
+      // stacked on top of it.
+      expect(find.text('New Task'), findsNothing);
+      expect(find.byType(AlertDialog), findsOneWidget);
+      expect(
+        find.widgetWithText(TextField, 'Title'),
+        findsOneWidget,
+        reason: "the task detail dialog's own Title field must be showing",
+      );
+
+      final titleField = tester.widget<TextField>(
+        find.widgetWithText(TextField, 'Title'),
+      );
+      expect(titleField.controller?.text, 'Write the report');
+
+      // Proves this is the REAL created task (its own id), not a
+      // locally-constructed stand-in: editing the description here and
+      // closing must persist against the actual persisted task. The
+      // description editor is the sole [NoteMarkdownEditor] on screen at
+      // this point (defaults to edit mode on an empty description).
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(NoteMarkdownEditor),
+          matching: find.byType(TextField),
+        ),
+        'from the detail dialog opened right after create',
+      );
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      final created = taskState.reminders
+          .firstWhere((t) => t.title == 'Write the report');
+      expect(
+        created.description,
+        'from the detail dialog opened right after create',
+        reason: 'the description edit must have persisted against the '
+            "REAL created task's id",
       );
     });
   });
