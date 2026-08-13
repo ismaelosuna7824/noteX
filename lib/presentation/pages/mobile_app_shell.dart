@@ -165,9 +165,9 @@ class _MobileAppShellState extends State<MobileAppShell>
 
   // ── Bottom navigation mapping ───────────────────────────────────────────
   // Sidebar indices: 0=Home, 1=Notes, 2=Editor, 3=Calendar, 4=Timer,
-  //                  5=Markdown, 6=Settings, 7=Reminders
+  //                  5=Markdown, 6=Settings, 7=Tasks
   // Bottom nav uses a compact 5-item bar with the most-used features.
-  // Settings and Reminders are accessible from the "More" overflow or
+  // Settings and Tasks are accessible from the "More" overflow or
   // directly via their page indices.
 
   static const _navDestinations = [
@@ -178,7 +178,7 @@ class _MobileAppShellState extends State<MobileAppShell>
     (4, Icons.timer_rounded, 'Timer'),
     (5, Icons.article_rounded, 'Markdown'),
     (6, Icons.settings_rounded, 'Settings'),
-    (7, Icons.notifications_rounded, 'Reminders'),
+    (7, Icons.task_alt_rounded, 'Tasks'),
   ];
 
   int get _bottomNavIndex {

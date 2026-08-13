@@ -2481,7 +2481,7 @@ class _QuickShortcutsBar extends StatelessWidget {
       (Icons.calendar_month_rounded, 'Calendar', 3),
       (Icons.timer_rounded, 'Timer', 4),
       (Icons.article_rounded, 'Markdown', 5),
-      (Icons.notifications_rounded, 'Reminders', 7),
+      (Icons.task_alt_rounded, 'Tasks', 7),
     ];
 
     return ClipRRect(
