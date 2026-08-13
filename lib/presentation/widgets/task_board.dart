@@ -1622,6 +1622,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// scrolling horizontally), the first thing in the left content column.
   Widget _buildTitleField() {
     return TextField(
+      key: const Key('task-detail-title-field'),
       controller: _titleController,
       maxLines: null,
       style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
@@ -2285,16 +2286,27 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                         fontWeight: FontWeight.w700,
                         color: mutedColor,
                       ),
+                      // Same outlined/labelled treatment as every other
+                      // input in this feature (task dialog Title, New Task
+                      // Title, blocked-reason field) — settled decision:
+                      // "no se parece a los otros inputs que tenemos".
+                      // The New Task dialog's Title field is the one
+                      // other input that also sets an accent-coloured
+                      // `focusedBorder`, so this matches THAT shape rather
+                      // than the plain (no focusedBorder) task-detail
+                      // Title field — do not invent a third style.
                       decoration: InputDecoration(
                         isDense: true,
-                        border: InputBorder.none,
+                        labelText: 'Title',
                         hintText: 'Untitled',
-                        hintStyle: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: mutedColor,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                        contentPadding: EdgeInsets.zero,
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide:
+                              BorderSide(color: widget.accentColor, width: 2),
+                        ),
                       ),
                     ),
                   ),

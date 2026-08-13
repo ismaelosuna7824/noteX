@@ -907,7 +907,14 @@ void main() {
 
       // The task dialog never closed — its own Title field is still in the
       // tree, layered BEHIND the note modal that just opened on top of it.
-      expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+      // Disambiguated by key rather than by the 'Title' label text: the
+      // note modal's own title field now carries the same label (this
+      // change's own styling fix), so a text-based lookup alone would find
+      // two matches here.
+      expect(
+        find.byKey(const Key('task-detail-title-field')),
+        findsOneWidget,
+      );
       expect(
         find.byType(AlertDialog),
         findsNWidgets(2),
@@ -1299,6 +1306,73 @@ void main() {
         before!.updatedAt,
         reason: "editing a linked note's title must never mark the TASK "
             'dirty or touch its updatedAt',
+      );
+    });
+  });
+
+  group(
+      'note modal title field — matches the app\'s outlined input '
+      'treatment (bug report: "el input del título ... se ve feo")', () {
+    testWidgets(
+        'the title field is an outlined, labelled input like the task '
+        "dialog's own Title field, not a bare filled box", (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      final titleField = tester.widget<TextField>(
+        find.byKey(const Key('task-note-title-field')),
+      );
+      final decoration = titleField.decoration!;
+
+      expect(
+        decoration.labelText,
+        'Title',
+        reason: 'must announce itself the same way every other input in '
+            'this feature does (task Title, New Task Title, blocked '
+            'reason)',
+      );
+      expect(
+        decoration.border,
+        isA<OutlineInputBorder>().having(
+          (b) => b.borderRadius,
+          'borderRadius',
+          BorderRadius.circular(12),
+        ),
+        reason: 'must use the same OutlineInputBorder(circular(12)) shape '
+            'as the app\'s other inputs, not a bare filled box',
+      );
+      expect(
+        decoration.filled,
+        isNot(true),
+        reason: 'a bare filled box is exactly the look the user rejected',
+      );
+      expect(
+        decoration.focusedBorder,
+        isA<OutlineInputBorder>()
+            .having((b) => b.borderRadius, 'borderRadius',
+                BorderRadius.circular(12))
+            .having((b) => b.borderSide.color, 'accent-coloured border',
+                themeState.accentColor),
+        reason: 'a focused border in the accent colour, matching the New '
+            'Task dialog\'s own Title field',
       );
     });
   });
