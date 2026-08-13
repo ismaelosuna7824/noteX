@@ -98,6 +98,19 @@ class Task {
     this.userId,
   });
 
+  /// Normalizes a scheduled date to LOCAL NOON so the day component
+  /// survives timezone conversion through Drift. `null` (backlog) passes
+  /// through unchanged.
+  ///
+  /// The single source of this domain invariant — every code path that
+  /// sets a concrete [scheduledDate] (creation via [Task.create], and an
+  /// edit via `UpdateTaskUseCase`) must route through this rather than
+  /// re-deriving noon locally, or an edited task can silently shift a day.
+  static DateTime? normalizeScheduledDate(DateTime? date) {
+    if (date == null) return null;
+    return DateTime(date.year, date.month, date.day, 12, 0, 0);
+  }
+
   factory Task.create({
     required String id,
     required String title,
@@ -109,16 +122,7 @@ class Task {
     return Task(
       id: id,
       title: title,
-      scheduledDate: scheduledDate == null
-          ? null
-          : DateTime(
-              scheduledDate.year,
-              scheduledDate.month,
-              scheduledDate.day,
-              12,
-              0,
-              0,
-            ),
+      scheduledDate: normalizeScheduledDate(scheduledDate),
       status: TaskStatus.todo,
       // The first push of any task always carries its status (D10).
       statusPendingPush: true,

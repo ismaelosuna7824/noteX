@@ -178,6 +178,22 @@ class TaskState extends ChangeNotifier {
     return result;
   }
 
+  /// Reschedules task [id] — pass a value to (re)schedule it, `null` to
+  /// send it to the backlog. A dedicated verb rather than an optional
+  /// param on [updateTask]: it always carries a concrete value (the
+  /// dialog's date picker/clear action always has a definite choice),
+  /// same "always concrete, never this class's sentinel" shape as
+  /// [setTaskProject] — never touches `status` (design D3; a schedule
+  /// change is not a status change). Normalization to local noon happens
+  /// inside [UpdateTaskUseCase] (via `Task.normalizeScheduledDate`), not
+  /// here, so every caller gets the same guarantee.
+  Future<Task?> setTaskScheduledDate(String id, DateTime? scheduledDate) async {
+    final result =
+        await _updateReminder.execute(id, scheduledDate: scheduledDate);
+    await refreshReminders();
+    return result;
+  }
+
   /// Soft-delete a reminder.
   Future<void> deleteReminder(String id) async {
     await _deleteReminder.execute(id);

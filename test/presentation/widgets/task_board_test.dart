@@ -1595,4 +1595,114 @@ void main() {
       expect(persisted!.projectId, isNull);
     });
   });
+
+  group('scheduled date is editable from the details panel', () {
+    testWidgets(
+        'picking a date from the calendar reschedules a backlog task, '
+        'normalized to local noon, without touching status', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Reschedule me'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Reschedule me'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('Backlog'),
+        ),
+        findsOneWidget,
+        reason: 'starts out in the backlog (no scheduledDate)',
+      );
+
+      await tester.tap(find.descendant(
+        of: find.byType(Dialog),
+        matching: find.text('Backlog'),
+      ));
+      await tester.pumpAndSettle();
+
+      // Switch the date picker to text-input entry mode to avoid ambiguous
+      // calendar-grid day taps (adjacent months can render the same day
+      // number), then type an unambiguous date directly. Scoped to the
+      // DatePickerDialog itself — the task dialog behind it has its own
+      // TextFields (Title, etc.) still in the tree.
+      await tester.tap(find.byIcon(Icons.edit_outlined));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(DatePickerDialog),
+          matching: find.byType(TextField),
+        ),
+        '08/20/2026',
+      );
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.scheduledDate, isNotNull);
+      expect(
+        persisted.scheduledDate,
+        DateTime(2026, 8, 20, 12, 0, 0),
+        reason: 'an edited date must be normalized to LOCAL NOON, exactly '
+            'like Task.create, or the day component can shift through '
+            'Drift\'s timezone conversion',
+      );
+      expect(
+        persisted.status,
+        TaskStatus.todo,
+        reason: 'a schedule change must never touch status (design D3), '
+            'and must never emit the D10 status quartet',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('Aug 20, 2026'),
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets(
+        'clearing the date on a scheduled task sends it back to the '
+        'backlog', (tester) async {
+      await repository.save(Task.create(
+        id: 'r1',
+        title: 'Clear my date',
+        scheduledDate: DateTime(2026, 5, 1),
+      ));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Clear my date'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('May 1, 2026'),
+        ),
+        findsOneWidget,
+      );
+
+      await tester.tap(find.byTooltip('Clear date (move to backlog)'));
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.scheduledDate, isNull);
+      expect(
+        persisted.status,
+        TaskStatus.todo,
+        reason: 'clearing the date must never touch status',
+      );
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('Backlog'),
+        ),
+        findsOneWidget,
+        reason: 'the control must reflect the backlog immediately',
+      );
+    });
+  });
 }

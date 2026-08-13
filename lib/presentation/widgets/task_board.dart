@@ -661,6 +661,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   // without waiting for a full task reload.
   late String? _projectId;
 
+  // Local mirror of the task's scheduled date, updated as the user
+  // (re)schedules or clears it within this dialog session — same "local
+  // mirror, persists immediately" shape as [_projectId] above. `null`
+  // means backlog. Persisted through [_setScheduledDate] ->
+  // [TaskState.setTaskScheduledDate] -> [UpdateTaskUseCase], never
+  // [_save] — a schedule change is a deliberate edit, not part of the
+  // title/description Save flow, and must never touch `status`.
+  late DateTime? _scheduledDate;
+
   // Local mirror of the task's status, updated as the user changes it via
   // the sidebar status control within this dialog session (mirrors the
   // noteIds/_projectId pattern above). Never written directly — every
@@ -684,6 +693,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _description = widget.task.description;
     _noteIds = List<String>.from(widget.task.noteIds);
     _projectId = widget.task.projectId;
+    _scheduledDate = widget.task.scheduledDate;
     _status = widget.task.status;
     unawaited(_loadLinkedNotes());
     unawaited(_loadTimeEntries());
@@ -839,6 +849,30 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
     if (newProjectId == null || !mounted) return;
     await _assignProject(newProjectId);
+  }
+
+  /// Opens a date picker to (re)schedule this task, or `null` to send it
+  /// to the backlog. Persists immediately through [_setScheduledDate].
+  Future<void> _pickScheduledDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _scheduledDate ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030, 12, 31),
+    );
+    if (picked == null || !mounted) return;
+    await _setScheduledDate(picked);
+  }
+
+  /// Persists a schedule change immediately — same "local mirror updates
+  /// first, then the dedicated verb persists" shape as [_assignProject].
+  /// [date] is passed straight through to [TaskState.setTaskScheduledDate]
+  /// — normalization to local noon happens inside `UpdateTaskUseCase`
+  /// (`Task.normalizeScheduledDate`), never here, so this control gets the
+  /// exact same guarantee [Task.create] does. Never touches `status`.
+  Future<void> _setScheduledDate(DateTime? date) async {
+    setState(() => _scheduledDate = date);
+    await widget.taskState.setTaskScheduledDate(widget.task.id, date);
   }
 
   /// Changes this task's status from the sidebar control — the one
@@ -1350,28 +1384,66 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// The Details panel: quiet label/value rows for the things the user
-  /// SETS rather than writes — Project, Scheduled date (or "Backlog" when
-  /// null — display-only, matching the flat list's own read-only
-  /// scheduling), Blocked reason (only while blocked — design D3's
-  /// display-scoping rule: the value stays in the data, only its ROW is
-  /// hidden otherwise), and Time tracked (the timer control). No Notes row
-  /// here — that count now lives in the "Notes · N" section header itself,
-  /// immediately above the linked-notes list, so it is not duplicated.
-  Widget _buildDetailsPanel(bool isDark) {
+  /// The scheduled-date control — tap to pick a date (a backlog task gets
+  /// one), tap the close icon to clear it back to the backlog. Persists
+  /// immediately through [_setScheduledDate], the same "no Save button
+  /// needed" pattern as the Project selector and status control — a
+  /// schedule change is a deliberate edit, distinct from the
+  /// title/description Save flow.
+  Widget _buildScheduledDateControl(bool isDark) {
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
-    final scheduledDate = widget.task.scheduledDate;
-    final scheduledLabel = scheduledDate == null
-        ? 'Backlog'
-        : DateFormat('MMM d, yyyy').format(scheduledDate);
+    final date = _scheduledDate;
+    final label =
+        date == null ? 'Backlog' : DateFormat('MMM d, yyyy').format(date);
 
+    return Row(
+      children: [
+        Expanded(
+          child: InkWell(
+            borderRadius: BorderRadius.circular(8),
+            onTap: () => unawaited(_pickScheduledDate()),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.calendar_today_rounded, size: 13, color: mutedColor),
+                  const SizedBox(width: 8),
+                  Text(label, style: TextStyle(fontSize: 13, color: mutedColor)),
+                ],
+              ),
+            ),
+          ),
+        ),
+        if (date != null)
+          IconButton(
+            icon: const Icon(Icons.close, size: 15),
+            tooltip: 'Clear date (move to backlog)',
+            splashRadius: 16,
+            constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+            padding: EdgeInsets.zero,
+            onPressed: () => unawaited(_setScheduledDate(null)),
+          ),
+      ],
+    );
+  }
+
+  /// The Details panel: quiet label/value rows for the things the user
+  /// SETS rather than writes — Project, Scheduled date (editable: pick to
+  /// (re)schedule, clear to send back to the backlog), Blocked reason
+  /// (only while blocked — design D3's display-scoping rule: the value
+  /// stays in the data, only its ROW is hidden otherwise), and Time
+  /// tracked (the timer control). No Notes row here — that count now lives
+  /// in the "Notes · N" section header itself, immediately above the
+  /// linked-notes list, so it is not duplicated.
+  Widget _buildDetailsPanel(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _buildDetailRow('Project', _buildProjectSelector(isDark), isDark),
         _buildDetailRow(
           'Scheduled date',
-          Text(scheduledLabel, style: TextStyle(fontSize: 13, color: mutedColor)),
+          _buildScheduledDateControl(isDark),
           isDark,
         ),
         if (_status == TaskStatus.blocked)

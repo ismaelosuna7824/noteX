@@ -49,9 +49,13 @@ class UpdateTaskUseCase {
     final updated = existing.copyWith(
       title: title,
       description: description,
+      // Same LOCAL NOON normalization Task.create applies — an edited
+      // date must survive timezone conversion through Drift exactly like
+      // a created one, or it can silently shift a day (see
+      // Task.normalizeScheduledDate).
       scheduledDate: scheduledDate is _Unset
           ? existing.scheduledDate
-          : scheduledDate as DateTime?,
+          : Task.normalizeScheduledDate(scheduledDate as DateTime?),
       blockedReason: blockedReason is _Unset
           ? existing.blockedReason
           : blockedReason as String?,

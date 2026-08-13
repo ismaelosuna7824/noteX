@@ -52,7 +52,14 @@ void main() {
 
     expect(result!.title, 'Buy oat milk');
     expect(result.description, 'Get the barista blend');
-    expect(result.scheduledDate, DateTime(2026, 3, 10));
+    // LOCAL NOON, not midnight — UpdateTaskUseCase routes every concrete
+    // scheduledDate through Task.normalizeScheduledDate, the same
+    // normalization Task.create applies, so the day component survives
+    // timezone conversion through Drift. A date left at midnight could
+    // read back as the previous day, and a task created one way would
+    // silently differ from the same task edited another way — this
+    // assertion is intentionally NOT `DateTime(2026, 3, 10)`.
+    expect(result.scheduledDate, DateTime(2026, 3, 10, 12, 0, 0));
   });
 
   test('preserves scheduledDate when omitted', () async {
