@@ -102,28 +102,54 @@ class TaskState extends ChangeNotifier {
   /// not blocked); pass a value to set it, `null` to clear it — only a
   /// deliberate edit reaches here (design D3).
   ///
-  /// [blockedReason]'s sentinel default is resolved here, not forwarded —
-  /// [UpdateTaskUseCase] has its own private `_Unset`, so this class's
-  /// sentinel is only ever compared against itself, mirroring the pattern
-  /// `update_task_use_case.dart` itself documents.
+  /// [blockedReason] and [noteId]'s sentinel defaults are resolved here, not
+  /// forwarded — [UpdateTaskUseCase] has its own private `_Unset`, a
+  /// different type per file (see `update_task_use_case.dart`). Forwarding
+  /// this class's sentinel instance into that check would be `false` for a
+  /// foreign instance and throw on the cast, so each parameter is either
+  /// passed with a resolved value or omitted from the call entirely,
+  /// letting the use case's own default apply — never passed as this
+  /// class's sentinel.
   Future<Task?> updateTask(
     String id, {
     String? title,
     String? description,
     Object? blockedReason = const _Unset(),
+    Object? noteId = const _Unset(),
   }) async {
-    final result = blockedReason is _Unset
-        ? await _updateReminder.execute(
-            id,
-            title: title,
-            description: description,
-          )
-        : await _updateReminder.execute(
-            id,
-            title: title,
-            description: description,
-            blockedReason: blockedReason as String?,
-          );
+    final hasBlockedReason = blockedReason is! _Unset;
+    final hasNoteId = noteId is! _Unset;
+
+    final Task? result;
+    if (hasBlockedReason && hasNoteId) {
+      result = await _updateReminder.execute(
+        id,
+        title: title,
+        description: description,
+        blockedReason: blockedReason as String?,
+        noteId: noteId as String?,
+      );
+    } else if (hasBlockedReason) {
+      result = await _updateReminder.execute(
+        id,
+        title: title,
+        description: description,
+        blockedReason: blockedReason as String?,
+      );
+    } else if (hasNoteId) {
+      result = await _updateReminder.execute(
+        id,
+        title: title,
+        description: description,
+        noteId: noteId as String?,
+      );
+    } else {
+      result = await _updateReminder.execute(
+        id,
+        title: title,
+        description: description,
+      );
+    }
     await refreshReminders();
     return result;
   }

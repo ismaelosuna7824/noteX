@@ -598,6 +598,7 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: row.deletedAt,
       syncStatus: _parseSyncStatus(row.syncStatus),
       userId: row.userId,
+      taskId: row.taskId,
     );
   }
 
@@ -614,6 +615,7 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: Value(entry.deletedAt),
       syncStatus: Value(entry.syncStatus.name),
       userId: Value(entry.userId),
+      taskId: Value(entry.taskId),
     );
   }
 

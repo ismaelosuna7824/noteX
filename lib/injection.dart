@@ -70,6 +70,7 @@ import 'application/use_cases/task/get_tasks_use_case.dart';
 import 'application/use_cases/task/transition_task_status_use_case.dart';
 import 'application/use_cases/task/update_task_use_case.dart';
 import 'application/use_cases/task/delete_task_use_case.dart';
+import 'application/use_cases/task/resolve_task_note_link_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/use_cases/cleanup_empty_notes_use_case.dart';
 import 'application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
@@ -240,7 +241,10 @@ Future<void> setupDependencies() async {
     ),
   );
   getIt.registerFactory<StartTimerUseCase>(
-    () => StartTimerUseCase(getIt<TimeEntryRepository>()),
+    () => StartTimerUseCase(
+      getIt<TimeEntryRepository>(),
+      getIt<TransitionTaskStatusUseCase>(),
+    ),
   );
   getIt.registerFactory<StopTimerUseCase>(
     () => StopTimerUseCase(getIt<TimeEntryRepository>()),
@@ -334,6 +338,9 @@ Future<void> setupDependencies() async {
       getIt<TaskRepository>(),
       getIt<SyncEngine>(),
     ),
+  );
+  getIt.registerFactory<ResolveTaskNoteLinkUseCase>(
+    () => ResolveTaskNoteLinkUseCase(getIt<NoteRepository>()),
   );
 
   // Application - Update Use Case
@@ -429,4 +436,10 @@ Future<void> setupDependencies() async {
       deleteReminder: getIt<DeleteTaskUseCase>(),
     ),
   );
+  // Wire timer→task cross-state refresh (design D1) — deferred-getIt,
+  // mirroring the SyncEngine.onSyncComplete pattern above. So the board
+  // shows the task's TRUE status after starting a linked timer, whether the
+  // transition applied or failed — never an optimistic lie.
+  getIt<TimerState>().onTaskChanged =
+      () => getIt<TaskState>().refreshReminders();
 }

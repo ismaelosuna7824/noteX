@@ -537,6 +537,7 @@ class SupabaseSyncAdapter implements SyncService {
         'user_id': e.userId,
         'description': e.description,
         'project_id': e.projectId,
+        'task_id': e.taskId, // no FK — see design D9/slice-3 notes
         'start_time': e.startTime.toUtc().toIso8601String(),
         'end_time': e.endTime?.toUtc().toIso8601String(),
         'created_at': e.startTime.toUtc().toIso8601String(),
@@ -550,6 +551,7 @@ class SupabaseSyncAdapter implements SyncService {
         id: m['id'] as String,
         description: m['description'] as String? ?? '',
         projectId: m['project_id'] as String?,
+        taskId: m['task_id'] as String?,
         startTime: DateTime.parse(m['start_time'] as String),
         endTime: m['end_time'] != null
             ? DateTime.parse(m['end_time'] as String)

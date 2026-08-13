@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:get_it/get_it.dart';
 
+import '../../application/use_cases/task/resolve_task_note_link_use_case.dart';
 import '../../domain/entities/task.dart';
+import '../../domain/value_objects/note_link_resolution.dart';
 import '../../domain/value_objects/task_status.dart';
+import '../../domain/value_objects/task_transition_outcome.dart';
+import '../state/app_state.dart';
 import '../state/task_state.dart';
 import '../state/theme_state.dart';
+import '../state/timer_state.dart';
 import 'animated_dialog.dart';
 import 'note_markdown_editor.dart';
 
@@ -556,6 +562,102 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Starts a timer linked to this task (design D1's own scenario: "the
+  /// user starts the timer from the board and watches the card"). The task
+  /// write is best-effort — a failure never blocks the timer, and is
+  /// surfaced here as a non-blocking SnackBar rather than swallowed.
+  Future<void> _startTimer() async {
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final outcome = await GetIt.instance<TimerState>().startTimer(
+      taskId: widget.task.id,
+      description: widget.task.title,
+    );
+    if (!mounted) return;
+    if (outcome == TaskTransitionOutcome.failed) {
+      messenger.showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Timer started, but the task status could not be updated.',
+          ),
+        ),
+      );
+    }
+    navigator.pop();
+  }
+
+  /// Resolves and opens `widget.task.noteId` through the three affordance
+  /// states (design D9): found and live → navigate to it; found and
+  /// soft-deleted → offer to restore, then open; not found → offer to
+  /// clear the link. Always via [ResolveTaskNoteLinkUseCase], never the
+  /// deletedAt-filtered in-memory note list.
+  Future<void> _openLinkedNote() async {
+    final noteId = widget.task.noteId;
+    if (noteId == null) return;
+
+    final resolution =
+        await GetIt.instance<ResolveTaskNoteLinkUseCase>().execute(noteId);
+    if (!mounted) return;
+
+    switch (resolution.status) {
+      case NoteLinkStatus.found:
+        final navigator = Navigator.of(context);
+        await GetIt.instance<AppState>().selectNote(resolution.note!);
+        navigator.pop();
+      case NoteLinkStatus.inTrash:
+        final restore = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Note in trash'),
+            content: Text(
+              '"${resolution.note!.title}" is in the trash. Restore it?',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Restore'),
+              ),
+            ],
+          ),
+        );
+        if (restore != true || !mounted) return;
+        final navigator = Navigator.of(context);
+        final appState = GetIt.instance<AppState>();
+        await appState.restoreNote(resolution.note!.id);
+        final restored = await GetIt.instance<ResolveTaskNoteLinkUseCase>()
+            .execute(noteId);
+        if (restored.status == NoteLinkStatus.found) {
+          await appState.selectNote(restored.note!);
+        }
+        navigator.pop();
+      case NoteLinkStatus.missing:
+        final clear = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Note not found'),
+            content: const Text('The linked note no longer exists.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: const Text('Close'),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: const Text('Clear link'),
+              ),
+            ],
+          ),
+        );
+        if (clear == true && mounted) {
+          await widget.taskState.updateTask(widget.task.id, noteId: null);
+        }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -577,6 +679,17 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            if (widget.task.noteId != null) ...[
+              OutlinedButton.icon(
+                onPressed: _openLinkedNote,
+                icon: const Icon(Icons.description_outlined, size: 16),
+                label: const Text('Open linked note'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: widget.accentColor,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
             if (isBlocked) ...[
               TextField(
                 controller: _blockedReasonController,
@@ -608,15 +721,27 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           ],
         ),
       ),
+      actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+        TextButton.icon(
+          onPressed: _startTimer,
+          icon: const Icon(Icons.play_arrow_rounded, size: 18),
+          label: const Text('Start timer'),
         ),
-        FilledButton(
-          onPressed: _save,
-          style: FilledButton.styleFrom(backgroundColor: widget.accentColor),
-          child: const Text('Save'),
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: _save,
+              style:
+                  FilledButton.styleFrom(backgroundColor: widget.accentColor),
+              child: const Text('Save'),
+            ),
+          ],
         ),
       ],
     );
