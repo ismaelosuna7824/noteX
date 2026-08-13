@@ -1,3 +1,5 @@
+import 'dart:collection';
+
 import '../value_objects/sync_status.dart';
 import '../value_objects/task_status.dart';
 
@@ -33,8 +35,18 @@ class Task {
   /// deliberate edit may clear it. See design D3.
   final String? blockedReason;
 
-  /// Optional link to a note. No foreign key — see design D9.
-  final String? noteId;
+  /// Links to zero or more notes — a task's accumulating "mini
+  /// documentation" (decision architecture/task-note-linking-model). No
+  /// foreign key — see design D9; each id is resolved through
+  /// [ResolveTaskNoteLinkUseCase], never a deletedAt-filtered list, so a
+  /// note in the trash degrades gracefully instead of vanishing silently.
+  /// Order-preserving and deduplicated — see [copyWith], [linkNote].
+  ///
+  /// Supersedes the single, nullable `noteId` the original design used.
+  /// That field's storage column (`note_id`) is kept, deprecated and
+  /// unused, on the schema — see schema v20 / decision
+  /// architecture/task-note-linking-model.
+  final List<String> noteIds;
   final String? externalProvider;
   final String? externalId;
   final String? externalUrl;
@@ -58,7 +70,7 @@ class Task {
     this.completedAt,
     this.description = '',
     this.blockedReason,
-    this.noteId,
+    this.noteIds = const [],
     this.externalProvider,
     this.externalId,
     this.externalUrl,
@@ -128,7 +140,7 @@ class Task {
     Object? completedAt = const _Unset(),
     String? description,
     Object? blockedReason = const _Unset(),
-    Object? noteId = const _Unset(),
+    Object? noteIds = const _Unset(),
     Object? externalProvider = const _Unset(),
     Object? externalId = const _Unset(),
     Object? externalUrl = const _Unset(),
@@ -157,7 +169,16 @@ class Task {
       blockedReason: blockedReason is _Unset
           ? this.blockedReason
           : blockedReason as String?,
-      noteId: noteId is _Unset ? this.noteId : noteId as String?,
+      // Deduplicated, order-preserving — passing the same id twice (or an
+      // id already present) never produces a duplicate entry. `.cast()`,
+      // not a direct `as List<String>`, so a literal like `const []`
+      // (reified as `List<dynamic>` without an element-type context) casts
+      // safely instead of throwing on the exact-type check `as` performs.
+      noteIds: noteIds is _Unset
+          ? this.noteIds
+          : List<String>.unmodifiable(
+              LinkedHashSet<String>.from((noteIds as List).cast<String>()),
+            ),
       externalProvider: externalProvider is _Unset
           ? this.externalProvider
           : externalProvider as String?,
@@ -203,6 +224,22 @@ class Task {
           : SyncStatus.pendingSync,
       blockedReason: blockedReason,
     );
+  }
+
+  /// Returns a copy with [id] appended to [noteIds] — the "link a note"
+  /// affordance (decision architecture/task-note-linking-model: N notes,
+  /// not one). No-op — returns `this` — if [id] is already linked, so
+  /// re-linking the same note never creates a duplicate entry.
+  Task linkNote(String id) {
+    if (noteIds.contains(id)) return this;
+    return copyWith(noteIds: [...noteIds, id]);
+  }
+
+  /// Returns a copy with [id] removed from [noteIds] — the "unlink" half of
+  /// the affordance. No-op — returns `this` — if [id] is not linked.
+  Task unlinkNote(String id) {
+    if (!noteIds.contains(id)) return this;
+    return copyWith(noteIds: noteIds.where((n) => n != id).toList());
   }
 
   Task markPendingSync() {

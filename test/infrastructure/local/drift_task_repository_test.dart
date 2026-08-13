@@ -27,7 +27,7 @@ void main() {
     DateTime? completedAt,
     String description = '',
     String? blockedReason,
-    String? noteId,
+    List<String> noteIds = const [],
     String? externalProvider,
     String? externalId,
     String? externalUrl,
@@ -50,7 +50,7 @@ void main() {
       completedAt: completedAt,
       description: description,
       blockedReason: blockedReason,
-      noteId: noteId,
+      noteIds: noteIds,
       externalProvider: externalProvider,
       externalId: externalId,
       externalUrl: externalUrl,
@@ -88,7 +88,7 @@ void main() {
         completedAt: DateTime(2026, 3, 3, 9),
         description: '# Groceries\n- milk\n- eggs',
         blockedReason: 'waiting on the store to open',
-        noteId: 'note-42',
+        noteIds: const ['note-42', 'note-43'],
         externalProvider: 'jira',
         externalId: 'PROJ-123',
         externalUrl: 'https://example.atlassian.net/browse/PROJ-123',
@@ -115,7 +115,7 @@ void main() {
       expect(fetched.completedAt, task.completedAt);
       expect(fetched.description, task.description);
       expect(fetched.blockedReason, task.blockedReason);
-      expect(fetched.noteId, task.noteId);
+      expect(fetched.noteIds, task.noteIds);
       expect(fetched.externalProvider, task.externalProvider);
       expect(fetched.externalId, task.externalId);
       expect(fetched.externalUrl, task.externalUrl);

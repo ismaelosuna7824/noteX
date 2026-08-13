@@ -327,7 +327,7 @@ void main() {
       deletedAt: DateTime(2026, 3, 2),
       userId: 'user-1',
       blockedReason: 'blocked reason',
-      noteId: 'note-1',
+      noteIds: const ['note-1'],
     );
 
     test('omitting a sentinel-backed field preserves its current value', () {
@@ -337,7 +337,7 @@ void main() {
       expect(copy.deletedAt, base.deletedAt);
       expect(copy.userId, base.userId);
       expect(copy.blockedReason, base.blockedReason);
-      expect(copy.noteId, base.noteId);
+      expect(copy.noteIds, base.noteIds);
       expect(copy.title, 'New title');
     });
 
@@ -347,17 +347,31 @@ void main() {
         deletedAt: null,
         userId: null,
         blockedReason: null,
-        noteId: null,
       );
 
       expect(copy.completedAt, isNull);
       expect(copy.deletedAt, isNull);
       expect(copy.userId, isNull);
       expect(copy.blockedReason, isNull);
-      expect(copy.noteId, isNull);
       // Untouched fields remain as-is.
       expect(copy.title, base.title);
       expect(copy.scheduledDate, base.scheduledDate);
+      expect(copy.noteIds, base.noteIds);
+    });
+
+    test('passing a list overwrites noteIds, deduplicated and order '
+        'preserved', () {
+      final copy = base.copyWith(
+        noteIds: const ['note-2', 'note-3', 'note-2'],
+      );
+
+      expect(copy.noteIds, ['note-2', 'note-3']);
+    });
+
+    test('passing an empty list clears noteIds', () {
+      final copy = base.copyWith(noteIds: const <String>[]);
+
+      expect(copy.noteIds, isEmpty);
     });
 
     test('passing a value overwrites a sentinel-backed field', () {
@@ -399,7 +413,7 @@ void main() {
       expect(copy.completedAt, base.completedAt);
       expect(copy.description, base.description);
       expect(copy.blockedReason, base.blockedReason);
-      expect(copy.noteId, base.noteId);
+      expect(copy.noteIds, base.noteIds);
       expect(copy.createdAt, base.createdAt);
       expect(copy.updatedAt, base.updatedAt);
       expect(copy.version, base.version);
@@ -429,6 +443,70 @@ void main() {
 
       expect(a, b);
       expect(a.hashCode, b.hashCode);
+    });
+  });
+
+  group('Task.linkNote / Task.unlinkNote — N notes per task '
+      '(architecture/task-note-linking-model)', () {
+    final base = Task(
+      id: 'r1',
+      title: 'Buy milk',
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    );
+
+    test('linkNote appends to an empty list', () {
+      final linked = base.linkNote('note-1');
+
+      expect(linked.noteIds, ['note-1']);
+    });
+
+    test('linkNote appends a second note without replacing the first', () {
+      final linked =
+          base.linkNote('note-1').linkNote('note-2').linkNote('note-3');
+
+      expect(linked.noteIds, ['note-1', 'note-2', 'note-3']);
+    });
+
+    test('linkNote is a no-op when the note is already linked', () {
+      final once = base.linkNote('note-1');
+      final twice = once.linkNote('note-1');
+
+      expect(twice.noteIds, ['note-1']);
+      expect(identical(once, twice), isTrue);
+    });
+
+    test('unlinkNote removes exactly one note, leaving the rest', () {
+      final linked =
+          base.linkNote('note-1').linkNote('note-2').linkNote('note-3');
+
+      final unlinked = linked.unlinkNote('note-2');
+
+      expect(unlinked.noteIds, ['note-1', 'note-3']);
+    });
+
+    test('unlinkNote is a no-op when the note is not linked', () {
+      final linked = base.linkNote('note-1');
+      final unchanged = linked.unlinkNote('note-does-not-exist');
+
+      expect(unchanged.noteIds, ['note-1']);
+      expect(identical(linked, unchanged), isTrue);
+    });
+
+    test('a trashed note among several linked notes does not affect the '
+        'others — linking/unlinking operates purely on ids', () {
+      // Trash-degradation itself is covered by
+      // ResolveTaskNoteLinkUseCase/resolve_task_note_link_use_case_test —
+      // this asserts the id-list operations that back it never conflate
+      // one note's state with another's.
+      final linked =
+          base.linkNote('note-live').linkNote('note-trashed').linkNote(
+                'note-gone',
+              );
+
+      final afterUnlinkingTrashed = linked.unlinkNote('note-trashed');
+
+      expect(afterUnlinkingTrashed.noteIds, ['note-live', 'note-gone']);
     });
   });
 }

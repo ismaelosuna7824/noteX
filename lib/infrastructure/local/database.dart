@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -14,6 +15,7 @@ import '../../domain/entities/note_project.dart' as domain_np;
 import '../../domain/entities/task.dart' as domain_task;
 import '../../domain/value_objects/sync_status.dart';
 import '../../domain/value_objects/task_status_resolution.dart';
+import 'task_note_ids_migration.dart';
 import 'task_status_migration.dart';
 
 part 'database.g.dart';
@@ -189,7 +191,25 @@ class TaskEntries extends Table {
       boolean().withDefault(const Constant(false))();
   TextColumn get description => text().withDefault(const Constant(''))();
   TextColumn get blockedReason => text().nullable()();
+
+  // DEPRECATED (schema v20) — superseded by `noteIds` below. A task links
+  // to N notes, not one (decision architecture/task-note-linking-model).
+  // Kept, unused, rather than dropped: dropping a column in SQLite requires
+  // a full table rebuild, the most dangerous DDL in this project (see the
+  // v19 `alterTable` migration below for what that costs). v20's backfill
+  // (`task_note_ids_migration.dart`) reads this column once, to seed
+  // `noteIds` for pre-existing rows; nothing else in the app reads or
+  // writes it going forward.
   TextColumn get noteId => text().nullable()();
+
+  // v20: a task's links to zero or more notes, JSON-encoded as a text
+  // column (`domain_task.Task.noteIds`) — the same sync path every other
+  // task field already travels, rather than a new join table with its own
+  // push/pull/merge rules. NOT NULL with a `'[]'` default so `ADD COLUMN`
+  // does not need a nullable relaxation later (see D5/v19 for why that is
+  // expensive) — an empty JSON array IS "no links", not a null sentinel.
+  TextColumn get noteIds => text().withDefault(const Constant('[]'))();
+
   TextColumn get externalProvider => text().nullable()();
   TextColumn get externalId => text().nullable()();
   TextColumn get externalUrl => text().nullable()();
@@ -261,7 +281,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 19;
+  int get schemaVersion => 20;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -461,6 +481,22 @@ class AppDatabase extends _$AppDatabase {
         // `@experimental` upstream, not a sign this call site is unstable.
         // ignore: experimental_member_use
         await m.alterTable(TableMigration(taskEntries));
+      }
+      if (from < 20) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+
+        // Additive only (decision architecture/task-note-linking-model) —
+        // corrects the single nullable `noteId` design error to a list, N
+        // notes per task. The deprecated `noteId` column is untouched.
+        await safeAddColumn(taskEntries, taskEntries.noteIds);
+        await backfillTaskNoteIds(this);
       }
     },
   );
@@ -740,7 +776,7 @@ class AppDatabase extends _$AppDatabase {
       completedAt: resolution.completedAt,
       description: row.description,
       blockedReason: row.blockedReason,
-      noteId: row.noteId,
+      noteIds: _decodeNoteIds(row.noteIds),
       externalProvider: row.externalProvider,
       externalId: row.externalId,
       externalUrl: row.externalUrl,
@@ -755,6 +791,21 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
+  /// Decodes the `note_ids` JSON-array text column into a `List<String>`.
+  /// Defensive, matching the rest of this class's row-parsing style: a
+  /// malformed or unexpected value (e.g. a row written before v20 whose
+  /// `noteIds` somehow bypassed the column DEFAULT) reads as "no links"
+  /// rather than throwing.
+  static List<String> _decodeNoteIds(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) return decoded.whereType<String>().toList();
+    } catch (_) {
+      // Malformed JSON — degrade to "no links" rather than crash.
+    }
+    return const [];
+  }
+
   static TaskEntriesCompanion taskToCompanion(domain_task.Task t) {
     return TaskEntriesCompanion(
       id: Value(t.id),
@@ -767,7 +818,7 @@ class AppDatabase extends _$AppDatabase {
       statusPendingPush: Value(t.statusPendingPush),
       description: Value(t.description),
       blockedReason: Value(t.blockedReason),
-      noteId: Value(t.noteId),
+      noteIds: Value(jsonEncode(t.noteIds)),
       externalProvider: Value(t.externalProvider),
       externalId: Value(t.externalId),
       externalUrl: Value(t.externalUrl),

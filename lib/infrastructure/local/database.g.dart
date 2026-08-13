@@ -4466,6 +4466,18 @@ class $TaskEntriesTable extends TaskEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _noteIdsMeta = const VerificationMeta(
+    'noteIds',
+  );
+  @override
+  late final GeneratedColumn<String> noteIds = GeneratedColumn<String>(
+    'note_ids',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
   static const VerificationMeta _externalProviderMeta = const VerificationMeta(
     'externalProvider',
   );
@@ -4540,6 +4552,7 @@ class $TaskEntriesTable extends TaskEntries
     description,
     blockedReason,
     noteId,
+    noteIds,
     externalProvider,
     externalId,
     externalUrl,
@@ -4684,6 +4697,12 @@ class $TaskEntriesTable extends TaskEntries
         noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta),
       );
     }
+    if (data.containsKey('note_ids')) {
+      context.handle(
+        _noteIdsMeta,
+        noteIds.isAcceptableOrUnknown(data['note_ids']!, _noteIdsMeta),
+      );
+    }
     if (data.containsKey('external_provider')) {
       context.handle(
         _externalProviderMeta,
@@ -4803,6 +4822,10 @@ class $TaskEntriesTable extends TaskEntries
         DriftSqlType.string,
         data['${effectivePrefix}note_id'],
       ),
+      noteIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_ids'],
+      )!,
       externalProvider: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}external_provider'],
@@ -4850,6 +4873,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   final String description;
   final String? blockedReason;
   final String? noteId;
+  final String noteIds;
   final String? externalProvider;
   final String? externalId;
   final String? externalUrl;
@@ -4873,6 +4897,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     required this.description,
     this.blockedReason,
     this.noteId,
+    required this.noteIds,
     this.externalProvider,
     this.externalId,
     this.externalUrl,
@@ -4913,6 +4938,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     if (!nullToAbsent || noteId != null) {
       map['note_id'] = Variable<String>(noteId);
     }
+    map['note_ids'] = Variable<String>(noteIds);
     if (!nullToAbsent || externalProvider != null) {
       map['external_provider'] = Variable<String>(externalProvider);
     }
@@ -4964,6 +4990,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       noteId: noteId == null && nullToAbsent
           ? const Value.absent()
           : Value(noteId),
+      noteIds: Value(noteIds),
       externalProvider: externalProvider == null && nullToAbsent
           ? const Value.absent()
           : Value(externalProvider),
@@ -5005,6 +5032,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       description: serializer.fromJson<String>(json['description']),
       blockedReason: serializer.fromJson<String?>(json['blockedReason']),
       noteId: serializer.fromJson<String?>(json['noteId']),
+      noteIds: serializer.fromJson<String>(json['noteIds']),
       externalProvider: serializer.fromJson<String?>(json['externalProvider']),
       externalId: serializer.fromJson<String?>(json['externalId']),
       externalUrl: serializer.fromJson<String?>(json['externalUrl']),
@@ -5037,6 +5065,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       'description': serializer.toJson<String>(description),
       'blockedReason': serializer.toJson<String?>(blockedReason),
       'noteId': serializer.toJson<String?>(noteId),
+      'noteIds': serializer.toJson<String>(noteIds),
       'externalProvider': serializer.toJson<String?>(externalProvider),
       'externalId': serializer.toJson<String?>(externalId),
       'externalUrl': serializer.toJson<String?>(externalUrl),
@@ -5065,6 +5094,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     String? description,
     Value<String?> blockedReason = const Value.absent(),
     Value<String?> noteId = const Value.absent(),
+    String? noteIds,
     Value<String?> externalProvider = const Value.absent(),
     Value<String?> externalId = const Value.absent(),
     Value<String?> externalUrl = const Value.absent(),
@@ -5094,6 +5124,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
         ? blockedReason.value
         : this.blockedReason,
     noteId: noteId.present ? noteId.value : this.noteId,
+    noteIds: noteIds ?? this.noteIds,
     externalProvider: externalProvider.present
         ? externalProvider.value
         : this.externalProvider,
@@ -5141,6 +5172,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           ? data.blockedReason.value
           : this.blockedReason,
       noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      noteIds: data.noteIds.present ? data.noteIds.value : this.noteIds,
       externalProvider: data.externalProvider.present
           ? data.externalProvider.value
           : this.externalProvider,
@@ -5179,6 +5211,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           ..write('description: $description, ')
           ..write('blockedReason: $blockedReason, ')
           ..write('noteId: $noteId, ')
+          ..write('noteIds: $noteIds, ')
           ..write('externalProvider: $externalProvider, ')
           ..write('externalId: $externalId, ')
           ..write('externalUrl: $externalUrl, ')
@@ -5207,6 +5240,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     description,
     blockedReason,
     noteId,
+    noteIds,
     externalProvider,
     externalId,
     externalUrl,
@@ -5234,6 +5268,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           other.description == this.description &&
           other.blockedReason == this.blockedReason &&
           other.noteId == this.noteId &&
+          other.noteIds == this.noteIds &&
           other.externalProvider == this.externalProvider &&
           other.externalId == this.externalId &&
           other.externalUrl == this.externalUrl &&
@@ -5259,6 +5294,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   final Value<String> description;
   final Value<String?> blockedReason;
   final Value<String?> noteId;
+  final Value<String> noteIds;
   final Value<String?> externalProvider;
   final Value<String?> externalId;
   final Value<String?> externalUrl;
@@ -5283,6 +5319,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     this.description = const Value.absent(),
     this.blockedReason = const Value.absent(),
     this.noteId = const Value.absent(),
+    this.noteIds = const Value.absent(),
     this.externalProvider = const Value.absent(),
     this.externalId = const Value.absent(),
     this.externalUrl = const Value.absent(),
@@ -5308,6 +5345,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     this.description = const Value.absent(),
     this.blockedReason = const Value.absent(),
     this.noteId = const Value.absent(),
+    this.noteIds = const Value.absent(),
     this.externalProvider = const Value.absent(),
     this.externalId = const Value.absent(),
     this.externalUrl = const Value.absent(),
@@ -5335,6 +5373,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     Expression<String>? description,
     Expression<String>? blockedReason,
     Expression<String>? noteId,
+    Expression<String>? noteIds,
     Expression<String>? externalProvider,
     Expression<String>? externalId,
     Expression<String>? externalUrl,
@@ -5360,6 +5399,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
       if (description != null) 'description': description,
       if (blockedReason != null) 'blocked_reason': blockedReason,
       if (noteId != null) 'note_id': noteId,
+      if (noteIds != null) 'note_ids': noteIds,
       if (externalProvider != null) 'external_provider': externalProvider,
       if (externalId != null) 'external_id': externalId,
       if (externalUrl != null) 'external_url': externalUrl,
@@ -5389,6 +5429,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     Value<String>? description,
     Value<String?>? blockedReason,
     Value<String?>? noteId,
+    Value<String>? noteIds,
     Value<String?>? externalProvider,
     Value<String?>? externalId,
     Value<String?>? externalUrl,
@@ -5414,6 +5455,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
       description: description ?? this.description,
       blockedReason: blockedReason ?? this.blockedReason,
       noteId: noteId ?? this.noteId,
+      noteIds: noteIds ?? this.noteIds,
       externalProvider: externalProvider ?? this.externalProvider,
       externalId: externalId ?? this.externalId,
       externalUrl: externalUrl ?? this.externalUrl,
@@ -5477,6 +5519,9 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     if (noteId.present) {
       map['note_id'] = Variable<String>(noteId.value);
     }
+    if (noteIds.present) {
+      map['note_ids'] = Variable<String>(noteIds.value);
+    }
     if (externalProvider.present) {
       map['external_provider'] = Variable<String>(externalProvider.value);
     }
@@ -5522,6 +5567,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
           ..write('description: $description, ')
           ..write('blockedReason: $blockedReason, ')
           ..write('noteId: $noteId, ')
+          ..write('noteIds: $noteIds, ')
           ..write('externalProvider: $externalProvider, ')
           ..write('externalId: $externalId, ')
           ..write('externalUrl: $externalUrl, ')
@@ -7943,6 +7989,7 @@ typedef $$TaskEntriesTableCreateCompanionBuilder =
       Value<String> description,
       Value<String?> blockedReason,
       Value<String?> noteId,
+      Value<String> noteIds,
       Value<String?> externalProvider,
       Value<String?> externalId,
       Value<String?> externalUrl,
@@ -7969,6 +8016,7 @@ typedef $$TaskEntriesTableUpdateCompanionBuilder =
       Value<String> description,
       Value<String?> blockedReason,
       Value<String?> noteId,
+      Value<String> noteIds,
       Value<String?> externalProvider,
       Value<String?> externalId,
       Value<String?> externalUrl,
@@ -8068,6 +8116,11 @@ class $$TaskEntriesTableFilterComposer
 
   ColumnFilters<String> get noteId => $composableBuilder(
     column: $table.noteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteIds => $composableBuilder(
+    column: $table.noteIds,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -8191,6 +8244,11 @@ class $$TaskEntriesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get noteIds => $composableBuilder(
+    column: $table.noteIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get externalProvider => $composableBuilder(
     column: $table.externalProvider,
     builder: (column) => ColumnOrderings(column),
@@ -8293,6 +8351,9 @@ class $$TaskEntriesTableAnnotationComposer
   GeneratedColumn<String> get noteId =>
       $composableBuilder(column: $table.noteId, builder: (column) => column);
 
+  GeneratedColumn<String> get noteIds =>
+      $composableBuilder(column: $table.noteIds, builder: (column) => column);
+
   GeneratedColumn<String> get externalProvider => $composableBuilder(
     column: $table.externalProvider,
     builder: (column) => column,
@@ -8367,6 +8428,7 @@ class $$TaskEntriesTableTableManager
                 Value<String> description = const Value.absent(),
                 Value<String?> blockedReason = const Value.absent(),
                 Value<String?> noteId = const Value.absent(),
+                Value<String> noteIds = const Value.absent(),
                 Value<String?> externalProvider = const Value.absent(),
                 Value<String?> externalId = const Value.absent(),
                 Value<String?> externalUrl = const Value.absent(),
@@ -8391,6 +8453,7 @@ class $$TaskEntriesTableTableManager
                 description: description,
                 blockedReason: blockedReason,
                 noteId: noteId,
+                noteIds: noteIds,
                 externalProvider: externalProvider,
                 externalId: externalId,
                 externalUrl: externalUrl,
@@ -8417,6 +8480,7 @@ class $$TaskEntriesTableTableManager
                 Value<String> description = const Value.absent(),
                 Value<String?> blockedReason = const Value.absent(),
                 Value<String?> noteId = const Value.absent(),
+                Value<String> noteIds = const Value.absent(),
                 Value<String?> externalProvider = const Value.absent(),
                 Value<String?> externalId = const Value.absent(),
                 Value<String?> externalUrl = const Value.absent(),
@@ -8441,6 +8505,7 @@ class $$TaskEntriesTableTableManager
                 description: description,
                 blockedReason: blockedReason,
                 noteId: noteId,
+                noteIds: noteIds,
                 externalProvider: externalProvider,
                 externalId: externalId,
                 externalUrl: externalUrl,

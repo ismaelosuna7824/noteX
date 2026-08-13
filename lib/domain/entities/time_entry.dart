@@ -15,9 +15,10 @@ class TimeEntry {
   final SyncStatus syncStatus;
   final String? userId;
 
-  /// Optional link to a task. No foreign key — mirrors [Task.noteId]
-  /// (design D9). Nullable so a free-text timer with no task behaves
-  /// exactly as it did before this field existed.
+  /// Optional link to a task. No foreign key — mirrors the same
+  /// no-FK rationale as `Task.noteIds` (design D9). Nullable so a
+  /// free-text timer with no task behaves exactly as it did before this
+  /// field existed.
   final String? taskId;
 
   const TimeEntry({
