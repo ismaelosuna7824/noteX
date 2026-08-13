@@ -664,13 +664,22 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                             const SizedBox(height: 12),
                             // Dark mode toggle
+                            //
+                            // The SwitchListTile needs its own Material
+                            // between it and this Container's background: a
+                            // ListTile paints its ink splash on the nearest
+                            // Material ancestor, so a coloured Container in
+                            // between hides the ripple and trips a framework
+                            // assertion on every build.
                             Container(
                               decoration: BoxDecoration(
                                 color: innerBg,
                                 borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: innerBorder),
                               ),
-                              child: SwitchListTile(
+                              child: Material(
+                                color: Colors.transparent,
+                                child: SwitchListTile(
                                 title: const Text(
                                   'Dark Mode',
                                   style: TextStyle(fontSize: 14),
@@ -687,6 +696,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 activeTrackColor: accentColor,
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
+                                ),
                                 ),
                               ),
                             ),
