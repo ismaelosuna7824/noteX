@@ -175,6 +175,8 @@ void main() {
   late DriftTimeEntryRepository timeEntryRepository;
   late DriftProjectRepository projectRepository;
   late TimerState timerState;
+  late DriftNoteProjectRepository noteProjectRepository;
+  late CreateNoteProjectUseCase createNoteProjectUseCase;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -201,7 +203,8 @@ void main() {
     // suite deliberately avoids (it seeds notes directly and calls the
     // narrower `refreshNotes()`).
     noteRepository = DriftNoteRepository(db);
-    final noteProjectRepository = DriftNoteProjectRepository(db);
+    noteProjectRepository = DriftNoteProjectRepository(db);
+    createNoteProjectUseCase = CreateNoteProjectUseCase(noteProjectRepository);
     final updateNoteUseCase = UpdateNoteUseCase(noteRepository);
     appState = AppState(
       createNote: CreateNoteUseCase(noteRepository),
@@ -1373,6 +1376,164 @@ void main() {
                 themeState.accentColor),
         reason: 'a focused border in the accent colour, matching the New '
             'Task dialog\'s own Title field',
+      );
+    });
+  });
+
+  group('note modal folder selector — link with the existing note folders',
+      () {
+    testWidgets(
+        'a note created and closed without touching the folder selector '
+        'still lands at root (default stays root)', (tester) async {
+      await createNoteProjectUseCase.execute(
+        id: 'folder-1',
+        name: 'Work',
+        colorValue: 0xFF00FF00,
+      );
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Untitled',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Untitled'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Close note'));
+      await tester.pumpAndSettle();
+
+      final persisted = await noteRepository.getById('note-1');
+      expect(
+        persisted!.projectId,
+        isNull,
+        reason: 'never selecting a folder must leave the note at root, '
+            'exactly like current behavior',
+      );
+    });
+
+    testWidgets(
+        'selecting a folder from the selector persists it onto the note, '
+        'on the same debounced path as title/content, without touching '
+        "the linked task's updatedAt", (tester) async {
+      await createNoteProjectUseCase.execute(
+        id: 'folder-1',
+        name: 'Work',
+        colorValue: 0xFF00FF00,
+      );
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      final before = await repository.getById('r1');
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('task-note-folder-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Work').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close note'));
+      await tester.pumpAndSettle();
+
+      final persisted = await noteRepository.getById('note-1');
+      expect(persisted!.projectId, 'folder-1',
+          reason: 'the chosen folder must persist through '
+              "UpdateNoteUseCase's existing projectId parameter");
+
+      final after = await repository.getById('r1');
+      expect(
+        after!.updatedAt,
+        before!.updatedAt,
+        reason: 'choosing a folder for a linked note must never mark the '
+            "TASK dirty or touch its updatedAt",
+      );
+    });
+
+    testWidgets(
+        'clearing a note\'s folder back to "No folder" persists root — '
+        'the _Unset sentinel path', (tester) async {
+      await createNoteProjectUseCase.execute(
+        id: 'folder-1',
+        name: 'Work',
+        colorValue: 0xFF00FF00,
+      );
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        projectId: 'folder-1',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      final before = await repository.getById('r1');
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text('Work'),
+        findsOneWidget,
+        reason: "the selector must open pre-selected to the note's "
+            'existing folder',
+      );
+
+      await tester.tap(find.byKey(const Key('task-note-folder-selector')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('No folder').last);
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close note'));
+      await tester.pumpAndSettle();
+
+      final persisted = await noteRepository.getById('note-1');
+      expect(
+        persisted!.projectId,
+        isNull,
+        reason: 'clearing back to "No folder" must persist root — the '
+            'easiest half of the _Unset sentinel path to get wrong',
+      );
+
+      final after = await repository.getById('r1');
+      expect(
+        after!.updatedAt,
+        before!.updatedAt,
+        reason: 'clearing a linked note\'s folder must never mark the '
+            "TASK dirty or touch its updatedAt",
       );
     });
   });

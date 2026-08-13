@@ -2152,6 +2152,7 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
   late Note _note;
   late String _content;
   late String _title;
+  late String? _projectId;
   late final TextEditingController _titleController;
   Timer? _debounce;
 
@@ -2161,6 +2162,7 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     _note = widget.note;
     _content = widget.note.content;
     _title = widget.note.title;
+    _projectId = widget.note.projectId;
     _titleController = TextEditingController(text: _title);
   }
 
@@ -2194,6 +2196,18 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     _scheduleFlush();
   }
 
+  /// Folder (NoteProject) selector callback — settled decision: "que cuando
+  /// crees la nota puedas decir dónde guardar", put IN the modal rather
+  /// than a separate pre-create step, so it doubles as a way to MOVE an
+  /// existing note between folders later, not only at creation. Same
+  /// debounced-flush path as title/content (never a direct write) — see
+  /// [_flush]'s doc for why [_projectId] is always passed as a concrete
+  /// value, never the `_Unset` sentinel itself.
+  void _onFolderChanged(String? value) {
+    setState(() => _projectId = value);
+    _scheduleFlush();
+  }
+
   void _scheduleFlush() {
     _debounce?.cancel();
     _debounce = Timer(
@@ -2202,24 +2216,39 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     );
   }
 
-  /// Persists [_title] and [_content] through [UpdateNoteUseCase] directly
-  /// — entirely separate from the task detail dialog's own
-  /// title/description/blockedReason save-on-close flow, so an edit here
-  /// never marks the TASK dirty or touches its `updatedAt`. A no-op write
-  /// (nothing actually changed) is skipped by [UpdateNoteUseCase] itself.
-  /// Safe to call with nothing pending — every dismissal path calls this
-  /// unconditionally. Deliberately never reassigns [_titleController]'s
-  /// text after a flush — doing so would reseed the field mid-edit, the
-  /// same class of bug [NoteMarkdownEditor]'s id-only `ValueKey` already
-  /// guards against for content.
+  /// Persists [_title], [_content] and [_projectId] through
+  /// [UpdateNoteUseCase] directly — entirely separate from the task detail
+  /// dialog's own title/description/blockedReason save-on-close flow, so an
+  /// edit here never marks the TASK dirty or touches its `updatedAt`. A
+  /// no-op write (nothing actually changed) is skipped by
+  /// [UpdateNoteUseCase] itself. Safe to call with nothing pending — every
+  /// dismissal path calls this unconditionally. Deliberately never
+  /// reassigns [_titleController]'s text after a flush — doing so would
+  /// reseed the field mid-edit, the same class of bug
+  /// [NoteMarkdownEditor]'s id-only `ValueKey` already guards against for
+  /// content.
+  ///
+  /// [_projectId] is always passed as a concrete `String?` (the chosen
+  /// folder id, or `null` for root) — never [UpdateNoteUseCase]'s own
+  /// private `_Unset` sentinel, which is not even visible outside that
+  /// file. Passing a concrete value is how [AppState.updateNoteProject]
+  /// (the other real caller of this parameter) resolves the same sentinel
+  /// safely; the trap this codebase has hit before is forwarding a
+  /// DIFFERENT file's `_Unset` instance into this one's `is _Unset` check,
+  /// which falls through to a throwing cast.
   Future<void> _flush() async {
     _debounce?.cancel();
     _debounce = null;
-    if (_content == _note.content && _title == _note.title) return;
+    if (_content == _note.content &&
+        _title == _note.title &&
+        _projectId == _note.projectId) {
+      return;
+    }
     final updated = await GetIt.instance<UpdateNoteUseCase>().execute(
       noteId: _note.id,
       title: _title,
       content: _content,
+      projectId: _projectId,
     );
     if (updated == null) return;
     _note = updated;
@@ -2234,6 +2263,57 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
   Future<void> _openFullEditor() async {
     await _flush();
     if (mounted) Navigator.of(context).pop((_note, true));
+  }
+
+  /// Folder (NoteProject) selector — "No folder" plus every folder
+  /// [AppState] knows about (settled decision: "si tienes carpetas te
+  /// aparezcan ahí"), same shape as [_TaskDetailDialogState]'s own project
+  /// selector for tasks. Selecting a folder never persists directly — see
+  /// [_onFolderChanged]'s doc for why it goes through the shared debounced
+  /// flush instead.
+  ///
+  /// If [_projectId] points at a folder [AppState.noteProjects] doesn't
+  /// carry (soft-deleted), a synthetic "Deleted folder" entry keeps the
+  /// dropdown's selected value valid — same degrade-the-display-keep-the-
+  /// data rule [_TaskDetailDialogState._buildProjectSelector] already
+  /// applies for a task's project.
+  Widget _buildFolderSelector(bool isDark) {
+    final appState = GetIt.instance<AppState>();
+    final folders = appState.noteProjects;
+    final isDangling =
+        _projectId != null && appState.noteProjectForId(_projectId) == null;
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
+    return Row(
+      children: [
+        Icon(Icons.folder_outlined, size: 15, color: mutedColor),
+        const SizedBox(width: 8),
+        DropdownButton<String?>(
+          key: const Key('task-note-folder-selector'),
+          value: _projectId,
+          isDense: true,
+          underline: const SizedBox.shrink(),
+          style: TextStyle(fontSize: 12.5, color: mutedColor),
+          onChanged: _onFolderChanged,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('No folder'),
+            ),
+            if (isDangling)
+              DropdownMenuItem<String?>(
+                value: _projectId,
+                child: const Text('Deleted folder'),
+              ),
+            for (final folder in folders)
+              DropdownMenuItem<String?>(
+                value: folder.id,
+                child: Text(folder.name),
+              ),
+          ],
+        ),
+      ],
+    );
   }
 
   @override
@@ -2332,6 +2412,8 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                   ),
                 ],
               ),
+              const SizedBox(height: 8),
+              _buildFolderSelector(isDark),
               const SizedBox(height: 12),
               Expanded(
                 child: Container(
