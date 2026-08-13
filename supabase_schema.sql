@@ -173,11 +173,10 @@ create table public.reminders (
   id uuid primary key,
   user_id uuid references auth.users not null,
   title text not null default '',
-  -- v19: relaxed from NOT NULL. A null row is a backlog task with no date —
-  -- see design D5 / supabase_v19_backlog_task.sql. Applied directly against
-  -- production; there is no versioned migration file per table the way the
-  -- local Drift schema has one, so this reference file is kept truthful by
-  -- hand.
+  -- v19: relaxed from NOT NULL. A null row is a backlog task with no date.
+  -- Apply via supabase_v19_backlog_task.sql — this file describes the TARGET
+  -- schema and does not record whether a given environment has been migrated.
+  -- Until the relaxation is applied, pushing a backlog task fails outright.
   scheduled_date timestamp with time zone,
   is_completed boolean not null default false,
   completed_at timestamp with time zone,
