@@ -51,6 +51,17 @@ class _TaskPageState extends State<TaskPage> {
         builder: (ctx, setDialogState) {
           final isDark = Theme.of(ctx).brightness == Brightness.dark;
           return AlertDialog(
+            // Same theme fix as every other dialog in the app (task detail
+            // dialog, note modals, project dialogs, showAddTaskDialog) —
+            // the app's own dark-neutral surface, not AlertDialog's
+            // `ColorScheme.fromSeed`-derived default. This dialog is a
+            // separate, unshared implementation from showAddTaskDialog's
+            // (the board view's "New Task"), so it was missed in the
+            // original sweep.
+            backgroundColor: Color.alphaBlend(
+              widget.themeState.editorBgColor.withValues(alpha: 0.96),
+              isDark ? Colors.black : Colors.white,
+            ),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
             ),
@@ -169,6 +180,14 @@ class _TaskPageState extends State<TaskPage> {
                 },
                 style: FilledButton.styleFrom(
                   backgroundColor: accentColor,
+                  // Same fix as every other accent-coloured FilledButton in
+                  // the app: left to the ambient theme, the label resolves
+                  // against `colorScheme.onPrimary` (the SEED's tonal
+                  // primary), not the literal accentColor used as the
+                  // background, which is why it read muted.
+                  foregroundColor: accentColor.computeLuminance() > 0.5
+                      ? Colors.black
+                      : Colors.white,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),

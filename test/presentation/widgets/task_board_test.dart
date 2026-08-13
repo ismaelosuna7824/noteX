@@ -392,6 +392,59 @@ void main() {
     });
   });
 
+  group(
+      '"New Task" dialog follows the theme (bug report: off-theme brown '
+      'surface)', () {
+    testWidgets(
+        "the create dialog's background is derived from "
+        "ThemeState.editorBgColor, and its Create button's foreground "
+        'contrasts with the literal accent colour — not the Material 3 '
+        'seed-tinted default', (tester) async {
+      themeState.toggleDarkMode();
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.add));
+      await tester.pumpAndSettle();
+
+      final createDialogFinder = find.ancestor(
+        of: find.text('New Task'),
+        matching: find.byType(AlertDialog),
+      );
+      final createDialog = tester.widget<AlertDialog>(createDialogFinder);
+      final expectedSurface = Color.alphaBlend(
+        themeState.editorBgColor.withValues(alpha: 0.96),
+        Colors.black,
+      );
+      expect(
+        createDialog.backgroundColor,
+        expectedSurface,
+        reason: 'the "New Task" dialog must resolve its background from '
+            'ThemeState.editorBgColor, like every other dialog in this '
+            'feature, not the ambient seed-tinted ColorScheme default',
+      );
+
+      final createButton = tester.widget<FilledButton>(
+        find.descendant(
+          of: createDialogFinder,
+          matching: find.widgetWithText(FilledButton, 'Create'),
+        ),
+      );
+      final expectedForeground =
+          themeState.accentColor.computeLuminance() > 0.5
+              ? Colors.black
+              : Colors.white;
+      expect(
+        createButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+      );
+      expect(
+        createButton.style?.backgroundColor?.resolve(<WidgetState>{}),
+        themeState.accentColor,
+      );
+    });
+  });
+
   group('blocked — own bucket, does not carry into the daily list', () {
     testWidgets(
         'a blocked task (even with a past scheduledDate) leaves pendingToday '

@@ -444,6 +444,59 @@ void main() {
     });
   });
 
+  group(
+      'the flat list\'s own "New Task" dialog resolves colours from the '
+      'theme too (bug report: off-theme brown surface — this dialog is a '
+      'separate, unshared implementation from showAddTaskDialog\'s, so it '
+      'was missed in the original sweep)', () {
+    testWidgets(
+        "the dialog's background is derived from ThemeState.editorBgColor, "
+        "and its Create button's foreground contrasts with the literal "
+        'accent colour — not the seed-tinted default', (tester) async {
+      themeState.toggleDarkMode();
+      await taskState.initialize();
+      await pumpTaskPage(tester);
+
+      // Default taskViewMode is 'list', so "New Task" opens
+      // _showAddReminderDialog, not the (already themed) shared
+      // showAddTaskDialog used by the board view.
+      await tester.tap(find.text('New Task'));
+      await tester.pumpAndSettle();
+
+      final dialogFinder = find.ancestor(
+        of: find.text('New Task').last,
+        matching: find.byType(AlertDialog),
+      );
+      final dialog = tester.widget<AlertDialog>(dialogFinder);
+      final expectedSurface = Color.alphaBlend(
+        themeState.editorBgColor.withValues(alpha: 0.96),
+        Colors.black,
+      );
+      expect(
+        dialog.backgroundColor,
+        expectedSurface,
+        reason: 'this dialog must resolve its background from '
+            'ThemeState.editorBgColor, like every other dialog in the app, '
+            'not the ambient seed-tinted ColorScheme default',
+      );
+
+      final createButton = tester.widget<FilledButton>(
+        find.descendant(
+          of: dialogFinder,
+          matching: find.widgetWithText(FilledButton, 'Create'),
+        ),
+      );
+      final expectedForeground =
+          themeState.accentColor.computeLuminance() > 0.5
+              ? Colors.black
+              : Colors.white;
+      expect(
+        createButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+      );
+    });
+  });
+
   group('board project filter (item 2)', () {
     Future<void> seedTwoProjectsWithTasks() async {
       await projectRepository.save(Project(

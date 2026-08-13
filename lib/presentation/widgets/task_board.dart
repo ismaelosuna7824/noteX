@@ -175,6 +175,16 @@ Future<void> showAddTaskDialog(
       builder: (ctx, setDialogState) {
         final isDark = Theme.of(ctx).brightness == Brightness.dark;
         return AlertDialog(
+          // Same theme fix as every other dialog in this feature (task
+          // detail dialog, note modals, project dialogs) — the app's own
+          // dark-neutral surface, not AlertDialog's
+          // `ColorScheme.fromSeed`-derived default, which reads as an
+          // off-theme brown against this app's gold accent. This dialog
+          // was simply missed in the original sweep.
+          backgroundColor: Color.alphaBlend(
+            themeState.editorBgColor.withValues(alpha: 0.96),
+            isDark ? Colors.black : Colors.white,
+          ),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: const Text(
             'New Task',
@@ -289,6 +299,15 @@ Future<void> showAddTaskDialog(
               ),
               style: FilledButton.styleFrom(
                 backgroundColor: accentColor,
+                // Same fix as the accent-coloured buttons elsewhere (task
+                // detail dialog's restore/unlink, _CreateProjectDialog's
+                // own Create button): left to the ambient theme, the label
+                // resolves against `colorScheme.onPrimary` (the SEED's
+                // tonal primary), not the literal accentColor used as the
+                // background, which is why it read muted.
+                foregroundColor: accentColor.computeLuminance() > 0.5
+                    ? Colors.black
+                    : Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
