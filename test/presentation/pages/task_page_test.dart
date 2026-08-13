@@ -273,6 +273,67 @@ void main() {
     });
   });
 
+  group(
+      '"New Task" and "Create Task" buttons resolve their foreground from '
+      'the accent, not a literal (bug report: washed out against the '
+      'accent colour)', () {
+    testWidgets(
+        "the header's \"New Task\" button's foreground contrasts with the "
+        'literal accent colour, not the seed-tinted onPrimary default',
+        (tester) async {
+      await taskState.initialize();
+      await pumpTaskPage(tester);
+
+      final newTaskButton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('New Task'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      final expectedForeground =
+          themeState.accentColor.computeLuminance() > 0.5
+              ? Colors.black
+              : Colors.white;
+
+      expect(
+        newTaskButton.style?.backgroundColor?.resolve(<WidgetState>{}),
+        themeState.accentColor,
+      );
+      expect(
+        newTaskButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+        reason: 'left unset, the label resolves against '
+            "colorScheme.onPrimary (the seed's tonal primary), not the "
+            'literal accentColor used as the background, which is why it '
+            'read washed out',
+      );
+    });
+
+    testWidgets(
+        "the empty state's \"Create Task\" button's foreground contrasts "
+        'with the literal accent colour, matching the header button\'s own '
+        'fix', (tester) async {
+      await taskState.initialize();
+      await pumpTaskPage(tester);
+
+      final createTaskButton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('Create Task'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      final expectedForeground =
+          themeState.accentColor.computeLuminance() > 0.5
+              ? Colors.black
+              : Colors.white;
+
+      expect(
+        createTaskButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+      );
+    });
+  });
+
   group('flat list row — brought up to the board card\'s task model (item 4)',
       () {
     testWidgets(

@@ -280,6 +280,17 @@ class _TaskPageState extends State<TaskPage> {
                       label: const Text('New Task'),
                       style: FilledButton.styleFrom(
                         backgroundColor: accentColor,
+                        // Same fix as every other accent-coloured
+                        // FilledButton in this feature (showAddTaskDialog's
+                        // own Create button, the empty-state's "Create
+                        // Task"): left to the ambient theme, the label
+                        // resolves against `colorScheme.onPrimary` (the
+                        // SEED's tonal primary), not the literal
+                        // accentColor used as the background, which is why
+                        // it read washed out.
+                        foregroundColor: accentColor.computeLuminance() > 0.5
+                            ? Colors.black
+                            : Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
@@ -373,6 +384,11 @@ class _TaskPageState extends State<TaskPage> {
             label: const Text('Create Task'),
             style: FilledButton.styleFrom(
               backgroundColor: accentColor,
+              // Same fix as the header's "New Task" button — see its own
+              // comment for why an unset foregroundColor reads washed out.
+              foregroundColor: accentColor.computeLuminance() > 0.5
+                  ? Colors.black
+                  : Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
