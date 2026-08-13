@@ -1116,6 +1116,71 @@ void main() {
             "TASK's own updatedAt",
       );
     });
+
+    testWidgets(
+        "editing a note's title inside the note modal persists it via "
+        'UpdateNoteUseCase and the NOTES list row reflects the new title '
+        'immediately, without marking the task dirty (bug report: "no te '
+        'deja cambiar el título de la nota")', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'August 13, 2026',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      final before = await repository.getById('r1');
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('August 13, 2026'));
+      await tester.pumpAndSettle();
+
+      final titleField = find.byKey(const Key('task-note-title-field'));
+      expect(titleField, findsOneWidget,
+          reason: 'the note title must be an editable field inside the '
+              'modal, not static text');
+      await tester.enterText(titleField, 'Grocery list');
+      await tester.tap(find.byTooltip('Close note'));
+      await tester.pumpAndSettle();
+
+      final persisted = await noteRepository.getById('note-1');
+      expect(
+        persisted!.title,
+        'Grocery list',
+        reason: 'the new title must persist through UpdateNoteUseCase',
+      );
+      expect(
+        persisted.content,
+        'original',
+        reason: 'editing the title must never touch the content',
+      );
+
+      expect(
+        find.text('Grocery list'),
+        findsOneWidget,
+        reason: 'the NOTES list row must reflect the new title once the '
+            'modal closes — without this, two notes created the same day '
+            'are indistinguishable in the list',
+      );
+      expect(find.text('August 13, 2026'), findsNothing);
+
+      final after = await repository.getById('r1');
+      expect(
+        after!.updatedAt,
+        before!.updatedAt,
+        reason: "editing a linked note's title must never mark the TASK "
+            'dirty or touch its updatedAt',
+      );
+    });
   });
 
   group('backlog task dragged to Done — regression for the vanishing gap',

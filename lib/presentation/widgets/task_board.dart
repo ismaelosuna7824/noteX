@@ -2043,15 +2043,20 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 /// Editing is never disabled from here — the editor's own edit⇄preview
 /// toggle stays available; rendered is the DEFAULT, not a restriction.
 ///
-/// Edits persist through [UpdateNoteUseCase] on a short debounce, entirely
-/// separate from the task detail dialog's own title/description/
-/// blockedReason save-on-close flow, so opening or editing a note here
-/// never marks the TASK dirty. Every dismissal (the header close button,
-/// barrier tap, Escape) flushes any pending edit first, via the same
-/// `PopScope(canPop: false)` pattern [_TaskDetailDialogState.build] itself
-/// uses — see that method's doc for why `canPop: false` is required to
-/// intercept the barrier/Escape paths rather than letting them pop
-/// silently.
+/// The title is an editable field too (not static text) — a note created
+/// from a task defaults to the current date ([CreateNoteUseCase]), so two
+/// notes created the same day are otherwise indistinguishable in the NOTES
+/// list.
+///
+/// Both title and content persist through [UpdateNoteUseCase] on a shared
+/// short debounce, entirely separate from the task detail dialog's own
+/// title/description/blockedReason save-on-close flow, so opening or
+/// editing a note here never marks the TASK dirty. Every dismissal (the
+/// header close button, barrier tap, Escape) flushes any pending edit
+/// first, via the same `PopScope(canPop: false)` pattern
+/// [_TaskDetailDialogState.build] itself uses — see that method's doc for
+/// why `canPop: false` is required to intercept the barrier/Escape paths
+/// rather than letting them pop silently.
 ///
 /// Every dismissal pops with the freshest [Note] (post-flush) alongside a
 /// flag for whether "Open in full editor" was requested — the caller
@@ -2084,6 +2089,8 @@ class _NoteEditorDialog extends StatefulWidget {
 class _NoteEditorDialogState extends State<_NoteEditorDialog> {
   late Note _note;
   late String _content;
+  late String _title;
+  late final TextEditingController _titleController;
   Timer? _debounce;
 
   @override
@@ -2091,6 +2098,8 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     super.initState();
     _note = widget.note;
     _content = widget.note.content;
+    _title = widget.note.title;
+    _titleController = TextEditingController(text: _title);
   }
 
   @override
@@ -2099,18 +2108,31 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     // [_openFullEditor]) already flushes before the pop that eventually
     // leads here.
     _debounce?.cancel();
+    _titleController.dispose();
     super.dispose();
   }
 
-  /// Marks the content dirty and (re)starts its debounce — mirrors the
-  /// shape of `AutoSaveService.markDirty`/`_tick`, but scoped locally to
-  /// this modal and this one note, deliberately NOT the global
+  /// Marks the content dirty and (re)starts the shared debounce — mirrors
+  /// the shape of `AutoSaveService.markDirty`/`_tick`, but scoped locally
+  /// to this modal and this one note, deliberately NOT the global
   /// `AppState.autoSaveService` singleton (that instance is owned by the
   /// full note editor page's own watch/flush lifecycle; sharing it here
   /// would mean this modal and the editor page fight over its single
   /// watched-note slot).
   void _onChanged(String value) {
     _content = value;
+    _scheduleFlush();
+  }
+
+  /// Same contract as [_onChanged], for the title field — a shared
+  /// debounce means typing a title then immediately typing content (or
+  /// vice versa) still flushes both together in one write.
+  void _onTitleChanged(String value) {
+    _title = value;
+    _scheduleFlush();
+  }
+
+  void _scheduleFlush() {
     _debounce?.cancel();
     _debounce = Timer(
       const Duration(milliseconds: 600),
@@ -2118,19 +2140,23 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     );
   }
 
-  /// Persists [_content] through [UpdateNoteUseCase] directly — entirely
-  /// separate from the task detail dialog's own title/description/
-  /// blockedReason save-on-close flow, so an edit here never marks the
-  /// TASK dirty or touches its `updatedAt`. A no-op write (nothing
-  /// actually changed) is skipped by [UpdateNoteUseCase] itself. Safe to
-  /// call with nothing pending — every dismissal path calls this
-  /// unconditionally.
+  /// Persists [_title] and [_content] through [UpdateNoteUseCase] directly
+  /// — entirely separate from the task detail dialog's own
+  /// title/description/blockedReason save-on-close flow, so an edit here
+  /// never marks the TASK dirty or touches its `updatedAt`. A no-op write
+  /// (nothing actually changed) is skipped by [UpdateNoteUseCase] itself.
+  /// Safe to call with nothing pending — every dismissal path calls this
+  /// unconditionally. Deliberately never reassigns [_titleController]'s
+  /// text after a flush — doing so would reseed the field mid-edit, the
+  /// same class of bug [NoteMarkdownEditor]'s id-only `ValueKey` already
+  /// guards against for content.
   Future<void> _flush() async {
     _debounce?.cancel();
     _debounce = null;
-    if (_content == _note.content) return;
+    if (_content == _note.content && _title == _note.title) return;
     final updated = await GetIt.instance<UpdateNoteUseCase>().execute(
       noteId: _note.id,
+      title: _title,
       content: _content,
     );
     if (updated == null) return;
@@ -2188,14 +2214,26 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
               Row(
                 children: [
                   Expanded(
-                    child: Text(
-                      _note.title.isEmpty ? 'Untitled' : _note.title,
+                    child: TextField(
+                      key: const Key('task-note-title-field'),
+                      controller: _titleController,
+                      onChanged: _onTitleChanged,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: mutedColor,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        border: InputBorder.none,
+                        hintText: 'Untitled',
+                        hintStyle: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: mutedColor,
+                        ),
+                        contentPadding: EdgeInsets.zero,
                       ),
                     ),
                   ),
