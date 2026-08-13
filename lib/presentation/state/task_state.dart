@@ -5,7 +5,9 @@ import '../../domain/entities/task.dart';
 import '../../domain/value_objects/task_status.dart';
 import '../../application/use_cases/task/create_task_use_case.dart';
 import '../../application/use_cases/task/get_tasks_use_case.dart';
+import '../../application/use_cases/task/link_note_to_task_use_case.dart';
 import '../../application/use_cases/task/transition_task_status_use_case.dart';
+import '../../application/use_cases/task/unlink_note_from_task_use_case.dart';
 import '../../application/use_cases/task/update_task_use_case.dart';
 import '../../application/use_cases/task/delete_task_use_case.dart';
 
@@ -19,6 +21,8 @@ class TaskState extends ChangeNotifier {
   final TransitionTaskStatusUseCase _completeReminder;
   final UpdateTaskUseCase _updateReminder;
   final DeleteTaskUseCase _deleteReminder;
+  final LinkNoteToTaskUseCase _linkNote;
+  final UnlinkNoteFromTaskUseCase _unlinkNote;
 
   List<Task> _reminders = [];
   List<Task> _pendingToday = [];
@@ -31,11 +35,15 @@ class TaskState extends ChangeNotifier {
     required TransitionTaskStatusUseCase completeReminder,
     required UpdateTaskUseCase updateReminder,
     required DeleteTaskUseCase deleteReminder,
+    required LinkNoteToTaskUseCase linkNote,
+    required UnlinkNoteFromTaskUseCase unlinkNote,
   })  : _createReminder = createReminder,
         _getReminders = getReminders,
         _completeReminder = completeReminder,
         _updateReminder = updateReminder,
-        _deleteReminder = deleteReminder;
+        _deleteReminder = deleteReminder,
+        _linkNote = linkNote,
+        _unlinkNote = unlinkNote;
 
   // Getters
   List<Task> get reminders => _reminders;
@@ -104,54 +112,55 @@ class TaskState extends ChangeNotifier {
   /// not blocked); pass a value to set it, `null` to clear it — only a
   /// deliberate edit reaches here (design D3).
   ///
-  /// [blockedReason] and [noteId]'s sentinel defaults are resolved here, not
-  /// forwarded — [UpdateTaskUseCase] has its own private `_Unset`, a
-  /// different type per file (see `update_task_use_case.dart`). Forwarding
-  /// this class's sentinel instance into that check would be `false` for a
-  /// foreign instance and throw on the cast, so each parameter is either
-  /// passed with a resolved value or omitted from the call entirely,
-  /// letting the use case's own default apply — never passed as this
-  /// class's sentinel.
+  /// Note linking/unlinking is NOT covered here — see [linkNoteToTask] and
+  /// [unlinkNoteFromTask] (decision architecture/task-note-linking-model).
+  /// A note link is an append/remove on a list, not a field replacement,
+  /// so it does not fit this method's "omit vs. set vs. clear" shape.
+  ///
+  /// [blockedReason]'s sentinel default is resolved here, not forwarded —
+  /// [UpdateTaskUseCase] has its own private `_Unset`, a different type per
+  /// file (see `update_task_use_case.dart`). Forwarding this class's
+  /// sentinel instance into that check would be `false` for a foreign
+  /// instance and throw on the cast, so the parameter is either passed
+  /// with a resolved value or omitted from the call entirely, letting the
+  /// use case's own default apply — never passed as this class's sentinel.
   Future<Task?> updateTask(
     String id, {
     String? title,
     String? description,
     Object? blockedReason = const _Unset(),
-    Object? noteId = const _Unset(),
   }) async {
     final hasBlockedReason = blockedReason is! _Unset;
-    final hasNoteId = noteId is! _Unset;
 
-    final Task? result;
-    if (hasBlockedReason && hasNoteId) {
-      result = await _updateReminder.execute(
-        id,
-        title: title,
-        description: description,
-        blockedReason: blockedReason as String?,
-        noteId: noteId as String?,
-      );
-    } else if (hasBlockedReason) {
-      result = await _updateReminder.execute(
-        id,
-        title: title,
-        description: description,
-        blockedReason: blockedReason as String?,
-      );
-    } else if (hasNoteId) {
-      result = await _updateReminder.execute(
-        id,
-        title: title,
-        description: description,
-        noteId: noteId as String?,
-      );
-    } else {
-      result = await _updateReminder.execute(
-        id,
-        title: title,
-        description: description,
-      );
-    }
+    final result = hasBlockedReason
+        ? await _updateReminder.execute(
+            id,
+            title: title,
+            description: description,
+            blockedReason: blockedReason as String?,
+          )
+        : await _updateReminder.execute(
+            id,
+            title: title,
+            description: description,
+          );
+    await refreshReminders();
+    return result;
+  }
+
+  /// Links [noteId] to task [id], appending it to the task's existing
+  /// links (decision architecture/task-note-linking-model — a task carries
+  /// N notes). No-op if [noteId] is already linked.
+  Future<Task?> linkNoteToTask(String id, String noteId) async {
+    final result = await _linkNote.execute(id, noteId);
+    await refreshReminders();
+    return result;
+  }
+
+  /// Unlinks [noteId] from task [id], leaving every other linked note
+  /// untouched. No-op if [noteId] is not linked.
+  Future<Task?> unlinkNoteFromTask(String id, String noteId) async {
+    final result = await _unlinkNote.execute(id, noteId);
     await refreshReminders();
     return result;
   }

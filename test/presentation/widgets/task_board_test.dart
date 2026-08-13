@@ -20,7 +20,10 @@ import 'package:notex/application/use_cases/note/restore_note_use_case.dart';
 import 'package:notex/application/use_cases/task/create_task_use_case.dart';
 import 'package:notex/application/use_cases/task/delete_task_use_case.dart';
 import 'package:notex/application/use_cases/task/get_tasks_use_case.dart';
+import 'package:notex/application/use_cases/task/link_note_to_task_use_case.dart';
+import 'package:notex/application/use_cases/task/resolve_task_note_link_use_case.dart';
 import 'package:notex/application/use_cases/task/transition_task_status_use_case.dart';
+import 'package:notex/application/use_cases/task/unlink_note_from_task_use_case.dart';
 import 'package:notex/application/use_cases/task/update_task_use_case.dart';
 import 'package:notex/application/use_cases/timer/create_project_use_case.dart';
 import 'package:notex/application/use_cases/timer/delete_project_use_case.dart';
@@ -157,6 +160,8 @@ void main() {
       completeReminder: transitionSpy,
       updateReminder: UpdateTaskUseCase(repository),
       deleteReminder: DeleteTaskUseCase(repository, _NoopSyncEngine()),
+      linkNote: LinkNoteToTaskUseCase(repository),
+      unlinkNote: UnlinkNoteFromTaskUseCase(repository),
     );
     themeState = ThemeState();
 
@@ -197,6 +202,15 @@ void main() {
       authRepository: _FakeAuthRepositoryWithStream(),
     );
     GetIt.instance.registerSingleton<AppState>(appState);
+
+    // The linked-notes list (_TaskDetailDialog._loadLinkedNotes/_openNote)
+    // resolves each note through ResolveTaskNoteLinkUseCase (design D9) —
+    // a REAL instance over the same in-memory note repository, so a task
+    // with a trashed or missing link exercises the actual three-state
+    // resolution rather than a stand-in for it.
+    GetIt.instance.registerSingleton<ResolveTaskNoteLinkUseCase>(
+      ResolveTaskNoteLinkUseCase(noteRepository),
+    );
 
     // The "Start timer" button (_TaskDetailDialog._startTimer) resolves
     // TimerState via GetIt.instance<TimerState>() — a REAL TimerState, over
@@ -419,13 +433,12 @@ void main() {
     });
   });
 
-  group('note linking — closing the reachability gap (verify-report '
-      'WARNING 5): the detail dialog can now set noteId, not just clear it',
-      () {
+  group('note linking — N notes per task, visible '
+      '(decision architecture/task-note-linking-model)', () {
     testWidgets(
-        'tapping "Link note", picking a note from the picker, sets the '
-        'task\'s noteId and swaps the affordance to "Open linked note"',
-        (tester) async {
+        'tapping "Link note", picking a note from the picker, appends it to '
+        'the task\'s noteIds, shows it in the linked-notes list, and keeps '
+        'the dialog open', (tester) async {
       await noteRepository.save(Note(
         id: 'note-1',
         title: 'Meeting notes',
@@ -442,11 +455,9 @@ void main() {
       await tester.tap(find.text('Unlinked task'));
       await tester.pumpAndSettle();
 
-      // Before linking: no way to open a note, only the affordance to link
-      // one — this is the exact gap the verify report named (the only
-      // noteId write anywhere in lib/presentation was `noteId: null`).
-      expect(find.text('Open linked note'), findsNothing);
+      // Before linking: nothing to open, only the affordance to link.
       expect(find.text('Link note'), findsOneWidget);
+      expect(find.text('Meeting notes'), findsNothing);
 
       await tester.tap(find.text('Link note'));
       await tester.pumpAndSettle();
@@ -458,9 +469,9 @@ void main() {
       await tester.tap(find.text('Meeting notes'));
       await tester.pumpAndSettle();
 
-      // Persisted through UpdateTaskUseCase — must not touch status.
+      // Persisted through LinkNoteToTaskUseCase — must not touch status.
       final persisted = await repository.getById('r1');
-      expect(persisted!.noteId, 'note-1');
+      expect(persisted!.noteIds, ['note-1']);
       expect(
         persisted.status,
         TaskStatus.todo,
@@ -468,11 +479,153 @@ void main() {
             'transitionTo may write it)',
       );
 
-      // Reopen the card: the affordance has swapped to "Open linked note".
-      await tester.tap(find.text('Unlinked task'));
-      await tester.pumpAndSettle();
-      expect(find.text('Open linked note'), findsOneWidget);
+      // Dialog stays open (does not pop) and now shows the linked note's
+      // title plus an affordance to link another — no need to reopen the
+      // card to see the result of the action just taken.
+      expect(find.text('Meeting notes'), findsOneWidget);
+      expect(find.text('Link another note'), findsOneWidget);
       expect(find.text('Link note'), findsNothing);
+    });
+
+    testWidgets(
+        'linking a second note appends it — the first stays linked, '
+        'not replaced', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await noteRepository.save(Note(
+        id: 'note-2',
+        title: 'Design doc',
+        content: '',
+        createdAt: DateTime(2026, 1, 2),
+        updatedAt: DateTime(2026, 1, 2),
+      ));
+      await appState.refreshNotes();
+
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with links')
+            .copyWith(noteIds: const ['note-1']),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with links'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Meeting notes'), findsOneWidget);
+
+      await tester.tap(find.text('Link another note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Design doc'));
+      await tester.pumpAndSettle();
+
+      // Both rendered — the first was never replaced.
+      expect(find.text('Meeting notes'), findsOneWidget);
+      expect(find.text('Design doc'), findsOneWidget);
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.noteIds, ['note-1', 'note-2']);
+    });
+
+    testWidgets(
+        'unlinking one note leaves the others linked', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await noteRepository.save(Note(
+        id: 'note-2',
+        title: 'Design doc',
+        content: '',
+        createdAt: DateTime(2026, 1, 2),
+        updatedAt: DateTime(2026, 1, 2),
+      ));
+      await appState.refreshNotes();
+
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with links').copyWith(
+          noteIds: const ['note-1', 'note-2'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with links'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Meeting notes'), findsOneWidget);
+      expect(find.text('Design doc'), findsOneWidget);
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.close).first);
+      await tester.pumpAndSettle();
+
+      // Exactly one row removed — the other remains.
+      expect(find.text('Design doc'), findsOneWidget);
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.noteIds, hasLength(1));
+    });
+
+    testWidgets(
+        'the board card shows a count indicator when the task carries '
+        'linked notes', (tester) async {
+      await repository.save(
+        Task.create(id: 'r1', title: 'Documented task').copyWith(
+          noteIds: const ['note-1', 'note-2'],
+        ),
+      );
+      await repository.save(Task.create(id: 'r2', title: 'Bare task'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      expect(find.text('2 notes'), findsOneWidget);
+      // The task with no links shows no count at all.
+      expect(find.text('0 notes'), findsNothing);
+    });
+
+    testWidgets(
+        'a task with a trashed note still renders its other, live notes '
+        'normally', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-live',
+        title: 'Still here',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await noteRepository.save(Note(
+        id: 'note-trashed',
+        title: 'In the trash',
+        content: '',
+        createdAt: DateTime(2026, 1, 2),
+        updatedAt: DateTime(2026, 1, 2),
+        deletedAt: DateTime(2026, 1, 3),
+      ));
+      await appState.refreshNotes();
+
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with a trashed link').copyWith(
+          noteIds: const ['note-live', 'note-trashed'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with a trashed link'));
+      await tester.pumpAndSettle();
+
+      // The live note renders its own title normally...
+      expect(find.text('Still here'), findsOneWidget);
+      // ...while the trashed one is labeled distinctly, not silently
+      // dropped from the list and not crashing the dialog.
+      expect(find.textContaining('in trash'), findsOneWidget);
     });
 
     testWidgets('the picker search field filters the note list by title',

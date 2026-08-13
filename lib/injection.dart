@@ -67,7 +67,9 @@ import 'application/use_cases/note/restore_note_use_case.dart';
 import 'application/use_cases/note/permanent_delete_note_use_case.dart';
 import 'application/use_cases/task/create_task_use_case.dart';
 import 'application/use_cases/task/get_tasks_use_case.dart';
+import 'application/use_cases/task/link_note_to_task_use_case.dart';
 import 'application/use_cases/task/transition_task_status_use_case.dart';
+import 'application/use_cases/task/unlink_note_from_task_use_case.dart';
 import 'application/use_cases/task/update_task_use_case.dart';
 import 'application/use_cases/task/delete_task_use_case.dart';
 import 'application/use_cases/task/resolve_task_note_link_use_case.dart';
@@ -342,6 +344,12 @@ Future<void> setupDependencies() async {
   getIt.registerFactory<ResolveTaskNoteLinkUseCase>(
     () => ResolveTaskNoteLinkUseCase(getIt<NoteRepository>()),
   );
+  getIt.registerFactory<LinkNoteToTaskUseCase>(
+    () => LinkNoteToTaskUseCase(getIt<TaskRepository>()),
+  );
+  getIt.registerFactory<UnlinkNoteFromTaskUseCase>(
+    () => UnlinkNoteFromTaskUseCase(getIt<TaskRepository>()),
+  );
 
   // Application - Update Use Case
   getIt.registerFactory<CheckForUpdateUseCase>(
@@ -434,6 +442,8 @@ Future<void> setupDependencies() async {
       completeReminder: getIt<TransitionTaskStatusUseCase>(),
       updateReminder: getIt<UpdateTaskUseCase>(),
       deleteReminder: getIt<DeleteTaskUseCase>(),
+      linkNote: getIt<LinkNoteToTaskUseCase>(),
+      unlinkNote: getIt<UnlinkNoteFromTaskUseCase>(),
     ),
   );
   // Wire timer→task cross-state refresh (design D1) — deferred-getIt,

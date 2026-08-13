@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
@@ -554,6 +556,33 @@ class _CardBody extends StatelessWidget {
               ),
             ),
           ],
+          if (task.noteIds.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            // Scan-at-a-glance indicator (decision
+            // architecture/task-note-linking-model — "si regresas con el
+            // tiempo no lo sabrás"): a user browsing the board can tell
+            // which tasks carry documentation without opening each one.
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.description_outlined,
+                  size: 11,
+                  color: isDark ? Colors.white54 : Colors.grey.shade600,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  task.noteIds.length == 1
+                      ? '1 note'
+                      : '${task.noteIds.length} notes',
+                  style: TextStyle(
+                    fontSize: 10,
+                    color: isDark ? Colors.white54 : Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -584,6 +613,14 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   late final TextEditingController _blockedReasonController;
   late String _description;
 
+  // Local mirror of the task's linked notes, updated as the user links or
+  // unlinks within this dialog session (decision
+  // architecture/task-note-linking-model — linking appends and the dialog
+  // stays open, so several notes can be linked without reopening it).
+  late List<String> _noteIds;
+  final Map<String, NoteLinkResolution> _noteResolutions = {};
+  bool _loadingNotes = true;
+
   @override
   void initState() {
     super.initState();
@@ -591,6 +628,8 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _blockedReasonController =
         TextEditingController(text: widget.task.blockedReason ?? '');
     _description = widget.task.description;
+    _noteIds = List<String>.from(widget.task.noteIds);
+    unawaited(_loadLinkedNotes());
   }
 
   @override
@@ -598,6 +637,27 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _titleController.dispose();
     _blockedReasonController.dispose();
     super.dispose();
+  }
+
+  /// Resolves every linked note's affordance state up front (design D9),
+  /// each independently — a task with three notes where one is in the
+  /// trash must still render the other two normally.
+  Future<void> _loadLinkedNotes() async {
+    if (_noteIds.isEmpty) {
+      if (mounted) setState(() => _loadingNotes = false);
+      return;
+    }
+    final useCase = GetIt.instance<ResolveTaskNoteLinkUseCase>();
+    final entries = await Future.wait(
+      _noteIds.map((id) async => MapEntry(id, await useCase.execute(id))),
+    );
+    if (!mounted) return;
+    setState(() {
+      _noteResolutions
+        ..clear()
+        ..addEntries(entries);
+      _loadingNotes = false;
+    });
   }
 
   Future<void> _save() async {
@@ -648,12 +708,12 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     navigator.pop();
   }
 
-  /// Opens the note picker and links the chosen note to this task
-  /// (`UpdateTaskUseCase` via [TaskState.updateTask] — title/status
-  /// untouched, no status quartet emitted). This is the missing half of
-  /// note-linking: the three affordance states in [_openLinkedNote] could
-  /// only ever unlink or resolve an existing link — nothing in the UI
-  /// could set `noteId` to a real value until this.
+  /// Opens the note picker and appends the chosen note to this task's
+  /// links (`LinkNoteToTaskUseCase` via [TaskState.linkNoteToTask] — a task
+  /// carries N notes, decision architecture/task-note-linking-model).
+  /// Stays open rather than popping, so several notes can be linked in one
+  /// session — the picker itself already excludes notes already linked by
+  /// deduplicating on selection.
   Future<void> _linkNote() async {
     final appState = GetIt.instance<AppState>();
     final selected = await showDialog<Note>(
@@ -664,20 +724,46 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       ),
     );
     if (selected == null || !mounted) return;
-    await widget.taskState.updateTask(widget.task.id, noteId: selected.id);
-    if (mounted) Navigator.of(context).pop();
-  }
+    if (_noteIds.contains(selected.id)) return;
 
-  /// Resolves and opens `widget.task.noteId` through the three affordance
-  /// states (design D9): found and live → navigate to it; found and
-  /// soft-deleted → offer to restore, then open; not found → offer to
-  /// clear the link. Always via [ResolveTaskNoteLinkUseCase], never the
-  /// deletedAt-filtered in-memory note list.
-  Future<void> _openLinkedNote() async {
-    final noteId = widget.task.noteId;
-    if (noteId == null) return;
+    final updated =
+        await widget.taskState.linkNoteToTask(widget.task.id, selected.id);
+    if (!mounted) return;
+    setState(() => _noteIds = List<String>.from(updated?.noteIds ?? [
+          ..._noteIds,
+          selected.id,
+        ]));
 
     final resolution =
+        await GetIt.instance<ResolveTaskNoteLinkUseCase>().execute(
+      selected.id,
+    );
+    if (!mounted) return;
+    setState(() => _noteResolutions[selected.id] = resolution);
+  }
+
+  /// Removes [noteId] from this task's links only — every other linked
+  /// note is untouched (`UnlinkNoteFromTaskUseCase` via
+  /// [TaskState.unlinkNoteFromTask]).
+  Future<void> _unlinkNote(String noteId) async {
+    final updated =
+        await widget.taskState.unlinkNoteFromTask(widget.task.id, noteId);
+    if (!mounted) return;
+    setState(() {
+      _noteIds = List<String>.from(
+        updated?.noteIds ?? (List<String>.from(_noteIds)..remove(noteId)),
+      );
+      _noteResolutions.remove(noteId);
+    });
+  }
+
+  /// Resolves and opens the note at [noteId] through the three affordance
+  /// states (design D9): found and live → navigate to it; found and
+  /// soft-deleted → offer to restore, then open; not found → offer to
+  /// unlink just this entry. Always via [ResolveTaskNoteLinkUseCase], never
+  /// the deletedAt-filtered in-memory note list.
+  Future<void> _openNote(String noteId) async {
+    final resolution = _noteResolutions[noteId] ??
         await GetIt.instance<ResolveTaskNoteLinkUseCase>().execute(noteId);
     if (!mounted) return;
 
@@ -717,11 +803,11 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         }
         navigator.pop();
       case NoteLinkStatus.missing:
-        final clear = await showDialog<bool>(
+        final unlink = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
             title: const Text('Note not found'),
-            content: const Text('The linked note no longer exists.'),
+            content: const Text('This linked note no longer exists.'),
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(false),
@@ -729,15 +815,61 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
-                child: const Text('Clear link'),
+                child: const Text('Unlink'),
               ),
             ],
           ),
         );
-        if (clear == true && mounted) {
-          await widget.taskState.updateTask(widget.task.id, noteId: null);
+        if (unlink == true && mounted) {
+          await _unlinkNote(noteId);
         }
     }
+  }
+
+  /// Renders every linked note as its own row (open + unlink affordances),
+  /// plus a "Link (another) note" action — the visibility half of decision
+  /// architecture/task-note-linking-model: a list, not a single pill, so a
+  /// user can tell exactly which notes a task carries.
+  Widget _buildLinkedNotesSection(bool isDark) {
+    if (_noteIds.isEmpty) {
+      return OutlinedButton.icon(
+        onPressed: _linkNote,
+        icon: const Icon(Icons.link, size: 16),
+        label: const Text('Link note'),
+        style: OutlinedButton.styleFrom(foregroundColor: widget.accentColor),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxHeight: 110),
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                for (final noteId in _noteIds)
+                  _LinkedNoteRow(
+                    key: ValueKey(noteId),
+                    resolution: _noteResolutions[noteId],
+                    loading: _loadingNotes && !_noteResolutions.containsKey(noteId),
+                    isDark: isDark,
+                    accentColor: widget.accentColor,
+                    onOpen: () => _openNote(noteId),
+                    onUnlink: () => _unlinkNote(noteId),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        TextButton.icon(
+          onPressed: _linkNote,
+          icon: const Icon(Icons.add_link, size: 16),
+          label: const Text('Link another note'),
+          style: TextButton.styleFrom(foregroundColor: widget.accentColor),
+        ),
+      ],
+    );
   }
 
   @override
@@ -761,27 +893,8 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (widget.task.noteId != null) ...[
-              OutlinedButton.icon(
-                onPressed: _openLinkedNote,
-                icon: const Icon(Icons.description_outlined, size: 16),
-                label: const Text('Open linked note'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: widget.accentColor,
-                ),
-              ),
-              const SizedBox(height: 12),
-            ] else ...[
-              OutlinedButton.icon(
-                onPressed: _linkNote,
-                icon: const Icon(Icons.link, size: 16),
-                label: const Text('Link note'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: widget.accentColor,
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
+            _buildLinkedNotesSection(isDark),
+            const SizedBox(height: 12),
             if (isBlocked) ...[
               TextField(
                 controller: _blockedReasonController,
@@ -836,6 +949,79 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           ],
         ),
       ],
+    );
+  }
+}
+
+/// One row in the task detail dialog's linked-notes list — one of three
+/// affordance states (design D9): found (open), inTrash (open → offers
+/// restore) or missing (open → offers unlink). Always paired with its own
+/// unlink button, independent of the other linked notes.
+class _LinkedNoteRow extends StatelessWidget {
+  const _LinkedNoteRow({
+    super.key,
+    required this.resolution,
+    required this.loading,
+    required this.isDark,
+    required this.accentColor,
+    required this.onOpen,
+    required this.onUnlink,
+  });
+
+  final NoteLinkResolution? resolution;
+  final bool loading;
+  final bool isDark;
+  final Color accentColor;
+  final VoidCallback onOpen;
+  final VoidCallback onUnlink;
+
+  @override
+  Widget build(BuildContext context) {
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final IconData icon;
+    final String label;
+    switch (resolution?.status) {
+      case NoteLinkStatus.found:
+        icon = Icons.description_outlined;
+        label = resolution!.note!.title.isEmpty
+            ? 'Untitled'
+            : resolution!.note!.title;
+      case NoteLinkStatus.inTrash:
+        icon = Icons.delete_outline;
+        label = '${resolution!.note!.title.isEmpty ? 'Untitled' : resolution!.note!.title} (in trash)';
+      case NoteLinkStatus.missing:
+        icon = Icons.link_off;
+        label = 'Note not found';
+      case null:
+        icon = Icons.description_outlined;
+        label = loading ? 'Loading…' : 'Note';
+    }
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: mutedColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: InkWell(
+              onTap: loading ? null : onOpen,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.5, color: mutedColor),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.close, size: 15),
+            tooltip: 'Unlink',
+            splashRadius: 16,
+            onPressed: onUnlink,
+          ),
+        ],
+      ),
     );
   }
 }
