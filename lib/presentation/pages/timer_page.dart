@@ -17,6 +17,7 @@ import '../state/timer_state.dart';
 import '../widgets/glassmorphic_container.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/app_picker_menu.dart';
 import '../widgets/project_colors.dart';
 import '../widgets/task_board.dart' show showTaskDetailDialog;
 import '../widgets/timer_calendar_view.dart';
@@ -703,8 +704,48 @@ class _ProjectChip extends StatelessWidget {
         : timerState.draftProjectId;
     final project = timerState.projectForId(selectedId);
 
-    return GestureDetector(
-      onTap: enabled ? () => _showProjectMenu(context) : null,
+    return AppPickerMenu<String?>(
+      value: timerState.draftProjectId,
+      enabled: enabled,
+      surfaceColor: themeState.editorBgColor,
+      accentColor: themeState.accentColor,
+      borderRadius: BorderRadius.circular(20),
+      semanticsLabel: 'Project',
+      // "All projects" widens the FILTER (filterProjectId), a different
+      // piece of state than the draft project every other row tracks —
+      // without this row there would be no way back to the whole week once
+      // a project narrows the view.
+      leadingOption: const AppPickerOption(
+        value: '__all__',
+        label: 'All projects',
+        icon: Icons.all_inclusive_rounded,
+      ),
+      leadingSelected: filterProjectId == null,
+      options: [
+        const AppPickerOption<String?>(
+          value: null,
+          label: 'No Project',
+          icon: Icons.folder_outlined,
+        ),
+        for (final p in timerState.projects)
+          AppPickerOption<String?>(
+            value: p.id,
+            label: p.name,
+            dotColor: p.color,
+            trailing: _ProjectDeleteButton(
+              onTap: () {
+                Navigator.pop(context); // close the menu first
+                _showDeleteProjectDialog(context, p);
+              },
+            ),
+          ),
+      ],
+      footerAction: const AppPickerOption.action(
+        value: '__new__',
+        label: 'New Project',
+        icon: Icons.add_rounded,
+      ),
+      onSelected: (result) => _handleProjectMenuResult(context, result),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
@@ -770,156 +811,27 @@ class _ProjectChip extends StatelessWidget {
     );
   }
 
-  Future<void> _showProjectMenu(BuildContext context) async {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset.zero, ancestor: overlay),
-        button.localToGlobal(
-          button.size.bottomRight(Offset.zero),
-          ancestor: overlay,
-        ),
-      ),
-      Offset.zero & overlay.size,
-    );
-
-    final projects = timerState.projects;
-    final currentDraftId = timerState.draftProjectId;
-
-    Widget checkIfActive(String? id) => SizedBox(
-      width: 18,
-      child: currentDraftId == id
-          ? Icon(Icons.check_rounded, size: 14, color: themeState.accentColor)
-          : null,
-    );
-
-    final result = await showMenu<String?>(
-      context: context,
-      position: position,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      items: [
-        // Every other row narrows the list; without this one there is no way
-        // back to the whole week once a project has been picked.
-        PopupMenuItem<String?>(
-          value: '__all__',
-          child: Row(
-            children: [
-              SizedBox(
-                width: 18,
-                child: filterProjectId == null
-                    ? Icon(Icons.check_rounded,
-                        size: 14, color: themeState.accentColor)
-                    : null,
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.all_inclusive_rounded,
-                size: 16,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'All projects',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        // No Project option
-        PopupMenuItem<String?>(
-          value: '__none__',
-          child: Row(
-            children: [
-              checkIfActive(null),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.folder_outlined,
-                size: 16,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'No Project',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        if (projects.isNotEmpty) const PopupMenuDivider(),
-        ...projects.map(
-          (p) => PopupMenuItem<String?>(
-            value: p.id,
-            child: Row(
-              children: [
-                checkIfActive(p.id),
-                const SizedBox(width: 4),
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: p.color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(p.name, style: const TextStyle(fontSize: 13)),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context); // close menu first
-                    _showDeleteProjectDialog(context, p);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 15,
-                      color: Colors.red.shade300,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const PopupMenuDivider(),
-        // New project
-        PopupMenuItem<String?>(
-          value: '__new__',
-          child: Row(
-            children: [
-              const SizedBox(width: 22), // align with others
-              Icon(Icons.add_rounded, size: 16, color: themeState.accentColor),
-              const SizedBox(width: 8),
-              Text(
-                'New Project',
-                style: TextStyle(
-                  color: themeState.accentColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    if (result == null) return;
+  /// [result] is whatever [AppPickerOption.value] the caller picked:
+  /// `'__all__'` (the leading meta row), `'__new__'` (the footer action),
+  /// `null` ("No Project" — a real value now, not a sentinel, since
+  /// [AppPickerMenu] keys its menu by index and never confuses a
+  /// null-valued selection with "dismissed without choosing") or a real
+  /// project id.
+  Future<void> _handleProjectMenuResult(
+    BuildContext context,
+    String? result,
+  ) async {
     if (result == '__all__') {
       // Only the filter. The draft project is what the next entry will be
       // tagged with, and widening the view is not a decision about that.
       onProjectSelected(null);
-    } else if (result == '__new__' && context.mounted) {
+    } else if (result == '__new__') {
+      if (!context.mounted) return;
       await _showNewProjectDialog(context);
       // After creation, timerState.draftProjectId holds the new project id.
       // Propagate to filter.
       onProjectSelected(timerState.draftProjectId);
-    } else if (result == '__none__') {
+    } else if (result == null) {
       timerState.setDraftProject(null);
       onProjectSelected('__none__'); // filter to show only no-project entries
     } else {
@@ -1062,6 +974,45 @@ class _ProjectChip extends StatelessWidget {
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The project row's inline delete affordance — its own 44x44 tappable
+/// region, deliberately built with [SizedBox] as the OUTERMOST widget
+/// rather than a padded [Container]: a [Container]'s `constraints` apply
+/// OUTSIDE its own `padding`, so a `Container(padding: ..., constraints:
+/// ...)` only ever bounds padding+child together, leaving the inner icon's
+/// small intrinsic size as the real (and too small) tappable area. Wrapping
+/// with [SizedBox] first, then handing the FULL box to [InkWell], avoids
+/// that trap entirely.
+class _ProjectDeleteButton extends StatelessWidget {
+  const _ProjectDeleteButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Delete project',
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: Center(
+              child: Icon(
+                Icons.delete_outline_rounded,
+                size: 15,
+                color: Colors.red.shade300,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

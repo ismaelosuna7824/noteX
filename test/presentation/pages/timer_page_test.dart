@@ -35,6 +35,7 @@ import 'package:notex/application/use_cases/timer/start_timer_use_case.dart';
 import 'package:notex/application/use_cases/timer/stop_timer_use_case.dart';
 import 'package:notex/application/use_cases/timer/update_time_entry_use_case.dart';
 import 'package:notex/application/use_cases/update_note_use_case.dart';
+import 'package:notex/domain/entities/project.dart';
 import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/entities/time_entry.dart';
 import 'package:notex/domain/repositories/auth_repository.dart';
@@ -48,6 +49,7 @@ import 'package:notex/infrastructure/local/drift_project_repository.dart';
 import 'package:notex/infrastructure/local/drift_task_repository.dart';
 import 'package:notex/infrastructure/local/drift_time_entry_repository.dart';
 import 'package:notex/presentation/pages/timer_page.dart';
+import 'package:notex/presentation/widgets/app_picker_menu.dart';
 import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
@@ -96,10 +98,29 @@ class _FakeAuthRepositoryWithStream implements AuthRepository {
   @override
   Stream<bool> get authStateChanges => const Stream<bool>.empty();
 
+  /// Read by [SyncEngine.syncIfAuthenticated] — [DeleteProjectUseCase]
+  /// calls it as its last step. `false` lets that call return immediately
+  /// instead of touching the (deliberately throwing) unused sync/
+  /// connectivity fakes, the same "opt out of sync cleanly" shape a real
+  /// signed-out session has.
+  @override
+  bool get isAuthenticated => false;
+
   @override
   dynamic noSuchMethod(Invocation invocation) =>
       throw UnimplementedError('unused in this test: ${invocation.memberName}');
 }
+
+/// A [SyncEngine] whose `syncIfAuthenticated()` resolves as a clean no-op
+/// (never-authenticated) instead of throwing — needed wherever a test
+/// actually exercises a delete flow through to completion, unlike
+/// [_unusedSyncEngine], which is for collaborators the suite never touches
+/// at all.
+SyncEngine _noopSyncEngine() => SyncEngine(
+      auth: _FakeAuthRepositoryWithStream(),
+      syncService: _UnusedSyncService(),
+      connectivity: _UnusedConnectivityService(),
+    );
 
 /// Covers item 4 of the task-detail-dialog/timer brief: a time entry that
 /// carries a `taskId` gets a visible "came from a task" indicator, and
@@ -142,7 +163,7 @@ void main() {
       deleteProject: DeleteProjectUseCase(
         projectRepository,
         timeEntryRepository,
-        _unusedSyncEngine(),
+        _noopSyncEngine(),
       ),
       startTimer: StartTimerUseCase(
         timeEntryRepository,
@@ -434,6 +455,235 @@ void main() {
             "colorScheme.onPrimary (the seed's tonal primary), not the "
             'literal background colour actually painted',
       );
+    });
+  });
+
+  group('the timer\'s own project picker, converted onto the shared '
+      'AppPickerMenu', () {
+    Future<Project> saveProject(String id, String name, int colorValue) async {
+      final now = DateTime.now();
+      final project = Project(
+        id: id,
+        name: name,
+        colorValue: colorValue,
+        createdAt: now,
+        updatedAt: now,
+      );
+      await projectRepository.save(project);
+      return project;
+    }
+
+    // Target the picker by widget TYPE, not its chevron icon — the week
+    // total's own project breakdown (_TimerBar's other Icons.expand_more_
+    // rounded, shown whenever more than one project has tracked time this
+    // week) would otherwise make icon-based lookup ambiguous.
+    Future<void> openProjectMenu(WidgetTester tester) async {
+      await tester.tap(find.byType(AppPickerMenu<String?>));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets(
+        'lists "All projects", "No Project" and every project, each with '
+        'its own correct check — both "All projects" and "No Project" '
+        'start checked, matching the original picker\'s dual-state default',
+        (tester) async {
+      await saveProject('proj-alpha', 'Alpha', Colors.red.toARGB32());
+      await saveProject('proj-beta', 'Beta', Colors.blue.toARGB32());
+
+      await pumpTimerPage(tester);
+      await openProjectMenu(tester);
+
+      expect(find.text('All projects'), findsOneWidget);
+      expect(
+        find.text('No Project'),
+        findsWidgets,
+        reason: 'the chip trigger itself also reads "No Project" while '
+            'unset — the row must exist regardless',
+      );
+      expect(find.text('Alpha'), findsOneWidget);
+      expect(find.text('Beta'), findsOneWidget);
+      expect(
+        find.byIcon(Icons.check_rounded),
+        findsNWidgets(2),
+        reason: 'with no filter and no draft project chosen yet, both '
+            '"All projects" (filterProjectId == null) and "No Project" '
+            '(draftProjectId == null) legitimately show a check at once — '
+            'the same two independent states the original hand-rolled '
+            'menu tracked',
+      );
+    });
+
+    testWidgets(
+        'selecting "All projects", "No Project" or a specific project '
+        'filters the entries list exactly as before', (tester) async {
+      final alpha =
+          await saveProject('proj-alpha', 'Alpha', Colors.red.toARGB32());
+      final now = DateTime.now();
+      await timeEntryRepository.save(TimeEntry(
+        id: 'entry-alpha',
+        description: 'Ship the feature',
+        projectId: alpha.id,
+        startTime: now.subtract(const Duration(hours: 2)),
+        endTime: now.subtract(const Duration(hours: 1)),
+        updatedAt: now,
+      ));
+      await timeEntryRepository.save(TimeEntry(
+        id: 'entry-none',
+        description: 'Untracked work',
+        startTime: now.subtract(const Duration(hours: 1)),
+        endTime: now,
+        updatedAt: now,
+      ));
+
+      await pumpTimerPage(tester);
+
+      // Filter to Alpha. `.last` scopes the tap to the menu's own row —
+      // the week's project breakdown legend (driven by this same tracked
+      // entry) also renders a "Alpha" label, unrelated to this picker.
+      await openProjectMenu(tester);
+      await tester.tap(find.text('Alpha').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ship the feature'), findsOneWidget);
+      expect(find.text('Untracked work'), findsNothing);
+
+      // Filter to No Project.
+      await openProjectMenu(tester);
+      await tester.tap(find.text('No Project').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Untracked work'), findsOneWidget);
+      expect(find.text('Ship the feature'), findsNothing);
+
+      // Back to All projects.
+      await openProjectMenu(tester);
+      await tester.tap(find.text('All projects').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Ship the feature'), findsOneWidget);
+      expect(find.text('Untracked work'), findsOneWidget);
+    });
+
+    testWidgets(
+        'the inline delete icon opens the same destructive confirmation as '
+        'before, and confirming it soft-deletes the project AND its time '
+        'entries', (tester) async {
+      final alpha =
+          await saveProject('proj-alpha', 'Alpha', Colors.red.toARGB32());
+      final now = DateTime.now();
+      await timeEntryRepository.save(TimeEntry(
+        id: 'entry-alpha',
+        description: 'Ship the feature',
+        projectId: alpha.id,
+        startTime: now.subtract(const Duration(hours: 1)),
+        endTime: now,
+        updatedAt: now,
+      ));
+
+      await pumpTimerPage(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.byTooltip('Delete project'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete "Alpha"?'), findsOneWidget);
+      expect(
+        find.text(
+          'This will permanently delete the project and all 1 time '
+          'entry inside it.',
+        ),
+        findsOneWidget,
+        reason: 'the confirmation wording, including the entry count, must '
+            'survive the conversion unchanged',
+      );
+
+      await tester.tap(find.text('Delete'));
+      await tester.pumpAndSettle();
+
+      final deletedProject = await projectRepository.getById(alpha.id);
+      expect(deletedProject!.deletedAt, isNotNull);
+      final deletedEntry = await timeEntryRepository.getById('entry-alpha');
+      expect(
+        deletedEntry!.deletedAt,
+        isNotNull,
+        reason: 'deleting a project must soft-delete its time entries too '
+            '— DeleteProjectUseCase\'s existing contract',
+      );
+
+      await openProjectMenu(tester);
+      expect(find.text('Alpha'), findsNothing);
+    });
+
+    testWidgets(
+        'the footer "New Project" action still creates a project through '
+        'the existing use case and selects it', (tester) async {
+      await pumpTimerPage(tester);
+      await openProjectMenu(tester);
+
+      await tester.tap(find.text('New Project'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New Project'), findsWidgets);
+      await tester.enterText(
+        find.descendant(
+          of: find.byType(AlertDialog),
+          matching: find.byType(TextField),
+        ),
+        'Gamma',
+      );
+      // Deliberately asserted on STATE, not the widget tree, and without
+      // any further `pump()`/`pumpAndSettle()` call after this tap.
+      // `_showNewProjectDialog` disposes its own `nameController`
+      // manually right after `await showAnimatedDialog(...)` resolves —
+      // i.e. right after `Navigator.pop`, while the dialog's 250ms close
+      // transition is STILL animating and the (now-disposed) `TextField`
+      // is still mounted. A pre-existing, documented defect this task
+      // explicitly excludes from the fix ("do not fix
+      // _showNewProjectDialog controller disposal"): ANY subsequent frame
+      // pump ticks that still-running exit transition and throws — proven
+      // by first writing this test WITH a follow-up `pump()`, which
+      // reliably reproduced it. `await tester.tap(...)` itself already
+      // drains the microtasks `createProject`/`setDraftProject`/
+      // `Navigator.pop` need, so the use-case path's effect is fully
+      // observable on `timerState`/`projectRepository` without touching
+      // that landmine.
+      await tester.tap(find.text('Create'));
+
+      expect(
+        timerState.draftProjectId,
+        isNotNull,
+        reason: 'the newly-created project must be the current selection',
+      );
+      final newProject =
+          await projectRepository.getById(timerState.draftProjectId!);
+      expect(
+        newProject?.name,
+        'Gamma',
+        reason: 'the footer action must create through the same '
+            'TimerState.createProject use-case path every other project '
+            'creation already goes through',
+      );
+    });
+
+    testWidgets(
+        'every menu row and the inline delete icon meet the 44x44 minimum '
+        'tap target', (tester) async {
+      await saveProject('proj-alpha', 'Alpha', Colors.red.toARGB32());
+
+      await pumpTimerPage(tester);
+      await openProjectMenu(tester);
+
+      // Same precedent as app_picker_menu_test.dart's own 44x44 assertion:
+      // every PopupMenuItem defaults to a >=48 minimum height
+      // (kMinInteractiveDimension), verified via the last rendered row.
+      final lastRowSize = tester.getSize(find.byType(InkWell).last);
+      expect(lastRowSize.height, greaterThanOrEqualTo(44));
+
+      // The inline delete icon is the risk this brief calls out by name —
+      // asserted directly, not assumed from the row's own height.
+      final deleteSize = tester.getSize(find.byTooltip('Delete project'));
+      expect(deleteSize.width, greaterThanOrEqualTo(44));
+      expect(deleteSize.height, greaterThanOrEqualTo(44));
     });
   });
 }
