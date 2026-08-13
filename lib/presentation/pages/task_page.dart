@@ -243,6 +243,13 @@ class _TaskPageState extends State<TaskPage> {
                       ),
                     ),
                     const Spacer(),
+                    if (widget.themeState.taskViewMode == 'board') ...[
+                      _BoardProjectFilter(
+                        themeState: widget.themeState,
+                        timerState: _timerState,
+                      ),
+                      const SizedBox(width: 10),
+                    ],
                     _ViewToggle(themeState: widget.themeState),
                     const SizedBox(width: 10),
                     FilledButton.icon(
@@ -808,6 +815,83 @@ class _ViewToggleButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Board project filter — narrows the Kanban board (only) to one project (or
+// "No Project") at a time. Persisted the same way as [_ViewToggle]'s own
+// mode, via [ThemeState.taskBoardProjectFilter]/[ThemeState.
+// setTaskBoardProjectFilter]. Only rendered while the board view is active
+// (see the caller in [_TaskPageState.build]) — the flat list and the home
+// page's "pending today" card are deliberately unaffected.
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _BoardProjectFilter extends StatelessWidget {
+  const _BoardProjectFilter({
+    required this.themeState,
+    required this.timerState,
+  });
+
+  final ThemeState themeState;
+  final TimerState timerState;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final projects = timerState.projects;
+    final current = themeState.taskBoardProjectFilter;
+    // Guards against a stale persisted project id (e.g. the project was
+    // deleted since) — falls back to "All projects" rather than throwing on
+    // DropdownButton's "exactly one item must match" assertion.
+    final isKnownValue = current == TaskBoard.projectFilterAll ||
+        current == TaskBoard.projectFilterNone ||
+        projects.any((p) => p.id == current);
+
+    return Container(
+      constraints: const BoxConstraints(minHeight: 44),
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.folder_outlined, size: 16, color: mutedColor),
+          const SizedBox(width: 6),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: isKnownValue ? current : TaskBoard.projectFilterAll,
+              isDense: true,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+                color: isDark ? Colors.white70 : Colors.grey.shade800,
+              ),
+              dropdownColor: themeState.editorBgColor,
+              onChanged: (value) {
+                if (value == null) return;
+                themeState.setTaskBoardProjectFilter(value);
+              },
+              items: [
+                const DropdownMenuItem(
+                  value: TaskBoard.projectFilterAll,
+                  child: Text('All projects'),
+                ),
+                const DropdownMenuItem(
+                  value: TaskBoard.projectFilterNone,
+                  child: Text('No Project'),
+                ),
+                for (final p in projects)
+                  DropdownMenuItem(value: p.id, child: Text(p.name)),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

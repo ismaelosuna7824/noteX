@@ -53,6 +53,7 @@ import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/state/timer_state.dart';
 import 'package:notex/presentation/widgets/sidebar.dart';
+import 'package:notex/presentation/widgets/task_board.dart';
 
 /// Same `_UnusedX`/fake-collaborator pattern as
 /// `test/presentation/widgets/task_board_test.dart` — this suite never
@@ -440,6 +441,148 @@ void main() {
       expect(dialog.actions, isNull);
       expect(find.text('Save'), findsNothing);
       expect(find.text('Cancel'), findsNothing);
+    });
+  });
+
+  group('board project filter (item 2)', () {
+    Future<void> seedTwoProjectsWithTasks() async {
+      await projectRepository.save(Project(
+        id: 'proj-a',
+        name: 'Project A',
+        colorValue: 0xFFFF0000,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await projectRepository.save(Project(
+        id: 'proj-b',
+        name: 'Project B',
+        colorValue: 0xFF0000FF,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await repository.save(
+        Task.create(id: 'todo-a', title: 'Task A').copyWith(
+          projectId: 'proj-a',
+        ),
+      );
+      await repository.save(
+        Task.create(id: 'todo-b', title: 'Task B').copyWith(
+          projectId: 'proj-b',
+        ),
+      );
+      await repository.save(
+        Task.create(id: 'todo-none', title: 'Task No Project'),
+      );
+      await taskState.initialize();
+      await timerState.initialize();
+    }
+
+    testWidgets(
+        'is hidden in list view and appears once switched to board view, '
+        'defaulting to All projects', (tester) async {
+      await taskState.initialize();
+      await pumpTaskPage(tester);
+
+      expect(
+        find.text('All projects'),
+        findsNothing,
+        reason: 'the board project filter is a board-only affordance — it '
+            'must not render in the flat list view',
+      );
+
+      await tester.tap(find.byTooltip('Board view'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('All projects'), findsOneWidget);
+      expect(
+        themeState.taskBoardProjectFilter,
+        TaskBoard.projectFilterAll,
+        reason: 'the filter must default to All projects',
+      );
+    });
+
+    testWidgets(
+        'selecting a project narrows the board only — the flat list stays '
+        'unfiltered when switching back', (tester) async {
+      await seedTwoProjectsWithTasks();
+      await pumpTaskPage(tester);
+
+      await tester.tap(find.byTooltip('Board view'));
+      await tester.pumpAndSettle();
+
+      // Sanity check: unfiltered, both projects' tasks and the
+      // project-less one are all visible on the board.
+      expect(find.text('Task A'), findsOneWidget);
+      expect(find.text('Task B'), findsOneWidget);
+      expect(find.text('Task No Project'), findsOneWidget);
+
+      await tester.tap(find.text('All projects'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Project A').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        themeState.taskBoardProjectFilter,
+        'proj-a',
+        reason: 'picking a project must persist the selection',
+      );
+      expect(find.text('Task A'), findsOneWidget);
+      expect(find.text('Task B'), findsNothing);
+      expect(find.text('Task No Project'), findsNothing);
+
+      // Switching back to the flat list must show every task again — the
+      // board filter is deliberately NOT applied there.
+      await tester.tap(find.byTooltip('List view'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Task A'), findsOneWidget);
+      expect(find.text('Task B'), findsOneWidget);
+      expect(find.text('Task No Project'), findsOneWidget);
+    });
+
+    testWidgets('"No Project" filters the board to project-less tasks only',
+        (tester) async {
+      await seedTwoProjectsWithTasks();
+      await pumpTaskPage(tester);
+
+      await tester.tap(find.byTooltip('Board view'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('All projects'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('No Project').last);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Task No Project'), findsOneWidget);
+      expect(find.text('Task A'), findsNothing);
+      expect(find.text('Task B'), findsNothing);
+    });
+
+    testWidgets('the selected filter persists across a rebuild of the page',
+        (tester) async {
+      await seedTwoProjectsWithTasks();
+      await pumpTaskPage(tester);
+
+      await tester.tap(find.byTooltip('Board view'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All projects'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Project B').last);
+      await tester.pumpAndSettle();
+
+      expect(themeState.taskBoardProjectFilter, 'proj-b');
+
+      // Rebuild the whole page fresh (same themeState instance — the
+      // persisted-selection contract this mirrors, ThemeState.taskViewMode,
+      // is also just held on the object and written to disk on every
+      // change; a rebuild here proves the selection outlives the widget
+      // tree, not just local State).
+      await pumpTaskPage(tester);
+
+      expect(find.text('Project B'), findsOneWidget);
+      expect(find.text('Task B'), findsOneWidget);
+      expect(find.text('Task A'), findsNothing);
+      expect(find.text('Task No Project'), findsNothing);
     });
   });
 }

@@ -29,6 +29,11 @@ import 'project_colors.dart';
 /// [TaskState.transitionTask], which delegates to
 /// [TransitionTaskStatusUseCase] (design D3/D6, the sole producer of
 /// transition writes).
+///
+/// Every column also honours [ThemeState.taskBoardProjectFilter] — a
+/// board-only, persisted filter (same pattern as [ThemeState.taskViewMode])
+/// that narrows every bucket, backlog tasks included, to one project (or
+/// "No Project") at a time. See [_matchesProjectFilter].
 class TaskBoard extends StatelessWidget {
   const TaskBoard({
     super.key,
@@ -63,6 +68,14 @@ class TaskBoard extends StatelessWidget {
     TaskStatus.done: 'Done',
   };
 
+  /// [ThemeState.taskBoardProjectFilter] sentinel: show every project's
+  /// tasks (default).
+  static const String projectFilterAll = 'all';
+
+  /// [ThemeState.taskBoardProjectFilter] sentinel: show only tasks with a
+  /// null `projectId`.
+  static const String projectFilterNone = 'none';
+
   /// Tasks for a given column. Todo/Doing pull from every non-deleted task
   /// in that status (backlog tasks included — a null scheduledDate just
   /// means no date badge on the card). Blocked and Done use their own
@@ -77,10 +90,15 @@ class TaskBoard extends StatelessWidget {
   ///   (repository doc), so a done backlog task can appear in both buckets
   ///   the day it's completed — excluded from the first to avoid a
   ///   duplicate card; the second is its permanent home.
+  ///
+  /// [ThemeState.taskBoardProjectFilter] is applied last, uniformly, so
+  /// every column — backlog tasks included — obeys it identically; a
+  /// filtered board never leaks another project's task into any bucket.
   List<Task> _tasksFor(TaskStatus status) {
+    final List<Task> tasks;
     switch (status) {
       case TaskStatus.blocked:
-        return taskState.blocked;
+        tasks = taskState.blocked;
       case TaskStatus.done:
         final doneBacklog = taskState.reminders.where(
           (t) => t.status == TaskStatus.done && t.scheduledDate == null,
@@ -88,11 +106,22 @@ class TaskBoard extends StatelessWidget {
         final completedWithSchedule = taskState.completedToday.where(
           (t) => t.scheduledDate != null,
         );
-        return [...completedWithSchedule, ...doneBacklog];
+        tasks = [...completedWithSchedule, ...doneBacklog];
       case TaskStatus.todo:
       case TaskStatus.doing:
-        return taskState.reminders.where((t) => t.status == status).toList();
+        tasks = taskState.reminders.where((t) => t.status == status).toList();
     }
+    return tasks.where(_matchesProjectFilter).toList();
+  }
+
+  /// Matches [ThemeState.taskBoardProjectFilter]: [projectFilterAll] keeps
+  /// everything, [projectFilterNone] keeps only a null `projectId`, and any
+  /// other value is treated as a project id to match exactly.
+  bool _matchesProjectFilter(Task task) {
+    final filter = themeState.taskBoardProjectFilter;
+    if (filter == projectFilterAll) return true;
+    if (filter == projectFilterNone) return task.projectId == null;
+    return task.projectId == filter;
   }
 
   @override

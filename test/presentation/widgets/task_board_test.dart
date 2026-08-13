@@ -2112,4 +2112,130 @@ void main() {
       expect(confirmDialog.backgroundColor, expectedSurface);
     });
   });
+
+  group('board project filter (item 2) — narrows every column, backlog '
+      'tasks included', () {
+    /// Seeds two projects and one task per project in each of Todo,
+    /// Blocked and (backlog) Done, plus one project-less backlog Todo task
+    /// — enough to prove the filter reaches every column and never leaks a
+    /// non-matching project's task into any bucket.
+    Future<void> seedMixedProjectTasks() async {
+      await projectRepository.save(Project(
+        id: 'proj-a',
+        name: 'Project A',
+        colorValue: 0xFFFF0000,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await projectRepository.save(Project(
+        id: 'proj-b',
+        name: 'Project B',
+        colorValue: 0xFF0000FF,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+
+      await repository.save(
+        Task.create(id: 'todo-a', title: 'Todo A').copyWith(
+          projectId: 'proj-a',
+        ),
+      );
+      await repository.save(
+        Task.create(id: 'todo-b', title: 'Todo B').copyWith(
+          projectId: 'proj-b',
+        ),
+      );
+      await repository.save(
+        Task.create(id: 'blocked-a', title: 'Blocked A').copyWith(
+          projectId: 'proj-a',
+          status: TaskStatus.blocked,
+        ),
+      );
+      await repository.save(
+        Task.create(id: 'blocked-b', title: 'Blocked B').copyWith(
+          projectId: 'proj-b',
+          status: TaskStatus.blocked,
+        ),
+      );
+      // Done, backlog (no scheduledDate) — the bucket the brief singles
+      // out as easy to leak from.
+      await repository.save(
+        Task.create(id: 'done-a', title: 'Done Backlog A').copyWith(
+          projectId: 'proj-a',
+          status: TaskStatus.done,
+        ),
+      );
+      await repository.save(
+        Task.create(id: 'done-b', title: 'Done Backlog B').copyWith(
+          projectId: 'proj-b',
+          status: TaskStatus.done,
+        ),
+      );
+      // No project at all — must appear only under the "No Project" filter.
+      await repository.save(
+        Task.create(id: 'todo-none', title: 'Todo No Project'),
+      );
+
+      await taskState.initialize();
+    }
+
+    testWidgets('defaults to All projects — every task renders unfiltered',
+        (tester) async {
+      expect(themeState.taskBoardProjectFilter, TaskBoard.projectFilterAll);
+
+      await seedMixedProjectTasks();
+      await pumpBoard(tester);
+
+      for (final title in [
+        'Todo A',
+        'Todo B',
+        'Blocked A',
+        'Blocked B',
+        'Done Backlog A',
+        'Done Backlog B',
+        'Todo No Project',
+      ]) {
+        expect(find.text(title), findsOneWidget, reason: '$title must be '
+            'visible with the default All-projects filter');
+      }
+    });
+
+    testWidgets(
+        'filtering to one project hides every other project\'s tasks in '
+        'every column, including the Done backlog bucket', (tester) async {
+      await seedMixedProjectTasks();
+      themeState.setTaskBoardProjectFilter('proj-a');
+      await pumpBoard(tester);
+
+      expect(find.text('Todo A'), findsOneWidget);
+      expect(find.text('Blocked A'), findsOneWidget);
+      expect(find.text('Done Backlog A'), findsOneWidget);
+
+      expect(find.text('Todo B'), findsNothing);
+      expect(find.text('Blocked B'), findsNothing);
+      expect(find.text('Done Backlog B'), findsNothing);
+      expect(
+        find.text('Todo No Project'),
+        findsNothing,
+        reason: 'a project filter must also exclude project-less tasks',
+      );
+    });
+
+    testWidgets(
+        '"No Project" filters to only tasks with a null projectId',
+        (tester) async {
+      await seedMixedProjectTasks();
+      themeState.setTaskBoardProjectFilter(TaskBoard.projectFilterNone);
+      await pumpBoard(tester);
+
+      expect(find.text('Todo No Project'), findsOneWidget);
+
+      expect(find.text('Todo A'), findsNothing);
+      expect(find.text('Todo B'), findsNothing);
+      expect(find.text('Blocked A'), findsNothing);
+      expect(find.text('Blocked B'), findsNothing);
+      expect(find.text('Done Backlog A'), findsNothing);
+      expect(find.text('Done Backlog B'), findsNothing);
+    });
+  });
 }

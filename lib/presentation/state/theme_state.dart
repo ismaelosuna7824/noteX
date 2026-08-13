@@ -77,6 +77,13 @@ class ThemeState extends ChangeNotifier {
   /// list stays available via 'list'.
   String _taskViewMode = 'list';
 
+  /// The Kanban board's project filter. `'all'` (default) shows every
+  /// task, `'none'` shows only tasks with a null `projectId`, and any
+  /// other value is a project id — same persisted-String pattern as
+  /// [_taskViewMode]/[_timerViewMode]. A board-only affordance: the flat
+  /// list and the home page's "pending today" card are unaffected.
+  String _taskBoardProjectFilter = 'all';
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -146,6 +153,7 @@ class ThemeState extends ChangeNotifier {
   String get editorViewMode => _editorViewMode;
   String get timerViewMode => _timerViewMode;
   String get taskViewMode => _taskViewMode;
+  String get taskBoardProjectFilter => _taskBoardProjectFilter;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -357,6 +365,8 @@ class ThemeState extends ChangeNotifier {
       _editorViewMode = json['editorViewMode'] as String? ?? 'preview';
       _timerViewMode = json['timerViewMode'] as String? ?? 'list';
       _taskViewMode = json['taskViewMode'] as String? ?? 'list';
+      _taskBoardProjectFilter =
+          json['taskBoardProjectFilter'] as String? ?? 'all';
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -399,6 +409,7 @@ class ThemeState extends ChangeNotifier {
         'editorViewMode': _editorViewMode,
         'timerViewMode': _timerViewMode,
         'taskViewMode': _taskViewMode,
+        'taskBoardProjectFilter': _taskBoardProjectFilter,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -442,6 +453,15 @@ class ThemeState extends ChangeNotifier {
   void setTaskViewMode(String mode) {
     if (_taskViewMode == mode) return;
     _taskViewMode = mode;
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Change the Kanban board's project filter and persist. Notifies: the
+  /// board is rebuilt from it, same as [setTaskViewMode].
+  void setTaskBoardProjectFilter(String filter) {
+    if (_taskBoardProjectFilter == filter) return;
+    _taskBoardProjectFilter = filter;
     _saveToDisk();
     notifyListeners();
   }
