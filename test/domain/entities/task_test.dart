@@ -1,82 +1,82 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:notex/domain/entities/reminder.dart';
+import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/value_objects/sync_status.dart';
 
-/// Characterization tests for [Reminder], written BEFORE the task-tracker
+/// Characterization tests for [Task], written BEFORE the task-tracker
 /// rename touches any `lib/` code. These pin down today's behavior so a
 /// later mechanical rename cannot silently change it.
 void main() {
-  group('Reminder.create', () {
+  group('Task.create', () {
     test('normalizes scheduledDate to local noon regardless of input time',
         () {
-      final reminder = Reminder.create(
+      final task = Task.create(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4, 23, 45, 10),
       );
 
-      expect(reminder.scheduledDate, DateTime(2026, 3, 4, 12, 0, 0));
+      expect(task.scheduledDate, DateTime(2026, 3, 4, 12, 0, 0));
     });
 
     test('normalizes even when the input time is already noon', () {
-      final reminder = Reminder.create(
+      final task = Task.create(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4, 12, 0, 0),
       );
 
-      expect(reminder.scheduledDate, DateTime(2026, 3, 4, 12, 0, 0));
+      expect(task.scheduledDate, DateTime(2026, 3, 4, 12, 0, 0));
     });
 
     test('sets defaults: not completed, version 1, localOnly, no userId', () {
-      final reminder = Reminder.create(
+      final task = Task.create(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4),
       );
 
-      expect(reminder.isCompleted, isFalse);
-      expect(reminder.completedAt, isNull);
-      expect(reminder.version, 1);
-      expect(reminder.syncStatus, SyncStatus.localOnly);
-      expect(reminder.userId, isNull);
-      expect(reminder.deletedAt, isNull);
+      expect(task.isCompleted, isFalse);
+      expect(task.completedAt, isNull);
+      expect(task.version, 1);
+      expect(task.syncStatus, SyncStatus.localOnly);
+      expect(task.userId, isNull);
+      expect(task.deletedAt, isNull);
     });
 
     test('stamps createdAt and updatedAt to the same "now" instant', () {
       final before = DateTime.now();
-      final reminder = Reminder.create(
+      final task = Task.create(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4),
       );
       final after = DateTime.now();
 
-      expect(reminder.createdAt, reminder.updatedAt);
+      expect(task.createdAt, task.updatedAt);
       expect(
-        reminder.createdAt.isAfter(before.subtract(const Duration(seconds: 1))),
+        task.createdAt.isAfter(before.subtract(const Duration(seconds: 1))),
         isTrue,
       );
       expect(
-        reminder.createdAt.isBefore(after.add(const Duration(seconds: 1))),
+        task.createdAt.isBefore(after.add(const Duration(seconds: 1))),
         isTrue,
       );
     });
 
     test('carries userId through when provided', () {
-      final reminder = Reminder.create(
+      final task = Task.create(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4),
         userId: 'user-1',
       );
 
-      expect(reminder.userId, 'user-1');
+      expect(task.userId, 'user-1');
     });
   });
 
-  group('Reminder.isForDate', () {
-    final reminder = Reminder(
+  group('Task.isForDate', () {
+    final task = Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4, 12, 0, 0),
@@ -85,21 +85,21 @@ void main() {
     );
 
     test('matches same year/month/day, ignoring time of day', () {
-      expect(reminder.isForDate(DateTime(2026, 3, 4)), isTrue);
-      expect(reminder.isForDate(DateTime(2026, 3, 4, 23, 59, 59)), isTrue);
-      expect(reminder.isForDate(DateTime(2026, 3, 4, 0, 0, 0)), isTrue);
+      expect(task.isForDate(DateTime(2026, 3, 4)), isTrue);
+      expect(task.isForDate(DateTime(2026, 3, 4, 23, 59, 59)), isTrue);
+      expect(task.isForDate(DateTime(2026, 3, 4, 0, 0, 0)), isTrue);
     });
 
     test('does not match a different day, month, or year', () {
-      expect(reminder.isForDate(DateTime(2026, 3, 5)), isFalse);
-      expect(reminder.isForDate(DateTime(2026, 4, 4)), isFalse);
-      expect(reminder.isForDate(DateTime(2027, 3, 4)), isFalse);
+      expect(task.isForDate(DateTime(2026, 3, 5)), isFalse);
+      expect(task.isForDate(DateTime(2026, 4, 4)), isFalse);
+      expect(task.isForDate(DateTime(2027, 3, 4)), isFalse);
     });
   });
 
-  group('Reminder.markCompleted', () {
+  group('Task.markCompleted', () {
     test('sets isCompleted and stamps completedAt/updatedAt to now', () {
-      final reminder = Reminder(
+      final task = Task(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4),
@@ -107,20 +107,20 @@ void main() {
         updatedAt: DateTime(2026, 1, 1),
       );
 
-      final completed = reminder.markCompleted();
+      final completed = task.markCompleted();
 
       expect(completed.isCompleted, isTrue);
       expect(completed.completedAt, isNotNull);
-      expect(completed.updatedAt.isAfter(reminder.updatedAt), isTrue);
+      expect(completed.updatedAt.isAfter(task.updatedAt), isTrue);
       // createdAt and identity fields are untouched.
-      expect(completed.id, reminder.id);
-      expect(completed.createdAt, reminder.createdAt);
+      expect(completed.id, task.id);
+      expect(completed.createdAt, task.createdAt);
     });
   });
 
-  group('Reminder.markDeleted', () {
+  group('Task.markDeleted', () {
     test('sets deletedAt, bumps updatedAt, and forces pendingSync', () {
-      final reminder = Reminder(
+      final task = Task(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4),
@@ -129,18 +129,18 @@ void main() {
         syncStatus: SyncStatus.localOnly,
       );
 
-      final deleted = reminder.markDeleted();
+      final deleted = task.markDeleted();
 
       expect(deleted.deletedAt, isNotNull);
-      expect(deleted.updatedAt.isAfter(reminder.updatedAt), isTrue);
+      expect(deleted.updatedAt.isAfter(task.updatedAt), isTrue);
       expect(deleted.syncStatus, SyncStatus.pendingSync);
       expect(deleted.isDeleted, isTrue);
-      expect(reminder.isDeleted, isFalse);
+      expect(task.isDeleted, isFalse);
     });
   });
 
-  group('Reminder.copyWith — _Unset sentinel semantics', () {
-    final base = Reminder(
+  group('Task.copyWith — _Unset sentinel semantics', () {
+    final base = Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),
@@ -199,17 +199,17 @@ void main() {
     });
   });
 
-  group('Reminder equality', () {
-    test('two reminders with the same id are equal regardless of other fields',
+  group('Task equality', () {
+    test('two tasks with the same id are equal regardless of other fields',
         () {
-      final a = Reminder(
+      final a = Task(
         id: 'r1',
         title: 'A',
         scheduledDate: DateTime(2026, 3, 4),
         createdAt: DateTime(2026, 1, 1),
         updatedAt: DateTime(2026, 1, 1),
       );
-      final b = Reminder(
+      final b = Task(
         id: 'r1',
         title: 'B',
         scheduledDate: DateTime(2026, 5, 1),

@@ -1,10 +1,10 @@
 import '../value_objects/sync_status.dart';
 
-/// Core domain entity representing a reminder.
+/// Core domain entity representing a task.
 ///
-/// Reminders have a title and a scheduled date. Uncompleted reminders
+/// Tasks have a title and a scheduled date. Uncompleted tasks
 /// accumulate — they carry over to the next day until marked complete.
-class Reminder {
+class Task {
   final String id;
   final String title;
   final DateTime scheduledDate;
@@ -17,7 +17,7 @@ class Reminder {
   final SyncStatus syncStatus;
   final String? userId;
 
-  const Reminder({
+  const Task({
     required this.id,
     required this.title,
     required this.scheduledDate,
@@ -31,14 +31,14 @@ class Reminder {
     this.userId,
   });
 
-  factory Reminder.create({
+  factory Task.create({
     required String id,
     required String title,
     required DateTime scheduledDate,
     String? userId,
   }) {
     final now = DateTime.now();
-    return Reminder(
+    return Task(
       id: id,
       title: title,
       scheduledDate: DateTime(
@@ -66,7 +66,7 @@ class Reminder {
         scheduledDate.day == date.day;
   }
 
-  Reminder copyWith({
+  Task copyWith({
     String? title,
     DateTime? scheduledDate,
     bool? isCompleted,
@@ -77,13 +77,14 @@ class Reminder {
     SyncStatus? syncStatus,
     Object? userId = const _Unset(),
   }) {
-    return Reminder(
+    return Task(
       id: id,
       title: title ?? this.title,
       scheduledDate: scheduledDate ?? this.scheduledDate,
       isCompleted: isCompleted ?? this.isCompleted,
-      completedAt:
-          completedAt is _Unset ? this.completedAt : completedAt as DateTime?,
+      completedAt: completedAt is _Unset
+          ? this.completedAt
+          : completedAt as DateTime?,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,
@@ -93,7 +94,7 @@ class Reminder {
     );
   }
 
-  Reminder markCompleted() {
+  Task markCompleted() {
     return copyWith(
       isCompleted: true,
       completedAt: DateTime.now(),
@@ -101,16 +102,16 @@ class Reminder {
     );
   }
 
-  Reminder markPendingSync() {
+  Task markPendingSync() {
     return copyWith(
       updatedAt: DateTime.now(),
       syncStatus: SyncStatus.pendingSync,
     );
   }
 
-  Reminder markSynced() => copyWith(syncStatus: SyncStatus.synced);
+  Task markSynced() => copyWith(syncStatus: SyncStatus.synced);
 
-  Reminder markDeleted() {
+  Task markDeleted() {
     return copyWith(
       deletedAt: DateTime.now(),
       updatedAt: DateTime.now(),
@@ -118,17 +119,17 @@ class Reminder {
     );
   }
 
-  Reminder incrementVersion() => copyWith(version: version + 1);
+  Task incrementVersion() => copyWith(version: version + 1);
 
   @override
   bool operator ==(Object other) =>
-      identical(this, other) || other is Reminder && id == other.id;
+      identical(this, other) || other is Task && id == other.id;
 
   @override
   int get hashCode => id.hashCode;
 
   @override
-  String toString() => 'Reminder(id: $id, title: $title)';
+  String toString() => 'Task(id: $id, title: $title)';
 }
 
 class _Unset {

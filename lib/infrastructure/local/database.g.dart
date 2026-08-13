@@ -4268,12 +4268,12 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
   }
 }
 
-class $ReminderEntriesTable extends ReminderEntries
-    with TableInfo<$ReminderEntriesTable, ReminderEntry> {
+class $TaskEntriesTable extends TaskEntries
+    with TableInfo<$TaskEntriesTable, TaskEntry> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $ReminderEntriesTable(this.attachedDatabase, [this._alias]);
+  $TaskEntriesTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -4553,7 +4553,7 @@ class $ReminderEntriesTable extends ReminderEntries
   static const String $name = 'reminders';
   @override
   VerificationContext validateIntegrity(
-    Insertable<ReminderEntry> instance, {
+    Insertable<TaskEntry> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -4734,9 +4734,9 @@ class $ReminderEntriesTable extends ReminderEntries
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  ReminderEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+  TaskEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ReminderEntry(
+    return TaskEntry(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -4829,12 +4829,12 @@ class $ReminderEntriesTable extends ReminderEntries
   }
 
   @override
-  $ReminderEntriesTable createAlias(String alias) {
-    return $ReminderEntriesTable(attachedDatabase, alias);
+  $TaskEntriesTable createAlias(String alias) {
+    return $TaskEntriesTable(attachedDatabase, alias);
   }
 }
 
-class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
+class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   final String id;
   final String title;
   final DateTime scheduledDate;
@@ -4857,7 +4857,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
   final String? externalUrl;
   final String? externalCachedTitle;
   final DateTime? externalLastSyncedAt;
-  const ReminderEntry({
+  const TaskEntry({
     required this.id,
     required this.title,
     required this.scheduledDate,
@@ -4931,8 +4931,8 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     return map;
   }
 
-  ReminderEntriesCompanion toCompanion(bool nullToAbsent) {
-    return ReminderEntriesCompanion(
+  TaskEntriesCompanion toCompanion(bool nullToAbsent) {
+    return TaskEntriesCompanion(
       id: Value(id),
       title: Value(title),
       scheduledDate: Value(scheduledDate),
@@ -4980,12 +4980,12 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     );
   }
 
-  factory ReminderEntry.fromJson(
+  factory TaskEntry.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ReminderEntry(
+    return TaskEntry(
       id: serializer.fromJson<String>(json['id']),
       title: serializer.fromJson<String>(json['title']),
       scheduledDate: serializer.fromJson<DateTime>(json['scheduledDate']),
@@ -5045,7 +5045,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     };
   }
 
-  ReminderEntry copyWith({
+  TaskEntry copyWith({
     String? id,
     String? title,
     DateTime? scheduledDate,
@@ -5068,7 +5068,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     Value<String?> externalUrl = const Value.absent(),
     Value<String?> externalCachedTitle = const Value.absent(),
     Value<DateTime?> externalLastSyncedAt = const Value.absent(),
-  }) => ReminderEntry(
+  }) => TaskEntry(
     id: id ?? this.id,
     title: title ?? this.title,
     scheduledDate: scheduledDate ?? this.scheduledDate,
@@ -5102,8 +5102,8 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
         ? externalLastSyncedAt.value
         : this.externalLastSyncedAt,
   );
-  ReminderEntry copyWithCompanion(ReminderEntriesCompanion data) {
-    return ReminderEntry(
+  TaskEntry copyWithCompanion(TaskEntriesCompanion data) {
+    return TaskEntry(
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
       scheduledDate: data.scheduledDate.present
@@ -5157,7 +5157,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
 
   @override
   String toString() {
-    return (StringBuffer('ReminderEntry(')
+    return (StringBuffer('TaskEntry(')
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('scheduledDate: $scheduledDate, ')
@@ -5212,7 +5212,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is ReminderEntry &&
+      (other is TaskEntry &&
           other.id == this.id &&
           other.title == this.title &&
           other.scheduledDate == this.scheduledDate &&
@@ -5237,7 +5237,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
           other.externalLastSyncedAt == this.externalLastSyncedAt);
 }
 
-class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
+class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   final Value<String> id;
   final Value<String> title;
   final Value<DateTime> scheduledDate;
@@ -5261,7 +5261,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
   final Value<String?> externalCachedTitle;
   final Value<DateTime?> externalLastSyncedAt;
   final Value<int> rowid;
-  const ReminderEntriesCompanion({
+  const TaskEntriesCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.scheduledDate = const Value.absent(),
@@ -5286,7 +5286,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     this.externalLastSyncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  ReminderEntriesCompanion.insert({
+  TaskEntriesCompanion.insert({
     required String id,
     this.title = const Value.absent(),
     required DateTime scheduledDate,
@@ -5314,7 +5314,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
        scheduledDate = Value(scheduledDate),
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
-  static Insertable<ReminderEntry> custom({
+  static Insertable<TaskEntry> custom({
     Expression<String>? id,
     Expression<String>? title,
     Expression<DateTime>? scheduledDate,
@@ -5368,7 +5368,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     });
   }
 
-  ReminderEntriesCompanion copyWith({
+  TaskEntriesCompanion copyWith({
     Value<String>? id,
     Value<String>? title,
     Value<DateTime>? scheduledDate,
@@ -5393,7 +5393,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     Value<DateTime?>? externalLastSyncedAt,
     Value<int>? rowid,
   }) {
-    return ReminderEntriesCompanion(
+    return TaskEntriesCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
       scheduledDate: scheduledDate ?? this.scheduledDate,
@@ -5501,7 +5501,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
 
   @override
   String toString() {
-    return (StringBuffer('ReminderEntriesCompanion(')
+    return (StringBuffer('TaskEntriesCompanion(')
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('scheduledDate: $scheduledDate, ')
@@ -5752,9 +5752,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $MarkdownProjectEntriesTable(this);
   late final $NoteProjectEntriesTable noteProjectEntries =
       $NoteProjectEntriesTable(this);
-  late final $ReminderEntriesTable reminderEntries = $ReminderEntriesTable(
-    this,
-  );
+  late final $TaskEntriesTable taskEntries = $TaskEntriesTable(this);
   late final $AppMetadataEntriesTable appMetadataEntries =
       $AppMetadataEntriesTable(this);
   @override
@@ -5769,7 +5767,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     markdownFileEntries,
     markdownProjectEntries,
     noteProjectEntries,
-    reminderEntries,
+    taskEntries,
     appMetadataEntries,
   ];
 }
@@ -7923,8 +7921,8 @@ typedef $$NoteProjectEntriesTableProcessedTableManager =
       NoteProjectRow,
       PrefetchHooks Function()
     >;
-typedef $$ReminderEntriesTableCreateCompanionBuilder =
-    ReminderEntriesCompanion Function({
+typedef $$TaskEntriesTableCreateCompanionBuilder =
+    TaskEntriesCompanion Function({
       required String id,
       Value<String> title,
       required DateTime scheduledDate,
@@ -7949,8 +7947,8 @@ typedef $$ReminderEntriesTableCreateCompanionBuilder =
       Value<DateTime?> externalLastSyncedAt,
       Value<int> rowid,
     });
-typedef $$ReminderEntriesTableUpdateCompanionBuilder =
-    ReminderEntriesCompanion Function({
+typedef $$TaskEntriesTableUpdateCompanionBuilder =
+    TaskEntriesCompanion Function({
       Value<String> id,
       Value<String> title,
       Value<DateTime> scheduledDate,
@@ -7976,9 +7974,9 @@ typedef $$ReminderEntriesTableUpdateCompanionBuilder =
       Value<int> rowid,
     });
 
-class $$ReminderEntriesTableFilterComposer
-    extends Composer<_$AppDatabase, $ReminderEntriesTable> {
-  $$ReminderEntriesTableFilterComposer({
+class $$TaskEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $TaskEntriesTable> {
+  $$TaskEntriesTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -8096,9 +8094,9 @@ class $$ReminderEntriesTableFilterComposer
   );
 }
 
-class $$ReminderEntriesTableOrderingComposer
-    extends Composer<_$AppDatabase, $ReminderEntriesTable> {
-  $$ReminderEntriesTableOrderingComposer({
+class $$TaskEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TaskEntriesTable> {
+  $$TaskEntriesTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -8216,9 +8214,9 @@ class $$ReminderEntriesTableOrderingComposer
   );
 }
 
-class $$ReminderEntriesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $ReminderEntriesTable> {
-  $$ReminderEntriesTableAnnotationComposer({
+class $$TaskEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TaskEntriesTable> {
+  $$TaskEntriesTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -8318,37 +8316,35 @@ class $$ReminderEntriesTableAnnotationComposer
   );
 }
 
-class $$ReminderEntriesTableTableManager
+class $$TaskEntriesTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $ReminderEntriesTable,
-          ReminderEntry,
-          $$ReminderEntriesTableFilterComposer,
-          $$ReminderEntriesTableOrderingComposer,
-          $$ReminderEntriesTableAnnotationComposer,
-          $$ReminderEntriesTableCreateCompanionBuilder,
-          $$ReminderEntriesTableUpdateCompanionBuilder,
+          $TaskEntriesTable,
+          TaskEntry,
+          $$TaskEntriesTableFilterComposer,
+          $$TaskEntriesTableOrderingComposer,
+          $$TaskEntriesTableAnnotationComposer,
+          $$TaskEntriesTableCreateCompanionBuilder,
+          $$TaskEntriesTableUpdateCompanionBuilder,
           (
-            ReminderEntry,
-            BaseReferences<_$AppDatabase, $ReminderEntriesTable, ReminderEntry>,
+            TaskEntry,
+            BaseReferences<_$AppDatabase, $TaskEntriesTable, TaskEntry>,
           ),
-          ReminderEntry,
+          TaskEntry,
           PrefetchHooks Function()
         > {
-  $$ReminderEntriesTableTableManager(
-    _$AppDatabase db,
-    $ReminderEntriesTable table,
-  ) : super(
+  $$TaskEntriesTableTableManager(_$AppDatabase db, $TaskEntriesTable table)
+    : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$ReminderEntriesTableFilterComposer($db: db, $table: table),
+              $$TaskEntriesTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$ReminderEntriesTableOrderingComposer($db: db, $table: table),
+              $$TaskEntriesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$ReminderEntriesTableAnnotationComposer($db: db, $table: table),
+              $$TaskEntriesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
@@ -8374,7 +8370,7 @@ class $$ReminderEntriesTableTableManager
                 Value<String?> externalCachedTitle = const Value.absent(),
                 Value<DateTime?> externalLastSyncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => ReminderEntriesCompanion(
+              }) => TaskEntriesCompanion(
                 id: id,
                 title: title,
                 scheduledDate: scheduledDate,
@@ -8424,7 +8420,7 @@ class $$ReminderEntriesTableTableManager
                 Value<String?> externalCachedTitle = const Value.absent(),
                 Value<DateTime?> externalLastSyncedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => ReminderEntriesCompanion.insert(
+              }) => TaskEntriesCompanion.insert(
                 id: id,
                 title: title,
                 scheduledDate: scheduledDate,
@@ -8457,21 +8453,18 @@ class $$ReminderEntriesTableTableManager
       );
 }
 
-typedef $$ReminderEntriesTableProcessedTableManager =
+typedef $$TaskEntriesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $ReminderEntriesTable,
-      ReminderEntry,
-      $$ReminderEntriesTableFilterComposer,
-      $$ReminderEntriesTableOrderingComposer,
-      $$ReminderEntriesTableAnnotationComposer,
-      $$ReminderEntriesTableCreateCompanionBuilder,
-      $$ReminderEntriesTableUpdateCompanionBuilder,
-      (
-        ReminderEntry,
-        BaseReferences<_$AppDatabase, $ReminderEntriesTable, ReminderEntry>,
-      ),
-      ReminderEntry,
+      $TaskEntriesTable,
+      TaskEntry,
+      $$TaskEntriesTableFilterComposer,
+      $$TaskEntriesTableOrderingComposer,
+      $$TaskEntriesTableAnnotationComposer,
+      $$TaskEntriesTableCreateCompanionBuilder,
+      $$TaskEntriesTableUpdateCompanionBuilder,
+      (TaskEntry, BaseReferences<_$AppDatabase, $TaskEntriesTable, TaskEntry>),
+      TaskEntry,
       PrefetchHooks Function()
     >;
 typedef $$AppMetadataEntriesTableCreateCompanionBuilder =
@@ -8647,8 +8640,8 @@ class $AppDatabaseManager {
       );
   $$NoteProjectEntriesTableTableManager get noteProjectEntries =>
       $$NoteProjectEntriesTableTableManager(_db, _db.noteProjectEntries);
-  $$ReminderEntriesTableTableManager get reminderEntries =>
-      $$ReminderEntriesTableTableManager(_db, _db.reminderEntries);
+  $$TaskEntriesTableTableManager get taskEntries =>
+      $$TaskEntriesTableTableManager(_db, _db.taskEntries);
   $$AppMetadataEntriesTableTableManager get appMetadataEntries =>
       $$AppMetadataEntriesTableTableManager(_db, _db.appMetadataEntries);
 }

@@ -1,38 +1,38 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:notex/application/use_cases/reminder/complete_reminder_use_case.dart';
-import 'package:notex/domain/entities/reminder.dart';
+import 'package:notex/application/use_cases/task/complete_task_use_case.dart';
+import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/value_objects/sync_status.dart';
 import 'package:notex/infrastructure/local/database.dart';
-import 'package:notex/infrastructure/local/drift_reminder_repository.dart';
+import 'package:notex/infrastructure/local/drift_task_repository.dart';
 
-/// Characterization tests for [CompleteReminderUseCase], written BEFORE the
+/// Characterization tests for [CompleteTaskUseCase], written BEFORE the
 /// task-tracker rename touches any `lib/` code.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late DriftReminderRepository repository;
-  late CompleteReminderUseCase useCase;
+  late DriftTaskRepository repository;
+  late CompleteTaskUseCase useCase;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    repository = DriftReminderRepository(db);
-    useCase = CompleteReminderUseCase(repository);
+    repository = DriftTaskRepository(db);
+    useCase = CompleteTaskUseCase(repository);
   });
 
   tearDown(() async {
     await db.close();
   });
 
-  test('returns null when the reminder id does not exist', () async {
+  test('returns null when the task id does not exist', () async {
     final result = await useCase.execute('missing');
 
     expect(result, isNull);
   });
 
-  test('marks an existing reminder as completed and persists it', () async {
-    await repository.save(Reminder(
+  test('marks an existing task as completed and persists it', () async {
+    await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),
@@ -53,7 +53,7 @@ void main() {
   });
 
   test('preserves localOnly sync status for unauthenticated users', () async {
-    await repository.save(Reminder(
+    await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),
@@ -67,8 +67,8 @@ void main() {
     expect(result!.syncStatus, SyncStatus.localOnly);
   });
 
-  test('promotes a synced reminder to pendingSync on completion', () async {
-    await repository.save(Reminder(
+  test('promotes a synced task to pendingSync on completion', () async {
+    await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),
@@ -82,9 +82,9 @@ void main() {
     expect(result!.syncStatus, SyncStatus.pendingSync);
   });
 
-  test('promotes a pendingSync reminder to pendingSync (stays pending)',
+  test('promotes a pendingSync task to pendingSync (stays pending)',
       () async {
-    await repository.save(Reminder(
+    await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),

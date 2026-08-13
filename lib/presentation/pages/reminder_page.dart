@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
-import '../../domain/entities/reminder.dart';
+import '../../domain/entities/task.dart';
 import '../state/app_state.dart';
 import '../state/reminder_state.dart';
 import '../state/theme_state.dart';
@@ -364,7 +364,7 @@ class _ReminderPageState extends State<ReminderPage> {
   }
 
   Widget _buildReminderTile(
-    Reminder reminder,
+    Task reminder,
     bool isDark,
     Color accentColor,
   ) {
@@ -383,7 +383,7 @@ class _ReminderPageState extends State<ReminderPage> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _ReminderTile extends StatefulWidget {
-  final Reminder reminder;
+  final Task reminder;
   final bool isDark;
   final Color accentColor;
   final VoidCallback onComplete;

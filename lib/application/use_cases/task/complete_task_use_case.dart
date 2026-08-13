@@ -1,15 +1,15 @@
-import '../../../domain/entities/reminder.dart';
-import '../../../domain/repositories/reminder_repository.dart';
+import '../../../domain/entities/task.dart';
+import '../../../domain/repositories/task_repository.dart';
 import '../../../domain/value_objects/sync_status.dart';
 
-/// Use case: Mark a reminder as completed.
-class CompleteReminderUseCase {
-  final ReminderRepository _repository;
+/// Use case: Mark a task as completed.
+class CompleteTaskUseCase {
+  final TaskRepository _repository;
 
-  const CompleteReminderUseCase(this._repository);
+  const CompleteTaskUseCase(this._repository);
 
-  Future<Reminder?> execute(String reminderId) async {
-    final existing = await _repository.getById(reminderId);
+  Future<Task?> execute(String taskId) async {
+    final existing = await _repository.getById(taskId);
     if (existing == null) return null;
 
     // Preserve localOnly status for unauthenticated users

@@ -1,13 +1,13 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notex/application/services/sync_engine.dart';
-import 'package:notex/application/use_cases/reminder/delete_reminder_use_case.dart';
-import 'package:notex/domain/entities/reminder.dart';
+import 'package:notex/application/use_cases/task/delete_task_use_case.dart';
+import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/repositories/auth_repository.dart';
 import 'package:notex/domain/services/connectivity_service.dart';
 import 'package:notex/domain/services/sync_service.dart';
 import 'package:notex/infrastructure/local/database.dart';
-import 'package:notex/infrastructure/local/drift_reminder_repository.dart';
+import 'package:notex/infrastructure/local/drift_task_repository.dart';
 
 /// Minimal fake satisfying [AuthRepository] — every member unused by this
 /// test throws, so an accidental new call site is caught immediately.
@@ -47,30 +47,30 @@ class _SpySyncEngine extends SyncEngine {
   }
 }
 
-/// Characterization tests for [DeleteReminderUseCase], written BEFORE the
+/// Characterization tests for [DeleteTaskUseCase], written BEFORE the
 /// task-tracker rename touches any `lib/` code.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late DriftReminderRepository repository;
+  late DriftTaskRepository repository;
   late _SpySyncEngine syncEngine;
-  late DeleteReminderUseCase useCase;
+  late DeleteTaskUseCase useCase;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    repository = DriftReminderRepository(db);
+    repository = DriftTaskRepository(db);
     syncEngine = _SpySyncEngine();
-    useCase = DeleteReminderUseCase(repository, syncEngine);
+    useCase = DeleteTaskUseCase(repository, syncEngine);
   });
 
   tearDown(() async {
     await db.close();
   });
 
-  test('soft-deletes an existing reminder (sets deletedAt, does not remove the row)',
+  test('soft-deletes an existing task (sets deletedAt, does not remove the row)',
       () async {
-    await repository.save(Reminder(
+    await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),
@@ -86,7 +86,7 @@ void main() {
     expect(row.isDeleted, isTrue);
   });
 
-  test('is a no-op on the repository when the reminder id does not exist',
+  test('is a no-op on the repository when the task id does not exist',
       () async {
     await useCase.execute('missing');
 
@@ -102,7 +102,7 @@ void main() {
 
   test('calls syncEngine.syncIfAuthenticated after a successful soft-delete',
       () async {
-    await repository.save(Reminder(
+    await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),

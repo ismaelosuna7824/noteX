@@ -1,11 +1,11 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:notex/domain/entities/reminder.dart';
+import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/value_objects/sync_status.dart';
 import 'package:notex/infrastructure/local/database.dart';
-import 'package:notex/infrastructure/local/drift_reminder_repository.dart';
+import 'package:notex/infrastructure/local/drift_task_repository.dart';
 
-/// Characterization tests for [DriftReminderRepository], written BEFORE the
+/// Characterization tests for [DriftTaskRepository], written BEFORE the
 /// task-tracker rename touches any `lib/` code. `getPending`'s carry-over
 /// query in particular has zero prior coverage and is the exact query the
 /// rename must preserve.
@@ -13,11 +13,11 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
-  late DriftReminderRepository repository;
+  late DriftTaskRepository repository;
 
-  Reminder buildReminder({
+  Task buildTask({
     required String id,
-    String title = 'Reminder',
+    String title = 'Task',
     required DateTime scheduledDate,
     bool isCompleted = false,
     DateTime? completedAt,
@@ -27,7 +27,7 @@ void main() {
     SyncStatus syncStatus = SyncStatus.localOnly,
     String? userId,
   }) {
-    return Reminder(
+    return Task(
       id: id,
       title: title,
       scheduledDate: scheduledDate,
@@ -43,7 +43,7 @@ void main() {
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
-    repository = DriftReminderRepository(db);
+    repository = DriftTaskRepository(db);
   });
 
   tearDown(() async {
@@ -52,7 +52,7 @@ void main() {
 
   group('save + getById — round trip', () {
     test('every field survives a save/read round trip', () async {
-      final reminder = buildReminder(
+      final task = buildTask(
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4, 12),
@@ -64,19 +64,19 @@ void main() {
         userId: 'user-1',
       );
 
-      await repository.save(reminder);
+      await repository.save(task);
       final fetched = await repository.getById('r1');
 
       expect(fetched, isNotNull);
-      expect(fetched!.id, reminder.id);
-      expect(fetched.title, reminder.title);
-      expect(fetched.scheduledDate, reminder.scheduledDate);
-      expect(fetched.isCompleted, reminder.isCompleted);
-      expect(fetched.completedAt, reminder.completedAt);
-      expect(fetched.createdAt, reminder.createdAt);
-      expect(fetched.updatedAt, reminder.updatedAt);
-      expect(fetched.syncStatus, reminder.syncStatus);
-      expect(fetched.userId, reminder.userId);
+      expect(fetched!.id, task.id);
+      expect(fetched.title, task.title);
+      expect(fetched.scheduledDate, task.scheduledDate);
+      expect(fetched.isCompleted, task.isCompleted);
+      expect(fetched.completedAt, task.completedAt);
+      expect(fetched.createdAt, task.createdAt);
+      expect(fetched.updatedAt, task.updatedAt);
+      expect(fetched.syncStatus, task.syncStatus);
+      expect(fetched.userId, task.userId);
     });
 
     test('getById returns null for a missing id', () async {
@@ -85,10 +85,10 @@ void main() {
 
     test('save upserts — saving an existing id updates in place', () async {
       await repository.save(
-        buildReminder(id: 'r1', title: 'Original', scheduledDate: DateTime(2026, 3, 4)),
+        buildTask(id: 'r1', title: 'Original', scheduledDate: DateTime(2026, 3, 4)),
       );
       await repository.save(
-        buildReminder(id: 'r1', title: 'Updated', scheduledDate: DateTime(2026, 3, 4)),
+        buildTask(id: 'r1', title: 'Updated', scheduledDate: DateTime(2026, 3, 4)),
       );
 
       final all = await repository.getAll();
@@ -98,9 +98,9 @@ void main() {
   });
 
   group('getAll', () {
-    test('excludes soft-deleted reminders', () async {
-      await repository.save(buildReminder(id: 'alive', scheduledDate: DateTime(2026, 3, 4)));
-      await repository.save(buildReminder(
+    test('excludes soft-deleted tasks', () async {
+      await repository.save(buildTask(id: 'alive', scheduledDate: DateTime(2026, 3, 4)));
+      await repository.save(buildTask(
         id: 'dead',
         scheduledDate: DateTime(2026, 3, 4),
         deletedAt: DateTime(2026, 3, 5),
@@ -112,9 +112,9 @@ void main() {
     });
 
     test('orders by scheduledDate ascending', () async {
-      await repository.save(buildReminder(id: 'late', scheduledDate: DateTime(2026, 3, 10)));
-      await repository.save(buildReminder(id: 'early', scheduledDate: DateTime(2026, 3, 1)));
-      await repository.save(buildReminder(id: 'mid', scheduledDate: DateTime(2026, 3, 5)));
+      await repository.save(buildTask(id: 'late', scheduledDate: DateTime(2026, 3, 10)));
+      await repository.save(buildTask(id: 'early', scheduledDate: DateTime(2026, 3, 1)));
+      await repository.save(buildTask(id: 'mid', scheduledDate: DateTime(2026, 3, 5)));
 
       final all = await repository.getAll();
 
@@ -123,18 +123,18 @@ void main() {
   });
 
   group('getBySyncStatus', () {
-    test('filters reminders by exact sync status', () async {
-      await repository.save(buildReminder(
+    test('filters tasks by exact sync status', () async {
+      await repository.save(buildTask(
         id: 'local',
         scheduledDate: DateTime(2026, 3, 4),
         syncStatus: SyncStatus.localOnly,
       ));
-      await repository.save(buildReminder(
+      await repository.save(buildTask(
         id: 'pending',
         scheduledDate: DateTime(2026, 3, 4),
         syncStatus: SyncStatus.pendingSync,
       ));
-      await repository.save(buildReminder(
+      await repository.save(buildTask(
         id: 'synced',
         scheduledDate: DateTime(2026, 3, 4),
         syncStatus: SyncStatus.synced,
@@ -147,14 +147,14 @@ void main() {
   });
 
   group('getModifiedSince', () {
-    test('returns only reminders with updatedAt strictly after the cutoff',
+    test('returns only tasks with updatedAt strictly after the cutoff',
         () async {
-      await repository.save(buildReminder(
+      await repository.save(buildTask(
         id: 'old',
         scheduledDate: DateTime(2026, 3, 4),
         updatedAt: DateTime(2026, 1, 1),
       ));
-      await repository.save(buildReminder(
+      await repository.save(buildTask(
         id: 'new',
         scheduledDate: DateTime(2026, 3, 4),
         updatedAt: DateTime(2026, 6, 1),
@@ -167,8 +167,8 @@ void main() {
   });
 
   group('getPending — carry-over invariant', () {
-    test('excludes completed reminders regardless of date', () async {
-      await repository.save(buildReminder(
+    test('excludes completed tasks regardless of date', () async {
+      await repository.save(buildTask(
         id: 'done',
         scheduledDate: DateTime(2026, 3, 1),
         isCompleted: true,
@@ -180,8 +180,8 @@ void main() {
       expect(pending, isEmpty);
     });
 
-    test('excludes reminders scheduled strictly in the future', () async {
-      await repository.save(buildReminder(
+    test('excludes tasks scheduled strictly in the future', () async {
+      await repository.save(buildTask(
         id: 'future',
         scheduledDate: DateTime(2026, 3, 20),
       ));
@@ -191,9 +191,9 @@ void main() {
       expect(pending, isEmpty);
     });
 
-    test('includes overdue (past-due, uncompleted) reminders — carry-over',
+    test('includes overdue (past-due, uncompleted) tasks — carry-over',
         () async {
-      await repository.save(buildReminder(
+      await repository.save(buildTask(
         id: 'overdue',
         scheduledDate: DateTime(2026, 3, 1),
       ));
@@ -203,8 +203,8 @@ void main() {
       expect(pending.map((r) => r.id), ['overdue']);
     });
 
-    test('includes a reminder scheduled exactly on upToDate', () async {
-      await repository.save(buildReminder(
+    test('includes a task scheduled exactly on upToDate', () async {
+      await repository.save(buildTask(
         id: 'today',
         scheduledDate: DateTime(2026, 3, 10, 12),
       ));
@@ -214,9 +214,9 @@ void main() {
       expect(pending.map((r) => r.id), ['today']);
     });
 
-    test('excludes soft-deleted reminders even if overdue and uncompleted',
+    test('excludes soft-deleted tasks even if overdue and uncompleted',
         () async {
-      await repository.save(buildReminder(
+      await repository.save(buildTask(
         id: 'deleted-overdue',
         scheduledDate: DateTime(2026, 3, 1),
         deletedAt: DateTime(2026, 3, 2),
@@ -228,8 +228,8 @@ void main() {
     });
 
     test('orders results by scheduledDate ascending', () async {
-      await repository.save(buildReminder(id: 'b', scheduledDate: DateTime(2026, 3, 5)));
-      await repository.save(buildReminder(id: 'a', scheduledDate: DateTime(2026, 3, 1)));
+      await repository.save(buildTask(id: 'b', scheduledDate: DateTime(2026, 3, 5)));
+      await repository.save(buildTask(id: 'a', scheduledDate: DateTime(2026, 3, 1)));
 
       final pending = await repository.getPending(DateTime(2026, 3, 10));
 
@@ -239,7 +239,7 @@ void main() {
 
   group('delete', () {
     test('hard-deletes the row', () async {
-      await repository.save(buildReminder(id: 'r1', scheduledDate: DateTime(2026, 3, 4)));
+      await repository.save(buildTask(id: 'r1', scheduledDate: DateTime(2026, 3, 4)));
       await repository.delete('r1');
 
       expect(await repository.getById('r1'), isNull);

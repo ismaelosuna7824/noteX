@@ -11,7 +11,7 @@ import '../../domain/entities/time_entry.dart' as domain_time;
 import '../../domain/entities/markdown_file.dart' as domain_md;
 import '../../domain/entities/markdown_project.dart' as domain_mdp;
 import '../../domain/entities/note_project.dart' as domain_np;
-import '../../domain/entities/reminder.dart' as domain_reminder;
+import '../../domain/entities/task.dart' as domain_task;
 import '../../domain/value_objects/sync_status.dart';
 import 'task_status_migration.dart';
 
@@ -159,9 +159,9 @@ class NoteProjectEntries extends Table {
   String get tableName => 'note_projects';
 }
 
-/// Drift table for reminders.
-@DataClassName('ReminderEntry')
-class ReminderEntries extends Table {
+/// Drift table for tasks.
+@DataClassName('TaskEntry')
+class TaskEntries extends Table {
   TextColumn get id => text()();
   TextColumn get title => text().withDefault(const Constant(''))();
   DateTimeColumn get scheduledDate => dateTime()();
@@ -176,8 +176,8 @@ class ReminderEntries extends Table {
       text().withDefault(const Constant('localOnly'))();
   TextColumn get userId => text().nullable()();
 
-  // ── v18: task-tracker columns (schema only in this phase; Reminder→Task
-  // rename and status-as-source-of-truth wiring land in later phases). ──
+  // ── v18: task-tracker columns (status-as-source-of-truth wiring lands
+  // in a later phase). ──
   TextColumn get status => text().withDefault(const Constant('todo'))();
   DateTimeColumn get statusChangedAt => dateTime().nullable()();
   // Local only — never serialized to Supabase. See task_status_migration.dart
@@ -196,6 +196,11 @@ class ReminderEntries extends Table {
   @override
   Set<Column> get primaryKey => {id};
 
+  // Deliberately NOT renamed to 'tasks'. Renaming the physical table would
+  // require a distributed migration against production Supabase rows still
+  // written by older shipped clients that only know the `reminders` table —
+  // see design D4. Only the Dart symbol (`ReminderEntries` → `TaskEntries`)
+  // changes; the wire format does not.
   @override
   String get tableName => 'reminders';
 }
@@ -243,7 +248,7 @@ class SyncMetadataEntries extends Table {
   MarkdownFileEntries,
   MarkdownProjectEntries,
   NoteProjectEntries,
-  ReminderEntries,
+  TaskEntries,
   AppMetadataEntries,
 ])
 class AppDatabase extends _$AppDatabase {
@@ -328,7 +333,10 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(noteEntries, noteEntries.projectId);
       }
       if (from < 9) {
-        await m.createTable(reminderEntries);
+        // Historical line: acts on the same physical `reminders` table under
+        // its current Dart symbol, `taskEntries` (renamed from
+        // `reminderEntries` in C3 — see design D4). Behavior unchanged.
+        await m.createTable(taskEntries);
       }
       if (from < 10) {
         Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
@@ -413,24 +421,20 @@ class AppDatabase extends _$AppDatabase {
           }
         }
 
-        // Written against the pre-rename symbol `reminderEntries` — the
-        // schema lands here (C2), the Reminder→Task rename lands separately
-        // (C3), so this migration cannot hide a rename bug.
-        await safeAddColumn(reminderEntries, reminderEntries.status);
-        await safeAddColumn(reminderEntries, reminderEntries.statusChangedAt);
-        await safeAddColumn(
-            reminderEntries, reminderEntries.statusPendingPush);
-        await safeAddColumn(reminderEntries, reminderEntries.description);
-        await safeAddColumn(reminderEntries, reminderEntries.blockedReason);
-        await safeAddColumn(reminderEntries, reminderEntries.noteId);
-        await safeAddColumn(
-            reminderEntries, reminderEntries.externalProvider);
-        await safeAddColumn(reminderEntries, reminderEntries.externalId);
-        await safeAddColumn(reminderEntries, reminderEntries.externalUrl);
-        await safeAddColumn(
-            reminderEntries, reminderEntries.externalCachedTitle);
-        await safeAddColumn(
-            reminderEntries, reminderEntries.externalLastSyncedAt);
+        // Originally written against the pre-rename symbol `reminderEntries`
+        // in C2; renamed to `taskEntries` here in C3 (see design D4) —
+        // symbol only, the underlying `reminders` table is unchanged.
+        await safeAddColumn(taskEntries, taskEntries.status);
+        await safeAddColumn(taskEntries, taskEntries.statusChangedAt);
+        await safeAddColumn(taskEntries, taskEntries.statusPendingPush);
+        await safeAddColumn(taskEntries, taskEntries.description);
+        await safeAddColumn(taskEntries, taskEntries.blockedReason);
+        await safeAddColumn(taskEntries, taskEntries.noteId);
+        await safeAddColumn(taskEntries, taskEntries.externalProvider);
+        await safeAddColumn(taskEntries, taskEntries.externalId);
+        await safeAddColumn(taskEntries, taskEntries.externalUrl);
+        await safeAddColumn(taskEntries, taskEntries.externalCachedTitle);
+        await safeAddColumn(taskEntries, taskEntries.externalLastSyncedAt);
 
         // Schema only, unused until slice 3.
         await safeAddColumn(timeEntries, timeEntries.taskId);
@@ -469,7 +473,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(markdownFileEntries).go();
       await delete(markdownProjectEntries).go();
       await delete(noteProjectEntries).go();
-      await delete(reminderEntries).go();
+      await delete(taskEntries).go();
       await delete(syncMetadataEntries).go();
     });
   }
@@ -690,10 +694,10 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  // ── Reminders ──────────────────────────────────────────────────────────
+  // ── Tasks ─────────────────────────────────────────────────────────────
 
-  static domain_reminder.Reminder reminderToDomain(ReminderEntry row) {
-    return domain_reminder.Reminder(
+  static domain_task.Task taskToDomain(TaskEntry row) {
+    return domain_task.Task(
       id: row.id,
       title: row.title,
       scheduledDate: row.scheduledDate,
@@ -708,20 +712,19 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  static ReminderEntriesCompanion reminderToCompanion(
-      domain_reminder.Reminder r) {
-    return ReminderEntriesCompanion(
-      id: Value(r.id),
-      title: Value(r.title),
-      scheduledDate: Value(r.scheduledDate),
-      isCompleted: Value(r.isCompleted),
-      completedAt: Value(r.completedAt),
-      createdAt: Value(r.createdAt),
-      updatedAt: Value(r.updatedAt),
-      version: Value(r.version),
-      deletedAt: Value(r.deletedAt),
-      syncStatus: Value(r.syncStatus.name),
-      userId: Value(r.userId),
+  static TaskEntriesCompanion taskToCompanion(domain_task.Task t) {
+    return TaskEntriesCompanion(
+      id: Value(t.id),
+      title: Value(t.title),
+      scheduledDate: Value(t.scheduledDate),
+      isCompleted: Value(t.isCompleted),
+      completedAt: Value(t.completedAt),
+      createdAt: Value(t.createdAt),
+      updatedAt: Value(t.updatedAt),
+      version: Value(t.version),
+      deletedAt: Value(t.deletedAt),
+      syncStatus: Value(t.syncStatus.name),
+      userId: Value(t.userId),
     );
   }
 }

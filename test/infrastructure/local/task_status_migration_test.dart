@@ -22,8 +22,8 @@ void main() {
     String syncStatus = 'localOnly',
     String? status,
   }) async {
-    await db.into(db.reminderEntries).insert(
-          ReminderEntriesCompanion.insert(
+    await db.into(db.taskEntries).insert(
+          TaskEntriesCompanion.insert(
             id: id,
             scheduledDate: DateTime(2026, 1, 1),
             isCompleted: Value(isCompleted),
@@ -35,8 +35,8 @@ void main() {
         );
   }
 
-  Future<ReminderEntry> fetch(String id) async {
-    return (db.select(db.reminderEntries)..where((t) => t.id.equals(id)))
+  Future<TaskEntry> fetch(String id) async {
+    return (db.select(db.taskEntries)..where((t) => t.id.equals(id)))
         .getSingle();
   }
 

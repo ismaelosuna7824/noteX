@@ -10,7 +10,7 @@ import 'domain/repositories/time_entry_repository.dart';
 import 'domain/repositories/markdown_file_repository.dart';
 import 'domain/repositories/markdown_project_repository.dart';
 import 'domain/repositories/note_project_repository.dart';
-import 'domain/repositories/reminder_repository.dart';
+import 'domain/repositories/task_repository.dart';
 import 'domain/services/sync_service.dart';
 import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
@@ -25,7 +25,7 @@ import 'infrastructure/local/drift_time_entry_repository.dart';
 import 'infrastructure/local/drift_markdown_file_repository.dart';
 import 'infrastructure/local/drift_markdown_project_repository.dart';
 import 'infrastructure/local/drift_note_project_repository.dart';
-import 'infrastructure/local/drift_reminder_repository.dart';
+import 'infrastructure/local/drift_task_repository.dart';
 import 'infrastructure/auth/supabase_auth_adapter.dart';
 import 'infrastructure/supabase/supabase_sync_adapter.dart';
 import 'infrastructure/network/connectivity_adapter.dart';
@@ -65,10 +65,10 @@ import 'application/use_cases/note/rename_note_project_use_case.dart';
 import 'application/use_cases/note/get_deleted_notes_use_case.dart';
 import 'application/use_cases/note/restore_note_use_case.dart';
 import 'application/use_cases/note/permanent_delete_note_use_case.dart';
-import 'application/use_cases/reminder/create_reminder_use_case.dart';
-import 'application/use_cases/reminder/get_reminders_use_case.dart';
-import 'application/use_cases/reminder/complete_reminder_use_case.dart';
-import 'application/use_cases/reminder/delete_reminder_use_case.dart';
+import 'application/use_cases/task/create_task_use_case.dart';
+import 'application/use_cases/task/get_tasks_use_case.dart';
+import 'application/use_cases/task/complete_task_use_case.dart';
+import 'application/use_cases/task/delete_task_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/use_cases/cleanup_empty_notes_use_case.dart';
 import 'application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
@@ -144,9 +144,9 @@ Future<void> setupDependencies() async {
     DriftNoteProjectRepository(database),
   );
 
-  // Infrastructure - Reminder Repository
-  getIt.registerSingleton<ReminderRepository>(
-    DriftReminderRepository(database),
+  // Infrastructure - Task Repository
+  getIt.registerSingleton<TaskRepository>(
+    DriftTaskRepository(database),
   );
 
   // Infrastructure - Sync Service (Supabase adapter)
@@ -160,7 +160,7 @@ Future<void> setupDependencies() async {
       mdFileRepo: getIt<MarkdownFileRepository>(),
       mdProjectRepo: getIt<MarkdownProjectRepository>(),
       noteProjectRepo: getIt<NoteProjectRepository>(),
-      reminderRepo: getIt<ReminderRepository>(),
+      taskRepo: getIt<TaskRepository>(),
     ),
   );
 
@@ -315,19 +315,19 @@ Future<void> setupDependencies() async {
     () => PermanentDeleteNoteUseCase(getIt<NoteRepository>()),
   );
 
-  // Application - Reminder Use Cases
-  getIt.registerFactory<CreateReminderUseCase>(
-    () => CreateReminderUseCase(getIt<ReminderRepository>()),
+  // Application - Task Use Cases
+  getIt.registerFactory<CreateTaskUseCase>(
+    () => CreateTaskUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<GetRemindersUseCase>(
-    () => GetRemindersUseCase(getIt<ReminderRepository>()),
+  getIt.registerFactory<GetTasksUseCase>(
+    () => GetTasksUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<CompleteReminderUseCase>(
-    () => CompleteReminderUseCase(getIt<ReminderRepository>()),
+  getIt.registerFactory<CompleteTaskUseCase>(
+    () => CompleteTaskUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<DeleteReminderUseCase>(
-    () => DeleteReminderUseCase(
-      getIt<ReminderRepository>(),
+  getIt.registerFactory<DeleteTaskUseCase>(
+    () => DeleteTaskUseCase(
+      getIt<TaskRepository>(),
       getIt<SyncEngine>(),
     ),
   );
@@ -418,10 +418,10 @@ Future<void> setupDependencies() async {
   // ReminderState
   getIt.registerSingleton<ReminderState>(
     ReminderState(
-      createReminder: getIt<CreateReminderUseCase>(),
-      getReminders: getIt<GetRemindersUseCase>(),
-      completeReminder: getIt<CompleteReminderUseCase>(),
-      deleteReminder: getIt<DeleteReminderUseCase>(),
+      createReminder: getIt<CreateTaskUseCase>(),
+      getReminders: getIt<GetTasksUseCase>(),
+      completeReminder: getIt<CompleteTaskUseCase>(),
+      deleteReminder: getIt<DeleteTaskUseCase>(),
     ),
   );
 }

@@ -1,37 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
-import '../../domain/entities/reminder.dart';
-import '../../application/use_cases/reminder/create_reminder_use_case.dart';
-import '../../application/use_cases/reminder/get_reminders_use_case.dart';
-import '../../application/use_cases/reminder/complete_reminder_use_case.dart';
-import '../../application/use_cases/reminder/delete_reminder_use_case.dart';
+import '../../domain/entities/task.dart';
+import '../../application/use_cases/task/create_task_use_case.dart';
+import '../../application/use_cases/task/get_tasks_use_case.dart';
+import '../../application/use_cases/task/complete_task_use_case.dart';
+import '../../application/use_cases/task/delete_task_use_case.dart';
 
 /// Presentation state for the Reminder feature.
 ///
 /// Manages all reminders and the pending-today subset used by the Home card.
 class ReminderState extends ChangeNotifier {
-  final CreateReminderUseCase _createReminder;
-  final GetRemindersUseCase _getReminders;
-  final CompleteReminderUseCase _completeReminder;
-  final DeleteReminderUseCase _deleteReminder;
+  final CreateTaskUseCase _createReminder;
+  final GetTasksUseCase _getReminders;
+  final CompleteTaskUseCase _completeReminder;
+  final DeleteTaskUseCase _deleteReminder;
 
-  List<Reminder> _reminders = [];
-  List<Reminder> _pendingToday = [];
+  List<Task> _reminders = [];
+  List<Task> _pendingToday = [];
 
   ReminderState({
-    required CreateReminderUseCase createReminder,
-    required GetRemindersUseCase getReminders,
-    required CompleteReminderUseCase completeReminder,
-    required DeleteReminderUseCase deleteReminder,
+    required CreateTaskUseCase createReminder,
+    required GetTasksUseCase getReminders,
+    required CompleteTaskUseCase completeReminder,
+    required DeleteTaskUseCase deleteReminder,
   })  : _createReminder = createReminder,
         _getReminders = getReminders,
         _completeReminder = completeReminder,
         _deleteReminder = deleteReminder;
 
   // Getters
-  List<Reminder> get reminders => _reminders;
-  List<Reminder> get pendingToday => _pendingToday;
+  List<Task> get reminders => _reminders;
+  List<Task> get pendingToday => _pendingToday;
   bool get hasPendingToday => _pendingToday.isNotEmpty;
 
   /// Load all reminders and the pending-today list.
@@ -49,7 +49,7 @@ class ReminderState extends ChangeNotifier {
   }
 
   /// Create a new reminder with a title and scheduled date.
-  Future<Reminder> createReminder({
+  Future<Task> createReminder({
     required String title,
     required DateTime scheduledDate,
   }) async {

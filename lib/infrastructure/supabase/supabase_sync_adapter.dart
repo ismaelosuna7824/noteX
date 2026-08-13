@@ -7,14 +7,14 @@ import '../../domain/entities/time_entry.dart';
 import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
 import '../../domain/entities/note_project.dart';
-import '../../domain/entities/reminder.dart';
+import '../../domain/entities/task.dart';
 import '../../domain/repositories/note_repository.dart';
 import '../../domain/repositories/project_repository.dart';
 import '../../domain/repositories/time_entry_repository.dart';
 import '../../domain/repositories/markdown_file_repository.dart';
 import '../../domain/repositories/markdown_project_repository.dart';
 import '../../domain/repositories/note_project_repository.dart';
-import '../../domain/repositories/reminder_repository.dart';
+import '../../domain/repositories/task_repository.dart';
 import '../../domain/services/sync_service.dart';
 import '../../domain/value_objects/sync_result.dart';
 import '../../domain/value_objects/sync_status.dart';
@@ -33,7 +33,7 @@ class SupabaseSyncAdapter implements SyncService {
   final MarkdownFileRepository _mdFileRepo;
   final MarkdownProjectRepository _mdProjectRepo;
   final NoteProjectRepository _noteProjectRepo;
-  final ReminderRepository _reminderRepo;
+  final TaskRepository _taskRepo;
 
   bool _isSyncing = false;
 
@@ -46,7 +46,7 @@ class SupabaseSyncAdapter implements SyncService {
     required MarkdownFileRepository mdFileRepo,
     required MarkdownProjectRepository mdProjectRepo,
     required NoteProjectRepository noteProjectRepo,
-    required ReminderRepository reminderRepo,
+    required TaskRepository taskRepo,
   })  : _supabase = supabase,
         _db = db,
         _noteRepo = noteRepo,
@@ -55,7 +55,7 @@ class SupabaseSyncAdapter implements SyncService {
         _mdFileRepo = mdFileRepo,
         _mdProjectRepo = mdProjectRepo,
         _noteProjectRepo = noteProjectRepo,
-        _reminderRepo = reminderRepo;
+        _taskRepo = taskRepo;
 
   @override
   bool get isSyncing => _isSyncing;
@@ -176,20 +176,20 @@ class SupabaseSyncAdapter implements SyncService {
         }
       }
 
-      // Push pending reminders
-      final pendingReminders = [
-        ...await _reminderRepo.getBySyncStatus(SyncStatus.pendingSync),
-        ...await _reminderRepo.getBySyncStatus(SyncStatus.localOnly)
+      // Push pending tasks
+      final pendingTasks = [
+        ...await _taskRepo.getBySyncStatus(SyncStatus.pendingSync),
+        ...await _taskRepo.getBySyncStatus(SyncStatus.localOnly)
       ];
-      for (final reminder in pendingReminders) {
-        final owned = reminder.copyWith(userId: userId);
+      for (final task in pendingTasks) {
+        final owned = task.copyWith(userId: userId);
         try {
-          await _pushReminder(owned);
-          await _reminderRepo.save(owned.markSynced());
+          await _pushTask(owned);
+          await _taskRepo.save(owned.markSynced());
           pushed++;
         } catch (e) {
-          print('====== ERROR PUSHING REMINDER: $e ======');
-          errors.add('Reminder ${reminder.id}: $e');
+          print('====== ERROR PUSHING TASK: $e ======');
+          errors.add('Task ${task.id}: $e');
         }
       }
 
@@ -233,8 +233,8 @@ class SupabaseSyncAdapter implements SyncService {
     await _supabase.from('note_projects').upsert(data, onConflict: 'id');
   }
 
-  Future<void> _pushReminder(Reminder reminder) async {
-    final data = _reminderToMap(reminder);
+  Future<void> _pushTask(Task task) async {
+    final data = _taskToMap(task);
     await _supabase.from('reminders').upsert(data, onConflict: 'id');
   }
 
@@ -314,14 +314,14 @@ class SupabaseSyncAdapter implements SyncService {
         }
       }
 
-      // Pull reminders
-      final remindersData = await _fetchTable('reminders', since);
-      for (final row in remindersData) {
+      // Pull tasks
+      final tasksData = await _fetchTable('reminders', since);
+      for (final row in tasksData) {
         try {
-          final result = await _mergeReminder(row);
+          final result = await _mergeTask(row);
           if (result) pulled++;
         } catch (e) {
-          errors.add('Pull reminder: $e');
+          errors.add('Pull task: $e');
         }
       }
 
@@ -712,23 +712,23 @@ class SupabaseSyncAdapter implements SyncService {
     return false;
   }
 
-  // ── Reminders Serialization ─────────────────────────────────────────
+  // ── Task Serialization ────────────────────────────────────────────
 
-  Map<String, dynamic> _reminderToMap(Reminder r) => {
-        'id': r.id,
-        'user_id': r.userId,
-        'title': r.title,
-        'scheduled_date': r.scheduledDate.toUtc().toIso8601String(),
-        'is_completed': r.isCompleted,
-        'completed_at': r.completedAt?.toUtc().toIso8601String(),
-        'created_at': r.createdAt.toUtc().toIso8601String(),
-        'updated_at': r.updatedAt.toUtc().toIso8601String(),
-        'deleted_at': r.deletedAt?.toUtc().toIso8601String(),
-        'version': r.version,
+  Map<String, dynamic> _taskToMap(Task t) => {
+        'id': t.id,
+        'user_id': t.userId,
+        'title': t.title,
+        'scheduled_date': t.scheduledDate.toUtc().toIso8601String(),
+        'is_completed': t.isCompleted,
+        'completed_at': t.completedAt?.toUtc().toIso8601String(),
+        'created_at': t.createdAt.toUtc().toIso8601String(),
+        'updated_at': t.updatedAt.toUtc().toIso8601String(),
+        'deleted_at': t.deletedAt?.toUtc().toIso8601String(),
+        'version': t.version,
         'sync_status': 'synced',
       };
 
-  Reminder _mapToReminder(Map<String, dynamic> m) => Reminder(
+  Task _mapToTask(Map<String, dynamic> m) => Task(
         id: m['id'] as String,
         title: m['title'] as String? ?? '',
         scheduledDate: DateTime.parse(m['scheduled_date'] as String),
@@ -746,23 +746,23 @@ class SupabaseSyncAdapter implements SyncService {
         userId: m['user_id'] as String?,
       );
 
-  // ── Reminder Merge Logic ────────────────────────────────────────────
+  // ── Task Merge Logic ──────────────────────────────────────────────
 
-  Future<bool> _mergeReminder(Map<String, dynamic> remoteData) async {
-    final remote = _mapToReminder(remoteData);
-    final local = await _reminderRepo.getById(remote.id);
+  Future<bool> _mergeTask(Map<String, dynamic> remoteData) async {
+    final remote = _mapToTask(remoteData);
+    final local = await _taskRepo.getById(remote.id);
 
     if (local == null) {
-      await _reminderRepo.save(remote.markSynced());
+      await _taskRepo.save(remote.markSynced());
       return true;
     }
 
     if (remote.version > local.version) {
-      await _reminderRepo.save(remote.markSynced());
+      await _taskRepo.save(remote.markSynced());
       return true;
     } else if (remote.version == local.version &&
         remote.updatedAt.isAfter(local.updatedAt)) {
-      await _reminderRepo.save(remote.markSynced());
+      await _taskRepo.save(remote.markSynced());
       return true;
     }
     return false;
