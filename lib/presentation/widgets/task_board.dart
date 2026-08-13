@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
+import 'package:intl/intl.dart';
 
 import '../../application/use_cases/task/resolve_task_note_link_use_case.dart';
 import '../../application/use_cases/timer/get_time_entries_use_case.dart';
@@ -637,6 +639,14 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   // without waiting for a full task reload.
   late String? _projectId;
 
+  // Local mirror of the task's status, updated as the user changes it via
+  // the sidebar status control within this dialog session (mirrors the
+  // noteIds/_projectId pattern above). Never written directly — every
+  // change flows through [_changeStatus] -> [TaskState.transitionTask] ->
+  // [TransitionTaskStatusUseCase] (design D3/D6, the sole producer of
+  // transition writes), exactly like the board's drag gesture.
+  late TaskStatus _status;
+
   // Every TimeEntry ever linked to this task (running or stopped),
   // powering "total tracked time" — the settled decision that replaces a
   // pause/resume affordance this app's data model doesn't support (each
@@ -652,6 +662,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _description = widget.task.description;
     _noteIds = List<String>.from(widget.task.noteIds);
     _projectId = widget.task.projectId;
+    _status = widget.task.status;
     unawaited(_loadLinkedNotes());
     unawaited(_loadTimeEntries());
   }
@@ -689,8 +700,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     final title = _titleController.text.trim();
     // blockedReason is rendered — and therefore only ever edited — while
     // status == blocked (design D3: retained but hidden otherwise, never
-    // destroyed by an edit to an unrelated field).
-    final isBlocked = widget.task.status == TaskStatus.blocked;
+    // destroyed by an edit to an unrelated field). Uses the LOCAL _status,
+    // not widget.task.status — the sidebar status control can change it
+    // within this same dialog session, before Save is pressed.
+    final isBlocked = _status == TaskStatus.blocked;
     if (isBlocked) {
       final reason = _blockedReasonController.text.trim();
       await widget.taskState.updateTask(
@@ -765,6 +778,26 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   Future<void> _assignProject(String? projectId) async {
     setState(() => _projectId = projectId);
     await widget.taskState.setTaskProject(widget.task.id, projectId);
+  }
+
+  /// Changes this task's status from the sidebar control — the one
+  /// deliberate new behavior this dialog gains (previously status only
+  /// changed by dragging a card between board columns). Always through
+  /// [TaskState.transitionTask], which delegates to
+  /// [TransitionTaskStatusUseCase] (design D3/D6, the sole producer of
+  /// transition writes) — never a direct status write. Reverts the local
+  /// display if the transition failed (e.g. the task was deleted
+  /// elsewhere) so the control never shows a status that was not actually
+  /// persisted.
+  Future<void> _changeStatus(TaskStatus next) async {
+    if (next == _status) return;
+    final previous = _status;
+    setState(() => _status = next);
+    final result = await widget.taskState.transitionTask(widget.task.id, next);
+    if (!mounted) return;
+    if (result == null) {
+      setState(() => _status = previous);
+    }
   }
 
   /// Opens the note picker and appends the chosen note to this task's
@@ -1062,8 +1095,14 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           Duration.zero,
           (Duration acc, e) => acc + e.elapsed,
         );
-        return Row(
-          mainAxisSize: MainAxisSize.min,
+        // Wrap, not Row: the sidebar's Details panel column is much
+        // narrower than the old single-column dialog was, so the button
+        // and the total label must be free to fall onto their own line
+        // instead of forcing a `RenderFlex overflow`.
+        return Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 8,
+          runSpacing: 4,
           children: [
             TextButton.icon(
               onPressed: isRunningHere ? _stopTimer : _startTimer,
@@ -1073,7 +1112,6 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
               ),
               label: Text(isRunningHere ? 'Stop' : 'Start timer'),
             ),
-            const SizedBox(width: 8),
             Text(
               'Total: ${_formatCardElapsed(total)}',
               style: TextStyle(
@@ -1087,42 +1125,17 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// Task-identity section: title, project, the timer control (lifted out
-  /// of the footer — it acts on the TASK, not the dialog, settled
-  /// decision), and — only while blocked — the blocked-reason editor.
-  Widget _buildTaskSection(bool isDark, bool isBlocked) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _sectionHeader('Task', isDark),
-        TextField(
-          controller: _titleController,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-          decoration: InputDecoration(
-            labelText: 'Title',
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildProjectSelector(isDark),
-        const SizedBox(height: 8),
-        _buildTimerControl(isDark),
-        if (isBlocked) ...[
-          const SizedBox(height: 12),
-          TextField(
-            controller: _blockedReasonController,
-            decoration: InputDecoration(
-              labelText: 'Blocked reason',
-              hintText: 'What is this waiting on?',
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-          ),
-        ],
-      ],
+  /// The title field — large, prominent and multi-line (wraps instead of
+  /// scrolling horizontally), the first thing in the left content column.
+  Widget _buildTitleField() {
+    return TextField(
+      controller: _titleController,
+      maxLines: null,
+      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 22),
+      decoration: InputDecoration(
+        labelText: 'Title',
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      ),
     );
   }
 
@@ -1141,57 +1154,315 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// Description section — the Markdown editor. The dialog's own total
-  /// height (see `build`) is sized generously enough that this Expanded
-  /// slot naturally lands well above `_kMinEditorHeight`, giving the
-  /// editor a sensible minimum without fighting Expanded's own tight
+  /// Description section — the Markdown editor, given real height. When
+  /// [height] is omitted (the side-by-side layout), the editor fills the
+  /// remaining space of its ancestor `Expanded` — the dialog's own total
+  /// height is sized generously enough that this lands well above
+  /// `_kMinEditorHeight`, without fighting `Expanded`'s own tight
   /// constraint (a `ConstrainedBox(minHeight:...)` inside an `Expanded`
   /// cannot force extra space — it only produces a render overflow when
-  /// the leftover space is smaller than the minimum).
-  Widget _buildDescriptionSection(bool isDark) {
+  /// the leftover space is smaller than the minimum). When [height] is
+  /// given (the stacked layout, inside a `SingleChildScrollView` where
+  /// `Expanded` cannot be used — its incoming height is unbounded), the
+  /// editor gets that fixed height instead.
+  Widget _buildDescriptionSection(bool isDark, {double? height}) {
+    final editor = Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.grey.shade300,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: NoteMarkdownEditor(
+        initialContent: widget.task.description,
+        toolbar: EditorToolbarProfile.minimal,
+        onChanged: (value) => _description = value,
+      ),
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _sectionHeader('Description', isDark),
-        Expanded(
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(
-                color: isDark
-                    ? Colors.white.withValues(alpha: 0.15)
-                    : Colors.grey.shade300,
-              ),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: NoteMarkdownEditor(
-              initialContent: widget.task.description,
-              toolbar: EditorToolbarProfile.minimal,
-              onChanged: (value) => _description = value,
+        height != null ? SizedBox(height: height, child: editor) : Expanded(child: editor),
+      ],
+    );
+  }
+
+  /// The left content column: the things the user WRITES — title,
+  /// description, linked notes — in that order (reference issue-detail
+  /// layout). In the stacked layout ([stacked] = true, used inside a
+  /// `SingleChildScrollView`) the description gets a fixed height instead
+  /// of `Expanded`, since `Expanded` requires a bounded incoming height.
+  Widget _buildLeftColumn(bool isDark, {required bool stacked}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildTitleField(),
+        const SizedBox(height: 20),
+        stacked
+            ? _buildDescriptionSection(isDark, height: 260)
+            : Expanded(child: _buildDescriptionSection(isDark)),
+        const SizedBox(height: 20),
+        _buildNotesSection(isDark),
+      ],
+    );
+  }
+
+  /// A quiet label/value row for the sidebar's Details panel — a small
+  /// muted caption above its value, matching the reference layout's
+  /// "things you set" panel.
+  Widget _buildDetailRow(String label, Widget value, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white38 : Colors.grey.shade500,
             ),
           ),
+          const SizedBox(height: 4),
+          value,
+        ],
+      ),
+    );
+  }
+
+  /// The blocked-reason editor — kept as its own `TextField` (not wrapped
+  /// in [_buildDetailRow]'s caption) because its `labelText` already
+  /// announces "Blocked reason"; a second caption above it would be a
+  /// redundant label for the same field.
+  Widget _buildBlockedReasonField() {
+    return TextField(
+      controller: _blockedReasonController,
+      style: const TextStyle(fontSize: 13),
+      decoration: InputDecoration(
+        labelText: 'Blocked reason',
+        hintText: 'What is this waiting on?',
+        isDense: true,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  /// The Details panel: quiet label/value rows for the things the user
+  /// SETS rather than writes — Project, Scheduled date (or "Backlog" when
+  /// null — display-only, matching the flat list's own read-only
+  /// scheduling), Blocked reason (only while blocked — design D3's
+  /// display-scoping rule: the value stays in the data, only its ROW is
+  /// hidden otherwise), Time tracked (the timer control), and a Notes
+  /// count.
+  Widget _buildDetailsPanel(bool isDark) {
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final scheduledDate = widget.task.scheduledDate;
+    final scheduledLabel = scheduledDate == null
+        ? 'Backlog'
+        : DateFormat('MMM d, yyyy').format(scheduledDate);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildDetailRow('Project', _buildProjectSelector(isDark), isDark),
+        _buildDetailRow(
+          'Scheduled date',
+          Text(scheduledLabel, style: TextStyle(fontSize: 13, color: mutedColor)),
+          isDark,
+        ),
+        if (_status == TaskStatus.blocked)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: _buildBlockedReasonField(),
+          ),
+        _buildDetailRow('Time tracked', _buildTimerControl(isDark), isDark),
+        _buildDetailRow(
+          'Notes',
+          Text('${_noteIds.length}', style: TextStyle(fontSize: 13, color: mutedColor)),
+          isDark,
         ),
       ],
     );
   }
 
+  /// The status control — prominent, at the top of the sidebar (reference
+  /// layout). The one deliberate behavior addition this redesign makes:
+  /// status can now change from the dialog, not only by dragging a card
+  /// between board columns. Always through [_changeStatus] ->
+  /// [TaskState.transitionTask] -> [TransitionTaskStatusUseCase] (design
+  /// D3/D6) — never a direct status write. Uses the app's own accent
+  /// colour, not a new palette — the label text is always visible, so the
+  /// colour is a supplementary cue, never the sole signal.
+  Widget _buildStatusControl(bool isDark) {
+    final accent = widget.accentColor;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: isDark ? 0.16 : 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accent.withValues(alpha: 0.35)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<TaskStatus>(
+          value: _status,
+          isExpanded: true,
+          icon: Icon(Icons.expand_more_rounded, color: accent),
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: accent),
+          onChanged: (next) {
+            if (next != null) unawaited(_changeStatus(next));
+          },
+          items: [
+            for (final status in TaskBoard._columns)
+              DropdownMenuItem<TaskStatus>(
+                value: status,
+                child: Text(TaskBoard._columnLabels[status]!),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Created/Updated, in small muted text at the bottom of the sidebar —
+  /// display-only, matching the reference layout's own footer timestamps.
+  Widget _buildTimestamps(bool isDark) {
+    final mutedColor = isDark ? Colors.white24 : Colors.grey.shade400;
+    final format = DateFormat('MMM d, yyyy · HH:mm');
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Created ${format.format(widget.task.createdAt)}',
+          style: TextStyle(fontSize: 10.5, color: mutedColor),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Updated ${format.format(widget.task.updatedAt)}',
+          style: TextStyle(fontSize: 10.5, color: mutedColor),
+        ),
+      ],
+    );
+  }
+
+  /// The right sidebar column: the things the user SETS — the status
+  /// control at the top, the Details panel, then the timestamps at the
+  /// bottom (reference layout). No `Expanded`/`Spacer` here, deliberately
+  /// — this same column is reused unchanged in both the side-by-side
+  /// layout (bounded height, inside a Row's `Expanded`) and the stacked
+  /// layout (unbounded height, inside a `SingleChildScrollView`), and a
+  /// `Spacer` would throw under the unbounded one.
+  Widget _buildSidebar(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildStatusControl(isDark),
+        const SizedBox(height: 20),
+        _sectionHeader('Details', isDark),
+        _buildDetailsPanel(isDark),
+        const SizedBox(height: 12),
+        _buildTimestamps(isDark),
+      ],
+    );
+  }
+
+  /// The quiet heading strip above the two columns — a close affordance
+  /// mirroring the reference layout's header bar. Pops without saving,
+  /// same as the footer's Cancel — not a new behavior, just an additional
+  /// way to reach the same existing dismissal.
+  Widget _buildHeader(bool isDark) {
+    return Row(
+      children: [
+        Expanded(
+          child: Text(
+            'Task Details',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+              color: isDark ? Colors.white38 : Colors.grey.shade500,
+            ),
+          ),
+        ),
+        IconButton(
+          icon: const Icon(Icons.close_rounded, size: 20),
+          tooltip: 'Close',
+          constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+      ],
+    );
+  }
+
+  /// The two-column body, or its stacked fallback below
+  /// [_stackBreakpointWidth]: the sidebar renders below the content column
+  /// instead of squeezing beside it (a `RenderFlex overflow` on a narrow,
+  /// resizable desktop window is a real bug, not a test artifact).
+  Widget _buildBody(bool isDark, {required bool stacked}) {
+    if (stacked) {
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildLeftColumn(isDark, stacked: true),
+            const SizedBox(height: 28),
+            _buildSidebar(isDark),
+          ],
+        ),
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(flex: 2, child: _buildLeftColumn(isDark, stacked: false)),
+        const SizedBox(width: 28),
+        Expanded(child: _buildSidebar(isDark)),
+      ],
+    );
+  }
+
+  /// Comfortable two-column width (reference layout: ~980-1040 logical
+  /// px) — the ceiling the dialog grows to on a wide window.
+  static const double _dialogMaxWidth = 1000;
+
+  /// Ceiling for the dialog's own height.
+  static const double _dialogHeight = 680;
+
+  /// Below this width the sidebar stacks under the content column instead
+  /// of squeezing beside it.
+  static const double _stackBreakpointWidth = 720;
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isBlocked = widget.task.status == TaskStatus.blocked;
+    final mediaSize = MediaQuery.of(context).size;
+
+    // Computed from MediaQuery (not a LayoutBuilder inside the dialog)
+    // so the SAME value both sizes the dialog's SizedBox and decides
+    // whether to stack — the two can never disagree. 80/96 mirror
+    // AlertDialog's own default `insetPadding` (40 horizontal, and a
+    // smaller vertical margin here since height already has its own
+    // scroll/shrink fallback below).
+    final availableWidth = mediaSize.width - 80;
+    final dialogWidth = math.max(280.0, math.min(availableWidth, _dialogMaxWidth));
+    final availableHeight = mediaSize.height - 96;
+    final dialogHeight = math.max(320.0, math.min(availableHeight, _dialogHeight));
+    final stacked = dialogWidth < _stackBreakpointWidth;
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       content: SizedBox(
-        width: 560,
-        height: 640,
+        width: dialogWidth,
+        height: dialogHeight,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildTaskSection(isDark, isBlocked),
-            const SizedBox(height: 24),
-            _buildNotesSection(isDark),
-            const SizedBox(height: 24),
-            Expanded(child: _buildDescriptionSection(isDark)),
+            _buildHeader(isDark),
+            const SizedBox(height: 16),
+            Expanded(child: _buildBody(isDark, stacked: stacked)),
           ],
         ),
       ),

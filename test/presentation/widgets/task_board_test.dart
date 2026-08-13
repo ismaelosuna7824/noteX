@@ -1213,4 +1213,185 @@ void main() {
       );
     });
   });
+
+  group('task detail dialog — two-column issue layout', () {
+    testWidgets(
+        'renders the left content column (title/description/notes) beside '
+        'a right sidebar (status/details/timestamps) on a wide window',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Spec doc',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Two column task').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester); // 1400x1200 physical size — a wide window.
+
+      await tester.tap(find.text('Two column task'));
+      await tester.pumpAndSettle();
+
+      // Left column content.
+      expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+      expect(find.text('DESCRIPTION'), findsOneWidget);
+      expect(find.text('NOTES · 1'), findsOneWidget);
+
+      // Right sidebar content — the status control, the Details panel's
+      // label/value rows, and the timestamps.
+      expect(
+        find.text('To Do'),
+        findsOneWidget,
+        reason: 'the status control must show the task\'s current status',
+      );
+      expect(find.text('DETAILS'), findsOneWidget);
+      expect(find.text('Project'), findsOneWidget);
+      expect(find.text('Scheduled date'), findsOneWidget);
+      // Scoped to the dialog itself — the board card behind it (for this
+      // same backlog task) also renders its own "Backlog" chip.
+      expect(
+        find.descendant(
+          of: find.byType(Dialog),
+          matching: find.text('Backlog'),
+        ),
+        findsOneWidget,
+        reason: 'the Details panel must show "Backlog" for a task with no '
+            'scheduledDate',
+      );
+      expect(find.text('Time tracked'), findsOneWidget);
+      expect(find.text('Notes'), findsOneWidget);
+      expect(find.textContaining('Created'), findsOneWidget);
+      expect(find.textContaining('Updated'), findsOneWidget);
+
+      // Geometrically side-by-side, not stacked: the title field (left
+      // column) sits to the left of the status control (sidebar).
+      final titleX = tester.getTopLeft(find.widgetWithText(TextField, 'Title')).dx;
+      final statusX = tester.getTopLeft(find.text('To Do')).dx;
+      expect(
+        titleX,
+        lessThan(statusX),
+        reason: 'on a wide window the sidebar must render beside the '
+            'content column, not below it',
+      );
+    });
+
+    testWidgets(
+        'stacks the sidebar below the content column below a width '
+        'threshold, without a RenderFlex overflow', (tester) async {
+      // A narrow desktop window — narrower than the dialog's comfortable
+      // two-column width. The dialog itself (not TaskBoard) must adapt: a
+      // fixed-width layout here would be the actual overflow bug the brief
+      // calls out.
+      tester.view.physicalSize = const Size(760, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await repository.save(Task.create(id: 'r1', title: 'Narrow window task'));
+      await taskState.initialize();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(splashFactory: NoSplash.splashFactory),
+          home: Scaffold(
+            body: AnimatedBuilder(
+              animation: Listenable.merge([taskState, timerState]),
+              builder: (context, _) => TaskBoard(
+                taskState: taskState,
+                themeState: themeState,
+                timerState: timerState,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Narrow window task'));
+      await tester.pumpAndSettle();
+
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'a narrow, resizable desktop window must not overflow — it '
+            'must stack instead of squeezing two columns',
+      );
+
+      // Stacked: the sidebar's status control renders below the content
+      // column's title field, not beside it.
+      final titleBottom =
+          tester.getBottomLeft(find.widgetWithText(TextField, 'Title')).dy;
+      final statusTop = tester.getTopLeft(find.text('To Do')).dy;
+      expect(
+        statusTop,
+        greaterThanOrEqualTo(titleBottom),
+        reason: 'below the width threshold, the sidebar must stack under '
+            'the content column',
+      );
+    });
+
+    testWidgets(
+        'changing status from the sidebar dropdown goes through '
+        'TransitionTaskStatusUseCase, never a direct status write',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Change my status'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Change my status'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('To Do'), findsOneWidget);
+
+      await tester.tap(find.byType(DropdownButton<TaskStatus>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Doing').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        transitionSpy.calls,
+        [('r1', TaskStatus.doing)],
+        reason: 'a status change from the dialog sidebar must flow through '
+            'the sole transition use case, exactly like the drag gesture '
+            'does',
+      );
+      final persisted = await repository.getById('r1');
+      expect(persisted!.status, TaskStatus.doing);
+
+      // The control itself reflects the new status.
+      expect(find.text('Doing'), findsOneWidget);
+      expect(find.text('To Do'), findsNothing);
+
+      // Triangulation: a second, DIFFERENT transition from the control
+      // (not just the one hardcoded path above) must also flow through
+      // the same use case, AND the Details panel must reactively show the
+      // Blocked reason row now that the local status is blocked — the
+      // display-scoping rule (design D3) applies to a dialog-driven
+      // transition exactly as it already does to a drag-driven one.
+      await tester.tap(find.byType(DropdownButton<TaskStatus>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Blocked').last);
+      await tester.pumpAndSettle();
+
+      expect(
+        transitionSpy.calls,
+        [('r1', TaskStatus.doing), ('r1', TaskStatus.blocked)],
+        reason: 'every distinct status change must go through the use '
+            'case, not just the first one',
+      );
+      final rePersisted = await repository.getById('r1');
+      expect(rePersisted!.status, TaskStatus.blocked);
+      expect(
+        find.widgetWithText(TextField, 'Blocked reason'),
+        findsOneWidget,
+        reason: 'the Blocked reason row must appear once status becomes '
+            'blocked from the dialog, not only from a drag',
+      );
+    });
+  });
 }
