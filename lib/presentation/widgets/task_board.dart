@@ -52,10 +52,14 @@ class TaskBoard extends StatelessWidget {
   /// dedicated buckets:
   /// * Blocked: [TaskState.blocked] (all blocked tasks — no day scoping;
   ///   nothing in the spec says a blocked task should ever roll off).
-  /// * Done: [TaskState.completedToday] (scheduled today, done — spec's
-  ///   "visible until end of day"), PLUS any done backlog task (no
-  ///   scheduledDate means no day to roll over from, so it stays visible
-  ///   rather than vanishing the moment it's marked done via drag).
+  /// * Done: [TaskState.completedToday] (completed today, regardless of
+  ///   when it was scheduled — spec's "visible until end of day"), PLUS any
+  ///   done backlog task (no scheduledDate means no day to roll over from,
+  ///   so it stays visible rather than vanishing the moment it's marked
+  ///   done via drag). `completedToday` is keyed on `completedAt`
+  ///   (repository doc), so a done backlog task can appear in both buckets
+  ///   the day it's completed — excluded from the first to avoid a
+  ///   duplicate card; the second is its permanent home.
   List<Task> _tasksFor(TaskStatus status) {
     switch (status) {
       case TaskStatus.blocked:
@@ -64,7 +68,10 @@ class TaskBoard extends StatelessWidget {
         final doneBacklog = taskState.reminders.where(
           (t) => t.status == TaskStatus.done && t.scheduledDate == null,
         );
-        return [...taskState.completedToday, ...doneBacklog];
+        final completedWithSchedule = taskState.completedToday.where(
+          (t) => t.scheduledDate != null,
+        );
+        return [...completedWithSchedule, ...doneBacklog];
       case TaskStatus.todo:
       case TaskStatus.doing:
         return taskState.reminders.where((t) => t.status == status).toList();

@@ -94,12 +94,15 @@ class DriftTaskRepository implements TaskRepository {
   Future<List<domain.Task>> getCompletedOn(DateTime day) async {
     final startOfDay = DateTime(day.year, day.month, day.day);
     final endOfDay = DateTime(day.year, day.month, day.day, 23, 59, 59);
+    // Keyed on completedAt, not scheduledDate — see the interface doc for
+    // why: a carried-over task (scheduled in the past) that gets completed
+    // today must show up today, not fall through every column.
     final rows = await (_db.select(_db.taskEntries)
           ..where(
             (t) =>
                 t.deletedAt.isNull() &
                 t.status.equals('done') &
-                t.scheduledDate.isBetweenValues(startOfDay, endOfDay),
+                t.completedAt.isBetweenValues(startOfDay, endOfDay),
           ))
         .get();
     return rows.map((r) => AppDatabase.taskToDomain(r)).toList();

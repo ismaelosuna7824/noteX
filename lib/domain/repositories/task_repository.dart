@@ -29,12 +29,19 @@ abstract class TaskRepository {
   /// Retrieve all non-deleted tasks with status `blocked`.
   Future<List<Task>> getBlocked();
 
-  /// Retrieve non-deleted, `done` tasks scheduled on [day].
+  /// Retrieve non-deleted, `done` tasks whose `completedAt` falls on [day].
   ///
   /// Deliberately separate from [getPending] — the home card's
   /// `hasPendingToday` badge must not count completed work. Powers "done
   /// stays visible until end of day" on the board's Done column: a task
-  /// stays visible for the day it was scheduled, then rolls off once that
+  /// stays visible for the day it was COMPLETED, then rolls off once that
   /// day is no longer [day].
+  ///
+  /// Keyed on `completedAt`, not `scheduledDate` — a task scheduled
+  /// yesterday, carried over via [getPending], and marked done today must
+  /// show up today, not on a day that has already passed. Keying on
+  /// `scheduledDate` would drop it from every board column the instant it
+  /// was completed (not `completedToday`, not the backlog union, not
+  /// todo/doing/blocked): it would simply vanish.
   Future<List<Task>> getCompletedOn(DateTime day);
 }

@@ -45,9 +45,11 @@ class TaskState extends ChangeNotifier {
   /// All non-deleted, `blocked` tasks — the board's Blocked column.
   List<Task> get blocked => _blocked;
 
-  /// `done` tasks scheduled today — the board's Done column. Separate from
+  /// `done` tasks completed today — the board's Done column. Separate from
   /// [reminders] so a done task rolls off the board the day after it was
-  /// scheduled, without being deleted (design's "visible until end of day").
+  /// COMPLETED (not the day it was scheduled — a carried-over task keyed on
+  /// `scheduledDate` would vanish the instant it was finished), without
+  /// being deleted (design's "visible until end of day").
   List<Task> get completedToday => _completedToday;
 
   /// Load all reminders and every board bucket.

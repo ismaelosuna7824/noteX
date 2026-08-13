@@ -327,8 +327,9 @@ void main() {
     });
   });
 
-  group('getCompletedOn — board Done column, "visible until end of day"', () {
-    test('includes a done task scheduled today', () async {
+  group('getCompletedOn — board Done column, "visible until end of day", '
+      'keyed on completedAt', () {
+    test('includes a done task completed today', () async {
       await repository.save(buildTask(
         id: 'done-today',
         scheduledDate: DateTime(2026, 3, 10, 9),
@@ -341,7 +342,7 @@ void main() {
       expect(completed.map((r) => r.id), ['done-today']);
     });
 
-    test('excludes a done task scheduled on a different day — gone after '
+    test('excludes a done task completed on a different day — gone after '
         'rollover', () async {
       await repository.save(buildTask(
         id: 'done-yesterday',
@@ -353,6 +354,28 @@ void main() {
       final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
 
       expect(completed, isEmpty);
+    });
+
+    test('a task scheduled yesterday, carried over, and completed today '
+        'appears today — not dropped by scheduledDate, not stranded on '
+        'yesterday (regression: the vanishing carry-over completion bug)',
+        () async {
+      // Carried over: scheduledDate is in the past, but the task is
+      // completed "today". Keying getCompletedOn on scheduledDate would
+      // drop this task from every board column the instant it's marked
+      // done — not completedToday (scheduled yesterday), not the backlog
+      // union (scheduledDate is non-null), not todo/doing (status is
+      // done), not blocked. It would simply vanish.
+      await repository.save(buildTask(
+        id: 'carried-over-done-today',
+        scheduledDate: DateTime(2026, 3, 9),
+        status: TaskStatus.done,
+        completedAt: DateTime(2026, 3, 10, 14),
+      ));
+
+      final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
+
+      expect(completed.map((r) => r.id), ['carried-over-done-today']);
     });
 
     test('excludes a not-yet-done task scheduled today', () async {
@@ -367,7 +390,7 @@ void main() {
       expect(completed, isEmpty);
     });
 
-    test('excludes a done backlog task (null scheduledDate)', () async {
+    test('excludes a done backlog task with no completedAt', () async {
       await repository.save(buildTask(
         id: 'done-backlog',
         scheduledDate: null,
@@ -379,11 +402,12 @@ void main() {
       expect(completed, isEmpty);
     });
 
-    test('excludes soft-deleted tasks even if done today', () async {
+    test('excludes soft-deleted tasks even if completed today', () async {
       await repository.save(buildTask(
         id: 'done-deleted',
         scheduledDate: DateTime(2026, 3, 10),
         status: TaskStatus.done,
+        completedAt: DateTime(2026, 3, 10),
         deletedAt: DateTime(2026, 3, 10),
       ));
 
