@@ -2480,7 +2480,7 @@ class _QuickShortcutsBar extends StatelessWidget {
     final items = [
       (Icons.calendar_month_rounded, 'Calendar', 3),
       (Icons.timer_rounded, 'Timer', 4),
-      (Icons.article_rounded, 'Markdown', 5),
+      // Markdown (index 5) intentionally omitted — hidden from the UI.
       (Icons.task_alt_rounded, 'Tasks', 7),
     ];
 

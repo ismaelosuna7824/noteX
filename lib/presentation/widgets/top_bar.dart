@@ -81,10 +81,17 @@ class _TopBarState extends State<TopBar>
     // Deliberately reads appState.notes, NOT filteredNotes: that getter also
     // applies the selected folder, which would silently scope a search that
     // presents itself as global.
+    //
+    // Markdown files are deliberately excluded: the Markdown section is
+    // hidden from the UI, so a search result that opened one would either
+    // dead-end (nothing to open it into) or silently bounce the user to
+    // Home via AppState.navigateToPage's fallback. The data and
+    // `_openHit`'s markdownFile branch are untouched — reversible by
+    // passing the real file list back in.
     _searchResults = UnifiedSearch.run(
       query: query,
       notes: widget.appState.notes,
-      files: GetIt.instance<MarkdownState>().files,
+      files: const [],
     );
     _showOverlay();
   }
