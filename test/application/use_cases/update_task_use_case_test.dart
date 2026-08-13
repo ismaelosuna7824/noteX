@@ -84,48 +84,21 @@ void main() {
     expect(result!.scheduledDate, isNull);
   });
 
-  test('sets noteId when passed a value', () async {
+  test('preserves noteIds — linking/unlinking is not this use case\'s '
+      'concern (see LinkNoteToTaskUseCase/UnlinkNoteFromTaskUseCase)',
+      () async {
     await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
       scheduledDate: DateTime(2026, 3, 4),
       createdAt: DateTime(2026, 1, 1),
       updatedAt: DateTime(2026, 1, 1),
-    ));
-
-    final result = await useCase.execute('r1', noteId: 'note-1');
-
-    expect(result!.noteId, 'note-1');
-  });
-
-  test('clears noteId when explicitly passed null', () async {
-    await repository.save(Task(
-      id: 'r1',
-      title: 'Buy milk',
-      scheduledDate: DateTime(2026, 3, 4),
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-      noteId: 'note-1',
-    ));
-
-    final result = await useCase.execute('r1', noteId: null);
-
-    expect(result!.noteId, isNull);
-  });
-
-  test('preserves noteId when omitted', () async {
-    await repository.save(Task(
-      id: 'r1',
-      title: 'Buy milk',
-      scheduledDate: DateTime(2026, 3, 4),
-      createdAt: DateTime(2026, 1, 1),
-      updatedAt: DateTime(2026, 1, 1),
-      noteId: 'note-1',
+      noteIds: const ['note-1'],
     ));
 
     final result = await useCase.execute('r1', title: 'Buy oat milk');
 
-    expect(result!.noteId, 'note-1');
+    expect(result!.noteIds, ['note-1']);
   });
 
   test('clears blockedReason only when explicitly passed null', () async {

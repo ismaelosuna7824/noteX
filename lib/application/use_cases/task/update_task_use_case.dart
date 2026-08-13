@@ -4,7 +4,13 @@ import '../../../domain/value_objects/sync_status.dart';
 
 /// Use case: update a task's user-editable fields.
 ///
-/// Covers title, description, scheduledDate, noteId and blockedReason.
+/// Covers title, description, scheduledDate and blockedReason. Note
+/// linking/unlinking is a separate concern — see [LinkNoteToTaskUseCase]
+/// and [UnlinkNoteFromTaskUseCase] (decision
+/// architecture/task-note-linking-model) — because appending/removing one
+/// id from a list is not "replace the field", the shape every other param
+/// here follows.
+///
 /// This is the only place `blockedReason` is deliberately cleared — see
 /// design D3. Must never touch `status`, and must never set
 /// `statusPendingPush`, so a title/description edit never emits the
@@ -22,7 +28,6 @@ class UpdateTaskUseCase {
     // pass `null` to explicitly send the task to the backlog. Distinguished
     // from "omitted" via the sentinel below — see design D3/D5.
     Object? scheduledDate = const _Unset(),
-    Object? noteId = const _Unset(),
     Object? blockedReason = const _Unset(),
   }) async {
     final existing = await _repository.getById(taskId);
@@ -38,7 +43,6 @@ class UpdateTaskUseCase {
       scheduledDate: scheduledDate is _Unset
           ? existing.scheduledDate
           : scheduledDate as DateTime?,
-      noteId: noteId is _Unset ? existing.noteId : noteId as String?,
       blockedReason: blockedReason is _Unset
           ? existing.blockedReason
           : blockedReason as String?,
