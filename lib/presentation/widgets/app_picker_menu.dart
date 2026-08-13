@@ -84,6 +84,9 @@ class AppPickerMenu<T> extends StatefulWidget {
     this.expand = false,
     this.borderRadius,
     this.semanticsLabel,
+    this.leadingOption,
+    this.leadingSelected = false,
+    this.footerAction,
   });
 
   /// The picker's current value — compared against each
@@ -119,12 +122,39 @@ class AppPickerMenu<T> extends StatefulWidget {
   final BorderRadius? borderRadius;
   final String? semanticsLabel;
 
+  /// An optional meta row rendered ABOVE [options], separated from them by
+  /// a divider (e.g. the timer's own project picker "All projects" row,
+  /// which widens a filter rather than choosing one of [options]).
+  ///
+  /// Its own check mark is driven by [leadingSelected], never by comparing
+  /// its value against [value] — the two are deliberately independent,
+  /// because a leading meta row commonly tracks a DIFFERENT piece of state
+  /// than the regular options do (e.g. a list-wide filter vs. the value the
+  /// next created item would use).
+  final AppPickerOption<T>? leadingOption;
+
+  /// Whether [leadingOption] currently shows a check mark. Ignored when
+  /// [leadingOption] is null.
+  final bool leadingSelected;
+
+  /// An optional action row rendered BELOW [options], separated from them
+  /// by a divider (e.g. "New Project…"). Never shows a check mark,
+  /// regardless of [value] — same rule [AppPickerOption.action] already
+  /// applies to an action embedded directly in [options].
+  final AppPickerOption<T>? footerAction;
+
   @override
   State<AppPickerMenu<T>> createState() => _AppPickerMenuState<T>();
 }
 
 class _AppPickerMenuState<T> extends State<AppPickerMenu<T>> {
   static const double _menuRadius = 14;
+
+  // Sentinel indices for [AppPickerMenu.leadingOption] and
+  // [AppPickerMenu.footerAction] — never collide with a real `options`
+  // index, which is always >= 0.
+  static const int _leadingIndex = -1;
+  static const int _footerIndex = -2;
 
   Future<void> _open() async {
     if (!widget.enabled) return;
@@ -157,6 +187,18 @@ class _AppPickerMenuState<T> extends State<AppPickerMenu<T>> {
           RoundedRectangleBorder(borderRadius: BorderRadius.circular(_menuRadius)),
       constraints: BoxConstraints(minWidth: widget.minWidth),
       items: [
+        if (widget.leadingOption != null) ...[
+          PopupMenuItem<int>(
+            value: _leadingIndex,
+            child: _AppPickerRow<T>(
+              option: widget.leadingOption!,
+              selected: widget.leadingSelected,
+              mutedColor: mutedColor,
+              accentColor: widget.accentColor,
+            ),
+          ),
+          const PopupMenuDivider(),
+        ],
         for (var i = 0; i < widget.options.length; i++)
           PopupMenuItem<int>(
             value: i,
@@ -168,13 +210,30 @@ class _AppPickerMenuState<T> extends State<AppPickerMenu<T>> {
               accentColor: widget.accentColor,
             ),
           ),
+        if (widget.footerAction != null) ...[
+          const PopupMenuDivider(),
+          PopupMenuItem<int>(
+            value: _footerIndex,
+            child: _AppPickerRow<T>(
+              option: widget.footerAction!,
+              selected: false,
+              mutedColor: mutedColor,
+              accentColor: widget.accentColor,
+            ),
+          ),
+        ],
       ],
     );
 
     if (selectedIndex != null) {
       final node = widget.focusNode;
       if (node != null) _suppressFocusReclaim(node);
-      widget.onSelected(widget.options[selectedIndex].value);
+      final T value = switch (selectedIndex) {
+        _leadingIndex => widget.leadingOption!.value,
+        _footerIndex => widget.footerAction!.value,
+        final i => widget.options[i].value,
+      };
+      widget.onSelected(value);
     }
   }
 

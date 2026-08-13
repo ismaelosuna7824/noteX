@@ -9,6 +9,9 @@ void main() {
     required ValueChanged<T> onSelected,
     FocusNode? focusNode,
     Widget? child,
+    AppPickerOption<T>? leadingOption,
+    bool leadingSelected = false,
+    AppPickerOption<T>? footerAction,
   }) {
     return MaterialApp(
       theme: ThemeData(splashFactory: NoSplash.splashFactory),
@@ -20,6 +23,9 @@ void main() {
           surfaceColor: const Color(0xFF1A1A2E),
           accentColor: const Color(0xFFFFD54F),
           focusNode: focusNode,
+          leadingOption: leadingOption,
+          leadingSelected: leadingSelected,
+          footerAction: footerAction,
           child: child ?? const Text('trigger'),
         ),
       ),
@@ -233,6 +239,153 @@ void main() {
 
       final size = tester.getSize(find.byType(InkWell).last);
       expect(size.height, greaterThanOrEqualTo(44));
+    });
+  });
+
+  group('AppPickerMenu — optional leading meta option and footer action '
+      '(extended for the timer project picker)', () {
+    testWidgets(
+        'a leading meta option renders above the regular options, and its '
+        'check mark is driven by leadingSelected — independent from value',
+        (tester) async {
+      await tester.pumpWidget(pumpPicker<String?>(
+        value: 'proj-1',
+        leadingOption: const AppPickerOption(
+          value: '__all__',
+          label: 'All projects',
+          icon: Icons.all_inclusive_rounded,
+        ),
+        leadingSelected: true,
+        options: const [
+          AppPickerOption(value: null, label: 'No Project'),
+          AppPickerOption(value: 'proj-1', label: 'Alpha'),
+        ],
+        onSelected: (_) {},
+      ));
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('All projects'), findsOneWidget);
+      expect(find.text('No Project'), findsOneWidget);
+      expect(find.text('Alpha'), findsOneWidget);
+      // Both the leading row (leadingSelected: true) AND the matching
+      // regular option (value == 'proj-1') show a check — proof the two
+      // are driven by independent state, exactly like the timer's own
+      // "All projects" (filter) vs "No Project"/project (draft) split.
+      expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
+    });
+
+    testWidgets(
+        'when leadingSelected is false, only a matching regular option '
+        'shows a check', (tester) async {
+      await tester.pumpWidget(pumpPicker<String?>(
+        value: 'proj-1',
+        leadingOption: const AppPickerOption(
+          value: '__all__',
+          label: 'All projects',
+          icon: Icons.all_inclusive_rounded,
+        ),
+        options: const [
+          AppPickerOption(value: 'proj-1', label: 'Alpha'),
+        ],
+        onSelected: (_) {},
+      ));
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    });
+
+    testWidgets('selecting the leading option calls onSelected with its own '
+        'value', (tester) async {
+      String? selected = 'unset';
+      await tester.pumpWidget(pumpPicker<String?>(
+        value: 'proj-1',
+        leadingOption: const AppPickerOption(
+          value: '__all__',
+          label: 'All projects',
+          icon: Icons.all_inclusive_rounded,
+        ),
+        options: const [
+          AppPickerOption(value: 'proj-1', label: 'Alpha'),
+        ],
+        onSelected: (value) => selected = value,
+      ));
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('All projects'));
+      await tester.pumpAndSettle();
+
+      expect(selected, '__all__');
+    });
+
+    testWidgets(
+        'a footer action renders below the regular options and never shows '
+        'a check, even when its value equals the current value',
+        (tester) async {
+      await tester.pumpWidget(pumpPicker<String>(
+        value: '__new__',
+        options: const [
+          AppPickerOption(value: 'a', label: 'Alpha'),
+        ],
+        footerAction: const AppPickerOption.action(
+          value: '__new__',
+          label: 'New Project',
+          icon: Icons.add_rounded,
+        ),
+        onSelected: (_) {},
+      ));
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New Project'), findsOneWidget);
+      expect(find.byIcon(Icons.check_rounded), findsNothing);
+    });
+
+    testWidgets('selecting the footer action calls onSelected with its own '
+        'value', (tester) async {
+      String? selected;
+      await tester.pumpWidget(pumpPicker<String>(
+        value: 'a',
+        options: const [
+          AppPickerOption(value: 'a', label: 'Alpha'),
+        ],
+        footerAction: const AppPickerOption.action(
+          value: '__new__',
+          label: 'New Project',
+          icon: Icons.add_rounded,
+        ),
+        onSelected: (value) => selected = value,
+      ));
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New Project'));
+      await tester.pumpAndSettle();
+
+      expect(selected, '__new__');
+    });
+
+    testWidgets(
+        'omitting leadingOption and footerAction renders exactly the same '
+        'as before — no divider or extra row appears', (tester) async {
+      await tester.pumpWidget(pumpPicker<String>(
+        value: 'a',
+        options: const [
+          AppPickerOption(value: 'a', label: 'Alpha'),
+          AppPickerOption(value: 'b', label: 'Beta'),
+        ],
+        onSelected: (_) {},
+      ));
+
+      await tester.tap(find.text('trigger'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PopupMenuDivider), findsNothing);
     });
   });
 }
