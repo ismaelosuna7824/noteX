@@ -51,6 +51,7 @@ import 'application/use_cases/timer/stop_timer_use_case.dart';
 import 'application/use_cases/timer/get_time_entries_use_case.dart';
 import 'application/use_cases/timer/delete_time_entry_use_case.dart';
 import 'application/use_cases/timer/update_time_entry_use_case.dart';
+import 'application/use_cases/timer/resolve_time_entry_task_use_case.dart';
 import 'application/use_cases/markdown/create_markdown_file_use_case.dart';
 import 'application/use_cases/markdown/update_markdown_file_use_case.dart';
 import 'application/use_cases/markdown/get_markdown_files_use_case.dart';
@@ -262,6 +263,9 @@ Future<void> setupDependencies() async {
   );
   getIt.registerFactory<UpdateTimeEntryUseCase>(
     () => UpdateTimeEntryUseCase(getIt<TimeEntryRepository>()),
+  );
+  getIt.registerFactory<ResolveTimeEntryTaskUseCase>(
+    () => ResolveTimeEntryTaskUseCase(getIt<TaskRepository>()),
   );
 
   // Application - Markdown Use Cases

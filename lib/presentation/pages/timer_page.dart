@@ -7,15 +7,18 @@ import '../../domain/services/project_breakdown.dart';
 import '../../domain/services/time_entry_grouping.dart';
 import '../widgets/time_entry_editor.dart';
 
+import '../../application/use_cases/timer/resolve_time_entry_task_use_case.dart';
 import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
 import '../state/app_state.dart';
+import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import '../widgets/glassmorphic_container.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/project_colors.dart';
+import '../widgets/task_board.dart' show showTaskDetailDialog;
 import '../widgets/timer_calendar_view.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1887,6 +1890,23 @@ class _EntryTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
+                // Open the task this entry was started from, if any — a
+                // distinct icon + tooltip (not colour alone) doubles as the
+                // "came from a task" indicator and the way to open it.
+                if (entry.taskId != null) ...[
+                  IconButton(
+                    icon: Icon(Icons.task_alt_outlined, size: 16, color: accent),
+                    tooltip: 'Open task',
+                    splashRadius: 16,
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    padding: EdgeInsets.zero,
+                    onPressed: () =>
+                        _openTaskFromTimeEntry(context, entry.taskId!, themeState),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+
                 // Delete
                 InkWell(
                   onTap: () => _confirmDelete(context),
@@ -2037,6 +2057,40 @@ class _ColorDotState extends State<_ColorDot>
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Resolves the task behind [taskId] and opens its detail dialog through
+/// the single public entry point ([showTaskDetailDialog]) — never a copy
+/// of the dialog. Shared by [_EntryTile] and [_EntryGroupTile] so a single
+/// entry and a grouped row behave identically.
+///
+/// A time entry can outlive its task (tasks are soft-deleted, never
+/// cascaded from here). [ResolveTimeEntryTaskUseCase] collapses "never
+/// existed" and "soft-deleted" into one `null` result, and this degrades
+/// by saying so plainly in a SnackBar instead of crashing or opening an
+/// empty dialog — mirrors the linked-note precedent (resolve, don't
+/// cascade). The entry itself is never mutated: a stale [taskId] is left
+/// exactly as it is, same as a note link that points nowhere.
+Future<void> _openTaskFromTimeEntry(
+  BuildContext context,
+  String taskId,
+  ThemeState themeState,
+) async {
+  final task =
+      await GetIt.instance<ResolveTimeEntryTaskUseCase>().execute(taskId);
+  if (!context.mounted) return;
+  if (task == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('This task no longer exists.')),
+    );
+    return;
+  }
+  await showTaskDetailDialog(
+    context,
+    task,
+    GetIt.instance<TaskState>(),
+    themeState.accentColor,
+  );
+}
 
 String _formatDuration(Duration d) {
   final h = d.inHours.toString().padLeft(2, '0');
@@ -2193,6 +2247,29 @@ class _EntryGroupTileState extends State<_EntryGroupTile> {
                       ),
                     ),
                     const SizedBox(width: 8),
+
+                    // Same task-open affordance as a single row (shared
+                    // via _openTaskFromTimeEntry) — a group carries it once
+                    // for whichever of its runs was linked to a task,
+                    // rather than requiring it be expanded first.
+                    if (group.taskId != null) ...[
+                      IconButton(
+                        icon:
+                            Icon(Icons.task_alt_outlined, size: 16, color: accent),
+                        tooltip: 'Open task',
+                        splashRadius: 16,
+                        constraints:
+                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        padding: EdgeInsets.zero,
+                        onPressed: () => _openTaskFromTimeEntry(
+                          context,
+                          group.taskId!,
+                          themeState,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+
                     AnimatedRotation(
                       turns: _open ? 0.5 : 0,
                       duration: const Duration(milliseconds: 180),

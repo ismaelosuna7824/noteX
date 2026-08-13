@@ -270,6 +270,26 @@ Future<void> showAddTaskDialog(
   );
 }
 
+/// Opens the task detail dialog for [task] — the single entry point every
+/// caller must use (the board card's own tap gesture below, and the timer
+/// page's "open the task this entry belongs to" affordance) so there is
+/// exactly one dialog implementation, never a duplicate copy of it.
+Future<void> showTaskDetailDialog(
+  BuildContext context,
+  Task task,
+  TaskState taskState,
+  Color accentColor,
+) {
+  return showAnimatedDialog<void>(
+    context: context,
+    builder: (_) => _TaskDetailDialog(
+      task: task,
+      taskState: taskState,
+      accentColor: accentColor,
+    ),
+  );
+}
+
 void _submitAddTask(
   BuildContext dialogContext,
   TaskState taskState,
@@ -442,13 +462,11 @@ class _BoardCard extends StatelessWidget {
         childWhenDragging: Opacity(opacity: 0.3, child: card),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () => showAnimatedDialog<void>(
-            context: context,
-            builder: (_) => _TaskDetailDialog(
-              task: task,
-              taskState: taskState,
-              accentColor: themeState.accentColor,
-            ),
+          onTap: () => showTaskDetailDialog(
+            context,
+            task,
+            taskState,
+            themeState.accentColor,
           ),
           child: card,
         ),

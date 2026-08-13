@@ -8,6 +8,7 @@ TimeEntry _entry({
   String? projectId,
   required DateTime start,
   DateTime? end,
+  String? taskId,
 }) =>
     TimeEntry(
       id: id,
@@ -16,6 +17,7 @@ TimeEntry _entry({
       startTime: start,
       endTime: end,
       updatedAt: start,
+      taskId: taskId,
     );
 
 final _day = DateTime(2026, 8, 12);
@@ -100,5 +102,29 @@ void main() {
 
   test('an empty list groups into nothing', () {
     expect(groupTimeEntries([]), isEmpty);
+  });
+
+  test('a group exposes the taskId of whichever of its runs carries one',
+      () {
+    final groups = groupTimeEntries([
+      _entry(
+        id: 'b',
+        description: 'Daily',
+        start: _at(14),
+        end: _at(14, 20),
+        taskId: 'task-1',
+      ),
+      _entry(id: 'a', description: 'Daily', start: _at(9), end: _at(9, 40)),
+    ]);
+
+    expect(groups.single.taskId, 'task-1');
+  });
+
+  test('a group with no task-linked run exposes a null taskId', () {
+    final groups = groupTimeEntries([
+      _entry(id: 'a', description: 'Free text', start: _at(9), end: _at(9, 10)),
+    ]);
+
+    expect(groups.single.taskId, isNull);
   });
 }
