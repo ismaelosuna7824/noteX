@@ -1,19 +1,40 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:get_it/get_it.dart';
+import 'package:notex/application/services/auto_save_service.dart';
 import 'package:notex/application/services/sync_engine.dart';
+import 'package:notex/application/use_cases/check_for_update_use_case.dart';
+import 'package:notex/application/use_cases/cleanup_empty_notes_use_case.dart';
+import 'package:notex/application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
+import 'package:notex/application/use_cases/create_note_use_case.dart';
+import 'package:notex/application/use_cases/delete_note_use_case.dart';
+import 'package:notex/application/use_cases/get_notes_use_case.dart';
+import 'package:notex/application/use_cases/note/create_note_project_use_case.dart';
+import 'package:notex/application/use_cases/note/delete_note_project_use_case.dart';
+import 'package:notex/application/use_cases/note/get_deleted_notes_use_case.dart';
+import 'package:notex/application/use_cases/note/get_note_projects_use_case.dart';
+import 'package:notex/application/use_cases/note/permanent_delete_note_use_case.dart';
+import 'package:notex/application/use_cases/note/rename_note_project_use_case.dart';
+import 'package:notex/application/use_cases/note/restore_note_use_case.dart';
 import 'package:notex/application/use_cases/task/create_task_use_case.dart';
 import 'package:notex/application/use_cases/task/delete_task_use_case.dart';
 import 'package:notex/application/use_cases/task/get_tasks_use_case.dart';
 import 'package:notex/application/use_cases/task/transition_task_status_use_case.dart';
 import 'package:notex/application/use_cases/task/update_task_use_case.dart';
+import 'package:notex/application/use_cases/update_note_use_case.dart';
+import 'package:notex/domain/entities/note.dart';
 import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/repositories/auth_repository.dart';
 import 'package:notex/domain/services/connectivity_service.dart';
 import 'package:notex/domain/services/sync_service.dart';
+import 'package:notex/domain/services/update_service.dart';
 import 'package:notex/domain/value_objects/task_status.dart';
 import 'package:notex/infrastructure/local/database.dart';
+import 'package:notex/infrastructure/local/drift_note_project_repository.dart';
+import 'package:notex/infrastructure/local/drift_note_repository.dart';
 import 'package:notex/infrastructure/local/drift_task_repository.dart';
+import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
@@ -55,6 +76,26 @@ class _NoopSyncEngine extends SyncEngine {
   Future<void> syncIfAuthenticated() async {}
 }
 
+class _UnusedUpdateService implements UpdateService {
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('unused in this test: ${invocation.memberName}');
+}
+
+/// Same `_UnusedX` pattern as the fakes above, but with one concrete
+/// override: [AppState]'s constructor subscribes to [authStateChanges]
+/// directly (`_authRepository.authStateChanges.listen(...)`), so unlike the
+/// other unused members it cannot be left to `noSuchMethod` — that would
+/// throw during construction, before any test body runs.
+class _FakeAuthRepositoryWithStream implements AuthRepository {
+  @override
+  Stream<bool> get authStateChanges => const Stream<bool>.empty();
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) =>
+      throw UnimplementedError('unused in this test: ${invocation.memberName}');
+}
+
 /// Spies on [TransitionTaskStatusUseCase.execute] without changing its
 /// behavior — delegates to the real implementation, so persistence still
 /// happens exactly as it would in the app. Pins the drag-to-column gesture
@@ -89,6 +130,8 @@ void main() {
   late _SpyTransitionUseCase transitionSpy;
   late TaskState taskState;
   late ThemeState themeState;
+  late DriftNoteRepository noteRepository;
+  late AppState appState;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -102,9 +145,49 @@ void main() {
       deleteReminder: DeleteTaskUseCase(repository, _NoopSyncEngine()),
     );
     themeState = ThemeState();
+
+    // The note-linking affordance (_TaskDetailDialog._linkNote) reads
+    // GetIt.instance<AppState>().notes — a REAL AppState, backed by the
+    // same in-memory database as the task repository above, sharing the
+    // note-project use cases it wraps. Note-project/update/cleanup paths
+    // are never exercised by this suite; only checkForUpdate's own
+    // UpdateService is a throwing fake, since AppState never calls it
+    // unless `checkForUpdate()`/`initialize()` is invoked, which this
+    // suite deliberately avoids (it seeds notes directly and calls the
+    // narrower `refreshNotes()`).
+    noteRepository = DriftNoteRepository(db);
+    final noteProjectRepository = DriftNoteProjectRepository(db);
+    final updateNoteUseCase = UpdateNoteUseCase(noteRepository);
+    appState = AppState(
+      createNote: CreateNoteUseCase(noteRepository),
+      getNotes: GetNotesUseCase(noteRepository),
+      deleteNote: DeleteNoteUseCase(noteRepository),
+      updateNote: updateNoteUseCase,
+      createNoteProject: CreateNoteProjectUseCase(noteProjectRepository),
+      getNoteProjects: GetNoteProjectsUseCase(noteProjectRepository),
+      deleteNoteProject: DeleteNoteProjectUseCase(
+        noteProjectRepository,
+        noteRepository,
+        _NoopSyncEngine(),
+      ),
+      renameNoteProject: RenameNoteProjectUseCase(noteProjectRepository),
+      getDeletedNotes: GetDeletedNotesUseCase(noteRepository),
+      restoreNote: RestoreNoteUseCase(noteRepository),
+      permanentDeleteNote: PermanentDeleteNoteUseCase(noteRepository),
+      checkForUpdate: CheckForUpdateUseCase(_UnusedUpdateService()),
+      cleanupEmptyNotes: CleanupEmptyNotesUseCase(noteRepository),
+      cleanupExpiredEphemeral:
+          CleanupExpiredEphemeralNotesUseCase(noteRepository),
+      updateService: _UnusedUpdateService(),
+      autoSaveService: AutoSaveService(updateNoteUseCase),
+      authRepository: _FakeAuthRepositoryWithStream(),
+    );
+    GetIt.instance.registerSingleton<AppState>(appState);
   });
 
   tearDown(() async {
+    await GetIt.instance.reset();
+    appState.dispose();
     await db.close();
   });
 
@@ -287,6 +370,129 @@ void main() {
       final persisted = await repository.getById('r1');
       expect(persisted!.blockedReason, 'waiting on legal',
           reason: 'a transition must never destroy user-authored text');
+    });
+  });
+
+  group('note linking — closing the reachability gap (verify-report '
+      'WARNING 5): the detail dialog can now set noteId, not just clear it',
+      () {
+    testWidgets(
+        'tapping "Link note", picking a note from the picker, sets the '
+        'task\'s noteId and swaps the affordance to "Open linked note"',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'agenda',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+
+      await repository.save(Task.create(id: 'r1', title: 'Unlinked task'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Unlinked task'));
+      await tester.pumpAndSettle();
+
+      // Before linking: no way to open a note, only the affordance to link
+      // one — this is the exact gap the verify report named (the only
+      // noteId write anywhere in lib/presentation was `noteId: null`).
+      expect(find.text('Open linked note'), findsNothing);
+      expect(find.text('Link note'), findsOneWidget);
+
+      await tester.tap(find.text('Link note'));
+      await tester.pumpAndSettle();
+
+      // The picker dialog is open, listing the seeded note.
+      expect(find.text('Link a note'), findsOneWidget);
+      expect(find.text('Meeting notes'), findsOneWidget);
+
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      // Persisted through UpdateTaskUseCase — must not touch status.
+      final persisted = await repository.getById('r1');
+      expect(persisted!.noteId, 'note-1');
+      expect(
+        persisted.status,
+        TaskStatus.todo,
+        reason: 'linking a note must not touch status (design D3 — only '
+            'transitionTo may write it)',
+      );
+
+      // Reopen the card: the affordance has swapped to "Open linked note".
+      await tester.tap(find.text('Unlinked task'));
+      await tester.pumpAndSettle();
+      expect(find.text('Open linked note'), findsOneWidget);
+      expect(find.text('Link note'), findsNothing);
+    });
+
+    testWidgets('the picker search field filters the note list by title',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await noteRepository.save(Note(
+        id: 'note-2',
+        title: 'Grocery list',
+        content: '',
+        createdAt: DateTime(2026, 1, 2),
+        updatedAt: DateTime(2026, 1, 2),
+      ));
+      await appState.refreshNotes();
+
+      await repository.save(Task.create(id: 'r1', title: 'Unlinked task'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Unlinked task'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Link note'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Meeting notes'), findsOneWidget);
+      expect(find.text('Grocery list'), findsOneWidget);
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Search notes…'),
+        'grocery',
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('Meeting notes'), findsNothing);
+      expect(find.text('Grocery list'), findsOneWidget);
+    });
+
+    testWidgets(
+        'a trashed note is excluded from the picker, mirroring '
+        'MentionPickerHost.mentionCandidates', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Trashed note',
+        content: '',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+        deletedAt: DateTime(2026, 1, 2),
+      ));
+      await appState.refreshNotes();
+
+      await repository.save(Task.create(id: 'r1', title: 'Unlinked task'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Unlinked task'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Link note'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Trashed note'), findsNothing);
+      expect(find.text('No notes found'), findsOneWidget);
     });
   });
 

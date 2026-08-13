@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../application/use_cases/task/resolve_task_note_link_use_case.dart';
+import '../../domain/entities/note.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/value_objects/note_link_resolution.dart';
 import '../../domain/value_objects/task_status.dart';
@@ -593,6 +594,26 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     navigator.pop();
   }
 
+  /// Opens the note picker and links the chosen note to this task
+  /// (`UpdateTaskUseCase` via [TaskState.updateTask] — title/status
+  /// untouched, no status quartet emitted). This is the missing half of
+  /// note-linking: the three affordance states in [_openLinkedNote] could
+  /// only ever unlink or resolve an existing link — nothing in the UI
+  /// could set `noteId` to a real value until this.
+  Future<void> _linkNote() async {
+    final appState = GetIt.instance<AppState>();
+    final selected = await showDialog<Note>(
+      context: context,
+      builder: (_) => _NotePickerDialog(
+        notes: appState.notes,
+        accentColor: widget.accentColor,
+      ),
+    );
+    if (selected == null || !mounted) return;
+    await widget.taskState.updateTask(widget.task.id, noteId: selected.id);
+    if (mounted) Navigator.of(context).pop();
+  }
+
   /// Resolves and opens `widget.task.noteId` through the three affordance
   /// states (design D9): found and live → navigate to it; found and
   /// soft-deleted → offer to restore, then open; not found → offer to
@@ -696,6 +717,16 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
                 ),
               ),
               const SizedBox(height: 12),
+            ] else ...[
+              OutlinedButton.icon(
+                onPressed: _linkNote,
+                icon: const Icon(Icons.link, size: 16),
+                label: const Text('Link note'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: widget.accentColor,
+                ),
+              ),
+              const SizedBox(height: 12),
             ],
             if (isBlocked) ...[
               TextField(
@@ -749,6 +780,144 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
               child: const Text('Save'),
             ),
           ],
+        ),
+      ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Note picker: search-and-select dialog for linking a note to a task.
+//
+// Follows the filtering/sorting conventions established by
+// MentionPickerHost.mentionCandidates (exclude trashed notes, newest-first)
+// and MentionOverlay's per-row rendering (icon + title, "Untitled"
+// fallback) — the same note-selection UX the @mention flow already uses,
+// adapted from an inline composing overlay to a modal dialog, since linking
+// a task is a deliberate button press rather than a token being typed.
+// ─────────────────────────────────────────────────────────────────────────
+
+class _NotePickerDialog extends StatefulWidget {
+  const _NotePickerDialog({required this.notes, required this.accentColor});
+
+  final List<Note> notes;
+  final Color accentColor;
+
+  @override
+  State<_NotePickerDialog> createState() => _NotePickerDialogState();
+}
+
+class _NotePickerDialogState extends State<_NotePickerDialog> {
+  final _searchController = TextEditingController();
+  String _query = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Excludes trashed notes (same rule as `MentionPickerHost.mentionCandidates`)
+  /// and sorts newest-first; then filters by the search query, if any.
+  List<Note> get _filtered {
+    final candidates = widget.notes.where((n) => n.deletedAt == null).toList()
+      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    if (_query.isEmpty) return candidates;
+    final q = _query.toLowerCase();
+    return candidates
+        .where((n) => n.title.toLowerCase().contains(q))
+        .toList();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final results = _filtered;
+
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text(
+        'Link a note',
+        style: TextStyle(fontWeight: FontWeight.w700),
+      ),
+      content: SizedBox(
+        width: 360,
+        height: 400,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _searchController,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Search notes…',
+                prefixIcon: const Icon(Icons.search, size: 18),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                isDense: true,
+              ),
+              onChanged: (value) => setState(() => _query = value),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: results.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No notes found',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color:
+                              isDark ? Colors.white38 : Colors.grey.shade500,
+                        ),
+                      ),
+                    )
+                  : ListView.builder(
+                      itemCount: results.length,
+                      itemBuilder: (context, index) {
+                        final note = results[index];
+                        return InkWell(
+                          onTap: () => Navigator.of(context).pop(note),
+                          borderRadius: BorderRadius.circular(8),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 10,
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.note_outlined,
+                                  size: 16,
+                                  color: isDark
+                                      ? Colors.white54
+                                      : Colors.grey.shade600,
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    note.title.isEmpty
+                                        ? 'Untitled'
+                                        : note.title,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
         ),
       ],
     );
