@@ -945,7 +945,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   Future<void> _createProjectFromSelector() async {
     final newProjectId = await showAnimatedDialog<String>(
       context: context,
-      builder: (_) => const _CreateProjectDialog(),
+      builder: (_) => _CreateProjectDialog(
+        accentColor: widget.accentColor,
+        surfaceColor: widget.surfaceColor,
+      ),
     );
     if (newProjectId == null || !mounted) return;
     await _assignProject(newProjectId);
@@ -1008,6 +1011,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       builder: (_) => _NotePickerDialog(
         notes: appState.notes,
         accentColor: widget.accentColor,
+        surfaceColor: widget.surfaceColor,
       ),
     );
     if (selected == null || !mounted) return;
@@ -1060,9 +1064,18 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         await GetIt.instance<AppState>().selectNote(resolution.note!);
         navigator.pop();
       case NoteLinkStatus.inTrash:
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final restore = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
+            // Same theme fix as the parent task detail dialog (and
+            // TimeEntryEditor before it): the app's own dark-neutral
+            // surface, not AlertDialog's ColorScheme.fromSeed-derived
+            // default — see [_TaskDetailDialog.surfaceColor]'s doc.
+            backgroundColor: Color.alphaBlend(
+              widget.surfaceColor.withValues(alpha: 0.96),
+              isDark ? Colors.black : Colors.white,
+            ),
             title: const Text('Note in trash'),
             content: Text(
               '"${resolution.note!.title}" is in the trash. Restore it?',
@@ -1074,6 +1087,17 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: widget.accentColor,
+                  // Same fix as the accent-coloured buttons elsewhere:
+                  // left to the ambient theme, the label resolves against
+                  // `colorScheme.onPrimary` (the SEED's tonal primary),
+                  // not the literal accentColor used as the background.
+                  foregroundColor: widget.accentColor.computeLuminance() >
+                          0.5
+                      ? Colors.black
+                      : Colors.white,
+                ),
                 child: const Text('Restore'),
               ),
             ],
@@ -1090,9 +1114,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         }
         navigator.pop();
       case NoteLinkStatus.missing:
+        final isDark = Theme.of(context).brightness == Brightness.dark;
         final unlink = await showDialog<bool>(
           context: context,
           builder: (ctx) => AlertDialog(
+            // Same theme fix as above — see [_TaskDetailDialog.surfaceColor].
+            backgroundColor: Color.alphaBlend(
+              widget.surfaceColor.withValues(alpha: 0.96),
+              isDark ? Colors.black : Colors.white,
+            ),
             title: const Text('Note not found'),
             content: const Text('This linked note no longer exists.'),
             actions: [
@@ -1102,6 +1132,13 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
               ),
               FilledButton(
                 onPressed: () => Navigator.of(ctx).pop(true),
+                style: FilledButton.styleFrom(
+                  backgroundColor: widget.accentColor,
+                  foregroundColor: widget.accentColor.computeLuminance() >
+                          0.5
+                      ? Colors.black
+                      : Colors.white,
+                ),
                 child: const Text('Unlink'),
               ),
             ],
@@ -1840,7 +1877,18 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 /// widget's own [dispose], which the framework only calls once the exit
 /// animation actually finishes and the route is removed.
 class _CreateProjectDialog extends StatefulWidget {
-  const _CreateProjectDialog();
+  const _CreateProjectDialog({
+    required this.accentColor,
+    required this.surfaceColor,
+  });
+
+  final Color accentColor;
+
+  /// Same fixed dark-neutral surface as the task detail dialog this one
+  /// opens from — see [_TaskDetailDialog.surfaceColor]'s doc for why it is
+  /// threaded explicitly rather than left to `AlertDialog`'s own
+  /// `ColorScheme.fromSeed`-derived default.
+  final Color surfaceColor;
 
   @override
   State<_CreateProjectDialog> createState() => _CreateProjectDialogState();
@@ -1868,7 +1916,14 @@ class _CreateProjectDialogState extends State<_CreateProjectDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return AlertDialog(
+      // Same theme fix as the parent task detail dialog — see
+      // [_TaskDetailDialog.surfaceColor]'s doc.
+      backgroundColor: Color.alphaBlend(
+        widget.surfaceColor.withValues(alpha: 0.96),
+        isDark ? Colors.black : Colors.white,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text(
         'New Project',
@@ -1941,6 +1996,16 @@ class _CreateProjectDialogState extends State<_CreateProjectDialog> {
         ),
         FilledButton(
           onPressed: _create,
+          style: FilledButton.styleFrom(
+            backgroundColor: widget.accentColor,
+            // Same fix as the parent dialog's own accent-coloured
+            // buttons: left to the ambient theme, the label resolves
+            // against `colorScheme.onPrimary` (the SEED's tonal primary),
+            // not the literal accentColor used as the background.
+            foregroundColor: widget.accentColor.computeLuminance() > 0.5
+                ? Colors.black
+                : Colors.white,
+          ),
           child: const Text('Create'),
         ),
       ],
@@ -2058,10 +2123,20 @@ class _LinkedNoteRow extends StatelessWidget {
 // ─────────────────────────────────────────────────────────────────────────
 
 class _NotePickerDialog extends StatefulWidget {
-  const _NotePickerDialog({required this.notes, required this.accentColor});
+  const _NotePickerDialog({
+    required this.notes,
+    required this.accentColor,
+    required this.surfaceColor,
+  });
 
   final List<Note> notes;
   final Color accentColor;
+
+  /// Same fixed dark-neutral surface as the task detail dialog this one
+  /// opens from — see [_TaskDetailDialog.surfaceColor]'s doc for why it is
+  /// threaded explicitly rather than left to `AlertDialog`'s own
+  /// `ColorScheme.fromSeed`-derived default.
+  final Color surfaceColor;
 
   @override
   State<_NotePickerDialog> createState() => _NotePickerDialogState();
@@ -2095,6 +2170,12 @@ class _NotePickerDialogState extends State<_NotePickerDialog> {
     final results = _filtered;
 
     return AlertDialog(
+      // Same theme fix as the parent task detail dialog — see
+      // [_TaskDetailDialog.surfaceColor]'s doc.
+      backgroundColor: Color.alphaBlend(
+        widget.surfaceColor.withValues(alpha: 0.96),
+        isDark ? Colors.black : Colors.white,
+      ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       title: const Text(
         'Link a note',

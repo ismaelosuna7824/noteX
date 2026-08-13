@@ -293,17 +293,24 @@ void main() {
 
     final boardTaskState = overrideTaskState ?? taskState;
     await tester.pumpWidget(
-      MaterialApp(
-        // Avoids the splash-shader throw under this test SDK — same trick
-        // mention_picker_host_test.dart uses.
-        theme: ThemeData(splashFactory: NoSplash.splashFactory),
-        home: Scaffold(
-          body: SizedBox(
-            width: 1000,
-            height: 700,
-            child: AnimatedBuilder(
-              animation: Listenable.merge([boardTaskState, timerState]),
-              builder: (context, _) => TaskBoard(
+      AnimatedBuilder(
+        animation: Listenable.merge([themeState, boardTaskState, timerState]),
+        builder: (context, _) => MaterialApp(
+          // Mirrors `app.dart`'s own wiring (`theme:
+          // widget.themeState.buildTheme()`) so `Theme.of(context)` inside
+          // the task detail dialog (and the nested dialogs it opens)
+          // reflects `themeState.isDarkMode` exactly like production —
+          // required for any test asserting theme-derived colours.
+          // `splashFactory` is overridden the same way this helper always
+          // has, to avoid the splash-shader throw under this test SDK.
+          theme: themeState
+              .buildTheme()
+              .copyWith(splashFactory: NoSplash.splashFactory),
+          home: Scaffold(
+            body: SizedBox(
+              width: 1000,
+              height: 700,
+              child: TaskBoard(
                 taskState: boardTaskState,
                 themeState: themeState,
                 timerState: timerState,
@@ -1854,6 +1861,196 @@ void main() {
             'to fall back on, so silence would mean the edit vanished '
             'without a trace',
       );
+    });
+  });
+
+  group(
+      'nested dialogs resolve their background from the theme, not a '
+      'literal (extends the task detail dialog theme fix to its children)',
+      () {
+    testWidgets(
+        '_CreateProjectDialog resolves its background from '
+        "ThemeState.editorBgColor, and its Create button's foreground "
+        'contrasts with the literal accent colour', (tester) async {
+      themeState.toggleDarkMode();
+      await repository.save(Task.create(id: 'r1', title: 'Needs a project'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Needs a project'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New project…').last);
+      await tester.pumpAndSettle();
+
+      final newProjectDialogFinder = find.ancestor(
+        of: find.text('New Project'),
+        matching: find.byType(AlertDialog),
+      );
+      final newProjectDialog = tester.widget<AlertDialog>(
+        newProjectDialogFinder,
+      );
+      final expectedSurface = Color.alphaBlend(
+        themeState.editorBgColor.withValues(alpha: 0.96),
+        Colors.black,
+      );
+      expect(
+        newProjectDialog.backgroundColor,
+        expectedSurface,
+        reason: "_CreateProjectDialog's background must be derived from "
+            'ThemeState.editorBgColor, not the ambient seed-tinted '
+            'ColorScheme default',
+      );
+
+      final createButton = tester.widget<FilledButton>(
+        find.descendant(
+          of: newProjectDialogFinder,
+          matching: find.widgetWithText(FilledButton, 'Create'),
+        ),
+      );
+      final expectedForeground =
+          themeState.accentColor.computeLuminance() > 0.5
+              ? Colors.black
+              : Colors.white;
+      expect(
+        createButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+      );
+      expect(
+        createButton.style?.backgroundColor?.resolve(<WidgetState>{}),
+        themeState.accentColor,
+      );
+    });
+
+    testWidgets(
+        '_NotePickerDialog resolves its background from '
+        'ThemeState.editorBgColor', (tester) async {
+      themeState.toggleDarkMode();
+      await repository.save(Task.create(id: 'r1', title: 'Needs a note'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Needs a note'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Link note'));
+      await tester.pumpAndSettle();
+
+      final pickerDialog = tester.widget<AlertDialog>(
+        find.ancestor(
+          of: find.text('Link a note'),
+          matching: find.byType(AlertDialog),
+        ),
+      );
+      final expectedSurface = Color.alphaBlend(
+        themeState.editorBgColor.withValues(alpha: 0.96),
+        Colors.black,
+      );
+      expect(
+        pickerDialog.backgroundColor,
+        expectedSurface,
+        reason: "_NotePickerDialog's background must be derived from "
+            'ThemeState.editorBgColor, not the ambient seed-tinted '
+            'ColorScheme default',
+      );
+    });
+
+    testWidgets(
+        'the "Note not found" confirmation resolves its background from '
+        "ThemeState.editorBgColor, and its Unlink button's foreground "
+        'contrasts with the literal accent colour', (tester) async {
+      themeState.toggleDarkMode();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with dead link').copyWith(
+          noteIds: const ['ghost-note'],
+        ),
+      );
+      await appState.refreshNotes();
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with dead link'));
+      await tester.pumpAndSettle();
+
+      // "Note not found" is only the linked-notes row's own label so far
+      // (design D9's missing-status affordance) — tapping it is what
+      // actually opens the confirmation dialog under test.
+      expect(find.text('Note not found'), findsOneWidget);
+      await tester.tap(find.text('Note not found'));
+      await tester.pumpAndSettle();
+
+      // Distinguished from the row's own "Note not found" label (still
+      // present behind this dialog) by its own unique content text.
+      final confirmDialogFinder = find.ancestor(
+        of: find.text('This linked note no longer exists.'),
+        matching: find.byType(AlertDialog),
+      );
+      final confirmDialog = tester.widget<AlertDialog>(confirmDialogFinder);
+      final expectedSurface = Color.alphaBlend(
+        themeState.editorBgColor.withValues(alpha: 0.96),
+        Colors.black,
+      );
+      expect(confirmDialog.backgroundColor, expectedSurface);
+
+      final unlinkButton = tester.widget<FilledButton>(
+        find.descendant(
+          of: confirmDialogFinder,
+          matching: find.widgetWithText(FilledButton, 'Unlink'),
+        ),
+      );
+      final expectedForeground =
+          themeState.accentColor.computeLuminance() > 0.5
+              ? Colors.black
+              : Colors.white;
+      expect(
+        unlinkButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+      );
+    });
+
+    testWidgets(
+        'the "Note in trash" confirmation resolves its background from '
+        'ThemeState.editorBgColor', (tester) async {
+      themeState.toggleDarkMode();
+      await noteRepository.save(Note(
+        id: 'note-trashed',
+        title: 'In the trash',
+        content: '',
+        createdAt: DateTime(2026, 1, 2),
+        updatedAt: DateTime(2026, 1, 2),
+        deletedAt: DateTime(2026, 1, 3),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with a trashed link').copyWith(
+          noteIds: const ['note-trashed'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with a trashed link'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('in trash'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Note in trash'), findsOneWidget);
+
+      final confirmDialog = tester.widget<AlertDialog>(
+        find.ancestor(
+          of: find.text('Note in trash'),
+          matching: find.byType(AlertDialog),
+        ),
+      );
+      final expectedSurface = Color.alphaBlend(
+        themeState.editorBgColor.withValues(alpha: 0.96),
+        Colors.black,
+      );
+      expect(confirmDialog.backgroundColor, expectedSurface);
     });
   });
 }
