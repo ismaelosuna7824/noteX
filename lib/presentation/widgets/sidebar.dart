@@ -33,7 +33,12 @@ class Sidebar extends StatelessWidget {
     (2, _SidebarItem(Icons.edit_note_rounded, 'Editor')),
     (3, _SidebarItem(Icons.calendar_month_rounded, 'Calendar')),
     (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
-    (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
+    // index 5 (Markdown) intentionally omitted — hidden from the UI, not
+    // deleted. The Markdown feature, its data, and its page still exist;
+    // see AppState.navigateToPage for the fallback if anything still
+    // requests that index. Every remaining tuple keeps its own explicit
+    // page index, so removing this entry does not shift what any other
+    // item points at.
     (9, _SidebarItem(Icons.hub_rounded, 'Graph')),
     (7, _SidebarItem(Icons.task_alt_rounded, 'Tasks')),
     (8, _SidebarItem(Icons.delete_outline_rounded, 'Trash')),
