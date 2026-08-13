@@ -151,6 +151,7 @@ void main() {
       String? blockedReason,
       SyncStatus syncStatus = SyncStatus.synced,
       DateTime? completedAt,
+      String? projectId,
     }) {
       return Task(
         id: 'r1',
@@ -162,8 +163,19 @@ void main() {
         blockedReason: blockedReason,
         syncStatus: syncStatus,
         completedAt: completedAt,
+        projectId: projectId,
       );
     }
+
+    test('a transition never touches projectId — only a deliberate '
+        'project assignment may (see UpdateTaskUseCase.setTaskProject)',
+        () {
+      final task = buildTask(projectId: 'proj-1');
+
+      final next = task.transitionTo(TaskStatus.doing);
+
+      expect(next.projectId, 'proj-1');
+    });
 
     test('sets statusChangedAt and statusPendingPush on every transition',
         () {
@@ -328,6 +340,7 @@ void main() {
       userId: 'user-1',
       blockedReason: 'blocked reason',
       noteIds: const ['note-1'],
+      projectId: 'proj-1',
     );
 
     test('omitting a sentinel-backed field preserves its current value', () {
@@ -338,6 +351,7 @@ void main() {
       expect(copy.userId, base.userId);
       expect(copy.blockedReason, base.blockedReason);
       expect(copy.noteIds, base.noteIds);
+      expect(copy.projectId, base.projectId);
       expect(copy.title, 'New title');
     });
 
@@ -347,16 +361,24 @@ void main() {
         deletedAt: null,
         userId: null,
         blockedReason: null,
+        projectId: null,
       );
 
       expect(copy.completedAt, isNull);
       expect(copy.deletedAt, isNull);
       expect(copy.userId, isNull);
       expect(copy.blockedReason, isNull);
+      expect(copy.projectId, isNull);
       // Untouched fields remain as-is.
       expect(copy.title, base.title);
       expect(copy.scheduledDate, base.scheduledDate);
       expect(copy.noteIds, base.noteIds);
+    });
+
+    test('passing a value overwrites projectId', () {
+      final copy = base.copyWith(projectId: 'proj-2');
+
+      expect(copy.projectId, 'proj-2');
     });
 
     test('passing a list overwrites noteIds, deduplicated and order '
@@ -420,6 +442,7 @@ void main() {
       expect(copy.deletedAt, base.deletedAt);
       expect(copy.syncStatus, base.syncStatus);
       expect(copy.userId, base.userId);
+      expect(copy.projectId, base.projectId);
     });
   });
 

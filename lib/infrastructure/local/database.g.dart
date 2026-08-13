@@ -4533,6 +4533,17 @@ class $TaskEntriesTable extends TaskEntries
         type: DriftSqlType.dateTime,
         requiredDuringInsert: false,
       );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4558,6 +4569,7 @@ class $TaskEntriesTable extends TaskEntries
     externalUrl,
     externalCachedTitle,
     externalLastSyncedAt,
+    projectId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4745,6 +4757,12 @@ class $TaskEntriesTable extends TaskEntries
         ),
       );
     }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
     return context;
   }
 
@@ -4846,6 +4864,10 @@ class $TaskEntriesTable extends TaskEntries
         DriftSqlType.dateTime,
         data['${effectivePrefix}external_last_synced_at'],
       ),
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
     );
   }
 
@@ -4879,6 +4901,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   final String? externalUrl;
   final String? externalCachedTitle;
   final DateTime? externalLastSyncedAt;
+  final String? projectId;
   const TaskEntry({
     required this.id,
     required this.title,
@@ -4903,6 +4926,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     this.externalUrl,
     this.externalCachedTitle,
     this.externalLastSyncedAt,
+    this.projectId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -4953,6 +4977,9 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     }
     if (!nullToAbsent || externalLastSyncedAt != null) {
       map['external_last_synced_at'] = Variable<DateTime>(externalLastSyncedAt);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
     }
     return map;
   }
@@ -5006,6 +5033,9 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       externalLastSyncedAt: externalLastSyncedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(externalLastSyncedAt),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
     );
   }
 
@@ -5042,6 +5072,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       externalLastSyncedAt: serializer.fromJson<DateTime?>(
         json['externalLastSyncedAt'],
       ),
+      projectId: serializer.fromJson<String?>(json['projectId']),
     );
   }
   @override
@@ -5073,6 +5104,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       'externalLastSyncedAt': serializer.toJson<DateTime?>(
         externalLastSyncedAt,
       ),
+      'projectId': serializer.toJson<String?>(projectId),
     };
   }
 
@@ -5100,6 +5132,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     Value<String?> externalUrl = const Value.absent(),
     Value<String?> externalCachedTitle = const Value.absent(),
     Value<DateTime?> externalLastSyncedAt = const Value.absent(),
+    Value<String?> projectId = const Value.absent(),
   }) => TaskEntry(
     id: id ?? this.id,
     title: title ?? this.title,
@@ -5136,6 +5169,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     externalLastSyncedAt: externalLastSyncedAt.present
         ? externalLastSyncedAt.value
         : this.externalLastSyncedAt,
+    projectId: projectId.present ? projectId.value : this.projectId,
   );
   TaskEntry copyWithCompanion(TaskEntriesCompanion data) {
     return TaskEntry(
@@ -5188,6 +5222,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
       externalLastSyncedAt: data.externalLastSyncedAt.present
           ? data.externalLastSyncedAt.value
           : this.externalLastSyncedAt,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
     );
   }
 
@@ -5216,7 +5251,8 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           ..write('externalId: $externalId, ')
           ..write('externalUrl: $externalUrl, ')
           ..write('externalCachedTitle: $externalCachedTitle, ')
-          ..write('externalLastSyncedAt: $externalLastSyncedAt')
+          ..write('externalLastSyncedAt: $externalLastSyncedAt, ')
+          ..write('projectId: $projectId')
           ..write(')'))
         .toString();
   }
@@ -5246,6 +5282,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     externalUrl,
     externalCachedTitle,
     externalLastSyncedAt,
+    projectId,
   ]);
   @override
   bool operator ==(Object other) =>
@@ -5273,7 +5310,8 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
           other.externalId == this.externalId &&
           other.externalUrl == this.externalUrl &&
           other.externalCachedTitle == this.externalCachedTitle &&
-          other.externalLastSyncedAt == this.externalLastSyncedAt);
+          other.externalLastSyncedAt == this.externalLastSyncedAt &&
+          other.projectId == this.projectId);
 }
 
 class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
@@ -5300,6 +5338,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   final Value<String?> externalUrl;
   final Value<String?> externalCachedTitle;
   final Value<DateTime?> externalLastSyncedAt;
+  final Value<String?> projectId;
   final Value<int> rowid;
   const TaskEntriesCompanion({
     this.id = const Value.absent(),
@@ -5325,6 +5364,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     this.externalUrl = const Value.absent(),
     this.externalCachedTitle = const Value.absent(),
     this.externalLastSyncedAt = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TaskEntriesCompanion.insert({
@@ -5351,6 +5391,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     this.externalUrl = const Value.absent(),
     this.externalCachedTitle = const Value.absent(),
     this.externalLastSyncedAt = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        createdAt = Value(createdAt),
@@ -5379,6 +5420,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     Expression<String>? externalUrl,
     Expression<String>? externalCachedTitle,
     Expression<DateTime>? externalLastSyncedAt,
+    Expression<String>? projectId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -5407,6 +5449,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
         'external_cached_title': externalCachedTitle,
       if (externalLastSyncedAt != null)
         'external_last_synced_at': externalLastSyncedAt,
+      if (projectId != null) 'project_id': projectId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -5435,6 +5478,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     Value<String?>? externalUrl,
     Value<String?>? externalCachedTitle,
     Value<DateTime?>? externalLastSyncedAt,
+    Value<String?>? projectId,
     Value<int>? rowid,
   }) {
     return TaskEntriesCompanion(
@@ -5461,6 +5505,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
       externalUrl: externalUrl ?? this.externalUrl,
       externalCachedTitle: externalCachedTitle ?? this.externalCachedTitle,
       externalLastSyncedAt: externalLastSyncedAt ?? this.externalLastSyncedAt,
+      projectId: projectId ?? this.projectId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -5541,6 +5586,9 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
         externalLastSyncedAt.value,
       );
     }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -5573,6 +5621,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
           ..write('externalUrl: $externalUrl, ')
           ..write('externalCachedTitle: $externalCachedTitle, ')
           ..write('externalLastSyncedAt: $externalLastSyncedAt, ')
+          ..write('projectId: $projectId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -7995,6 +8044,7 @@ typedef $$TaskEntriesTableCreateCompanionBuilder =
       Value<String?> externalUrl,
       Value<String?> externalCachedTitle,
       Value<DateTime?> externalLastSyncedAt,
+      Value<String?> projectId,
       Value<int> rowid,
     });
 typedef $$TaskEntriesTableUpdateCompanionBuilder =
@@ -8022,6 +8072,7 @@ typedef $$TaskEntriesTableUpdateCompanionBuilder =
       Value<String?> externalUrl,
       Value<String?> externalCachedTitle,
       Value<DateTime?> externalLastSyncedAt,
+      Value<String?> projectId,
       Value<int> rowid,
     });
 
@@ -8146,6 +8197,11 @@ class $$TaskEntriesTableFilterComposer
 
   ColumnFilters<DateTime> get externalLastSyncedAt => $composableBuilder(
     column: $table.externalLastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -8273,6 +8329,11 @@ class $$TaskEntriesTableOrderingComposer
     column: $table.externalLastSyncedAt,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TaskEntriesTableAnnotationComposer
@@ -8378,6 +8439,9 @@ class $$TaskEntriesTableAnnotationComposer
     column: $table.externalLastSyncedAt,
     builder: (column) => column,
   );
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
 }
 
 class $$TaskEntriesTableTableManager
@@ -8434,6 +8498,7 @@ class $$TaskEntriesTableTableManager
                 Value<String?> externalUrl = const Value.absent(),
                 Value<String?> externalCachedTitle = const Value.absent(),
                 Value<DateTime?> externalLastSyncedAt = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TaskEntriesCompanion(
                 id: id,
@@ -8459,6 +8524,7 @@ class $$TaskEntriesTableTableManager
                 externalUrl: externalUrl,
                 externalCachedTitle: externalCachedTitle,
                 externalLastSyncedAt: externalLastSyncedAt,
+                projectId: projectId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -8486,6 +8552,7 @@ class $$TaskEntriesTableTableManager
                 Value<String?> externalUrl = const Value.absent(),
                 Value<String?> externalCachedTitle = const Value.absent(),
                 Value<DateTime?> externalLastSyncedAt = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TaskEntriesCompanion.insert(
                 id: id,
@@ -8511,6 +8578,7 @@ class $$TaskEntriesTableTableManager
                 externalUrl: externalUrl,
                 externalCachedTitle: externalCachedTitle,
                 externalLastSyncedAt: externalLastSyncedAt,
+                projectId: projectId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0

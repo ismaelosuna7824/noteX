@@ -50,6 +50,12 @@ class TaskSupabaseMapper {
       // no dual-write. Requires the remote `note_ids` column to exist
       // (v20 DDL) before a client can push this.
       'note_ids': jsonEncode(t.noteIds),
+      // v21 — links to one of the timer feature's projects. Unlike
+      // `note_ids`, the remote column carries a real foreign key (design:
+      // see `Task.projectId`'s doc) since a project is only ever
+      // soft-deleted. Requires the remote `project_id` column to exist
+      // (v21 DDL) before a client can push this.
+      'project_id': t.projectId,
       'external_provider': t.externalProvider,
       'external_id': t.externalId,
       'external_url': t.externalUrl,
@@ -103,6 +109,10 @@ class TaskSupabaseMapper {
       // an older, unreleased build) has no `note_ids` key at all, which
       // must read as "no links", not a parse error.
       noteIds: _decodeNoteIds(m['note_ids']),
+      // Parsed defensively — a row written before the v21 DDL lands has no
+      // `project_id` key at all, which must read as "No Project", not a
+      // parse error.
+      projectId: m['project_id'] as String?,
       externalProvider: m['external_provider'] as String?,
       externalId: m['external_id'] as String?,
       externalUrl: m['external_url'] as String?,

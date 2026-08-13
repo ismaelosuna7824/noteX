@@ -53,6 +53,19 @@ class Task {
   final String? externalCachedTitle;
   final DateTime? externalLastSyncedAt;
 
+  /// Links this task to one of the timer feature's projects. No foreign
+  /// key locally — mirrors [noteIds]'s no-FK rationale (design D9) — but,
+  /// unlike a note, a [Project] is only ever soft-deleted (see
+  /// `DeleteProjectUseCase`), never permanently removed, so the Supabase
+  /// mapping DOES use a real foreign key (see
+  /// `task_supabase_mapper.dart`/`supabase_v21_task_project.sql`). A task
+  /// pointing at a since-deleted project keeps the id — degrade the
+  /// display, keep the data, same as a trashed linked note.
+  ///
+  /// Never touched by [transitionTo]: a project assignment is a deliberate
+  /// edit, not a status change (see `TaskState.setTaskProject`).
+  final String? projectId;
+
   final DateTime createdAt;
   final DateTime updatedAt;
   final int version;
@@ -76,6 +89,7 @@ class Task {
     this.externalUrl,
     this.externalCachedTitle,
     this.externalLastSyncedAt,
+    this.projectId,
     required this.createdAt,
     required this.updatedAt,
     this.version = 1,
@@ -146,6 +160,7 @@ class Task {
     Object? externalUrl = const _Unset(),
     Object? externalCachedTitle = const _Unset(),
     Object? externalLastSyncedAt = const _Unset(),
+    Object? projectId = const _Unset(),
     DateTime? updatedAt,
     int? version,
     Object? deletedAt = const _Unset(),
@@ -192,6 +207,7 @@ class Task {
       externalLastSyncedAt: externalLastSyncedAt is _Unset
           ? this.externalLastSyncedAt
           : externalLastSyncedAt as DateTime?,
+      projectId: projectId is _Unset ? this.projectId : projectId as String?,
       createdAt: createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       version: version ?? this.version,

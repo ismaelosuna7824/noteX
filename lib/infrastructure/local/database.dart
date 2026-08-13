@@ -216,6 +216,15 @@ class TaskEntries extends Table {
   TextColumn get externalCachedTitle => text().nullable()();
   DateTimeColumn get externalLastSyncedAt => dateTime().nullable()();
 
+  // v21: links a task to one of the timer feature's projects
+  // (`domain_task.Task.projectId`). Nullable — no project is the default,
+  // same as `TimeEntry.projectId`. No local FK (Drift/SQLite tables here
+  // don't declare cross-table FKs at all — see `TimeEntries.projectId`
+  // above for the same shape); the Supabase side does add a real FK since,
+  // unlike a note, a project is only ever soft-deleted, never permanently
+  // removed (see `task_supabase_mapper.dart`).
+  TextColumn get projectId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 
@@ -281,7 +290,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 20;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -497,6 +506,22 @@ class AppDatabase extends _$AppDatabase {
         // notes per task. The deprecated `noteId` column is untouched.
         await safeAddColumn(taskEntries, taskEntries.noteIds);
         await backfillTaskNoteIds(this);
+      }
+      if (from < 21) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+
+        // Additive only. A brand-new nullable link with no prior data to
+        // derive it from (unlike v20's noteIds), so there is nothing to
+        // backfill — every existing row simply reads back with
+        // projectId == null ("No Project"), the same default new rows get.
+        await safeAddColumn(taskEntries, taskEntries.projectId);
       }
     },
   );
@@ -782,6 +807,7 @@ class AppDatabase extends _$AppDatabase {
       externalUrl: row.externalUrl,
       externalCachedTitle: row.externalCachedTitle,
       externalLastSyncedAt: row.externalLastSyncedAt,
+      projectId: row.projectId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       version: row.version,
@@ -824,6 +850,7 @@ class AppDatabase extends _$AppDatabase {
       externalUrl: Value(t.externalUrl),
       externalCachedTitle: Value(t.externalCachedTitle),
       externalLastSyncedAt: Value(t.externalLastSyncedAt),
+      projectId: Value(t.projectId),
       createdAt: Value(t.createdAt),
       updatedAt: Value(t.updatedAt),
       version: Value(t.version),

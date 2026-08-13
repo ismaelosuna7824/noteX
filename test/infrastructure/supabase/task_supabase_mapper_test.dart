@@ -19,6 +19,7 @@ void main() {
     String? externalUrl,
     String? externalCachedTitle,
     DateTime? externalLastSyncedAt,
+    String? projectId,
   }) {
     return Task(
       id: 'r1',
@@ -36,6 +37,7 @@ void main() {
       externalUrl: externalUrl,
       externalCachedTitle: externalCachedTitle,
       externalLastSyncedAt: externalLastSyncedAt,
+      projectId: projectId,
       createdAt: DateTime(2026, 1, 1, 8),
       updatedAt: DateTime(2026, 1, 2, 9),
       version: 3,
@@ -313,6 +315,7 @@ void main() {
         externalUrl: 'https://example.atlassian.net/browse/PROJ-123',
         externalCachedTitle: 'Buy milk (cached)',
         externalLastSyncedAt: DateTime(2026, 2, 28, 10),
+        projectId: 'proj-1',
       );
 
       final roundTripped = TaskSupabaseMapper.fromMap(
@@ -356,6 +359,7 @@ void main() {
       );
       expect(roundTripped.version, original.version);
       expect(roundTripped.userId, original.userId);
+      expect(roundTripped.projectId, original.projectId);
       // The one asymmetry: never emitted outbound, forced false inbound.
       expect(original.statusPendingPush, isTrue);
       expect(roundTripped.statusPendingPush, isFalse);
@@ -437,6 +441,47 @@ void main() {
       final task = TaskSupabaseMapper.fromMap(row);
 
       expect(task.noteIds, isEmpty);
+    });
+  });
+
+  group('project_id — v21, links a task to a timer project', () {
+    test('toMap emits project_id unconditionally (not gated by '
+        'includeStatusFields), unlike the status quartet', () {
+      final task = buildTask(projectId: 'proj-1');
+
+      final withStatus =
+          TaskSupabaseMapper.toMap(task, includeStatusFields: true);
+      final withoutStatus =
+          TaskSupabaseMapper.toMap(task, includeStatusFields: false);
+
+      expect(withStatus['project_id'], 'proj-1');
+      expect(withoutStatus['project_id'], 'proj-1');
+    });
+
+    test('toMap emits a null project_id for "No Project"', () {
+      final map =
+          TaskSupabaseMapper.toMap(buildTask(), includeStatusFields: true);
+
+      expect(map['project_id'], isNull);
+    });
+
+    test('fromMap parses project_id when present', () {
+      final row = rowFor(TaskStatus.todo, false);
+      row['project_id'] = 'proj-1';
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.projectId, 'proj-1');
+    });
+
+    test('fromMap defaults to "No Project" when project_id is absent — a '
+        'row written before the v21 DDL lands', () {
+      final row = rowFor(TaskStatus.todo, false);
+      row.remove('project_id');
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.projectId, isNull);
     });
   });
 }

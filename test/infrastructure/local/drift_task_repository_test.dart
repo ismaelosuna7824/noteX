@@ -39,6 +39,7 @@ void main() {
     DateTime? deletedAt,
     SyncStatus syncStatus = SyncStatus.localOnly,
     String? userId,
+    String? projectId,
   }) {
     return Task(
       id: id,
@@ -62,6 +63,7 @@ void main() {
       deletedAt: deletedAt,
       syncStatus: syncStatus,
       userId: userId,
+      projectId: projectId,
     );
   }
 
@@ -99,6 +101,7 @@ void main() {
         version: 3,
         syncStatus: SyncStatus.pendingSync,
         userId: 'user-1',
+        projectId: 'proj-1',
       );
 
       await repository.save(task);
@@ -126,6 +129,17 @@ void main() {
       expect(fetched.version, task.version);
       expect(fetched.syncStatus, task.syncStatus);
       expect(fetched.userId, task.userId);
+      expect(fetched.projectId, task.projectId);
+    });
+
+    test('projectId round-trips as null ("No Project") when omitted',
+        () async {
+      final task = buildTask(id: 'r2', title: 'No project task');
+
+      await repository.save(task);
+      final fetched = await repository.getById('r2');
+
+      expect(fetched!.projectId, isNull);
     });
 
     test('getById returns null for a missing id', () async {
