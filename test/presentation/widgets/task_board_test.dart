@@ -236,6 +236,14 @@ void main() {
       ResolveTaskNoteLinkUseCase(noteRepository),
     );
 
+    // The in-place note preview's own save path
+    // (_TaskDetailDialog._flushPreview) resolves UpdateNoteUseCase via
+    // GetIt directly — a REAL instance over the same in-memory note
+    // repository as [appState]'s own (registered separately here,
+    // mirroring [updateNoteUseCase] above), never a stand-in, and never
+    // through AppState's own wrapped verbs.
+    GetIt.instance.registerSingleton<UpdateNoteUseCase>(updateNoteUseCase);
+
     // The "Start timer" button (_TaskDetailDialog._startTimer) resolves
     // TimerState via GetIt.instance<TimerState>() — a REAL TimerState, over
     // the same in-memory database, so the button exercises the actual
@@ -745,6 +753,150 @@ void main() {
 
       expect(find.text('Trashed note'), findsNothing);
       expect(find.text('No notes found'), findsOneWidget);
+    });
+  });
+
+  group(
+      'preview/edit a linked note without leaving the task (settled '
+      'decision: "hacer en preview para que no se salgan de esa tarea")',
+      () {
+    testWidgets(
+        "editing a note in the preview persists through the note's own "
+        'path (UpdateNoteUseCase) and does not mark the task dirty',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      final before = await repository.getById('r1');
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      final previewField = find.descendant(
+        of: find.byKey(const Key('task-note-preview')),
+        matching: find.byType(TextField),
+      );
+      expect(previewField, findsOneWidget);
+
+      await tester.enterText(previewField, 'edited from the task');
+      await tester.tap(find.byTooltip('Back to notes'));
+      await tester.pumpAndSettle();
+
+      final updatedNote = await noteRepository.getById('note-1');
+      expect(updatedNote!.content, 'edited from the task');
+
+      final after = await repository.getById('r1');
+      expect(
+        after!.updatedAt,
+        before!.updatedAt,
+        reason: 'a note edit in the in-place preview must persist through '
+            "the note's own path, never the task's save-on-close flow, so "
+            "the TASK's updatedAt must stay untouched",
+      );
+      expect(
+        after.noteIds,
+        ['note-1'],
+        reason: 'previewing/editing a note must never change which notes '
+            'are linked',
+      );
+    });
+
+    testWidgets(
+        'a trashed note does not open an editable preview — the restore '
+        'confirmation shows instead, and declining leaves no preview open',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-trashed',
+        title: 'In the trash',
+        content: 'trashed content',
+        createdAt: DateTime(2026, 1, 2),
+        updatedAt: DateTime(2026, 1, 2),
+        deletedAt: DateTime(2026, 1, 3),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with a trashed link').copyWith(
+          noteIds: const ['note-trashed'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with a trashed link'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.textContaining('in trash'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Note in trash'), findsOneWidget);
+      expect(
+        find.byKey(const Key('task-note-preview')),
+        findsNothing,
+        reason: 'a trashed note must not open an editable preview while '
+            'still in the trash',
+      );
+
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byKey(const Key('task-note-preview')),
+        findsNothing,
+        reason: 'declining the restore must leave no preview open',
+      );
+    });
+
+    testWidgets(
+        '"Open in full editor" (secondary action) still navigates to the '
+        'note and closes the task dialog — demoted, not deleted',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'agenda',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('task-note-preview')), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Open in full editor'));
+      await tester.pumpAndSettle();
+
+      expect(appState.currentNote?.id, 'note-1');
+      expect(
+        find.byType(AlertDialog),
+        findsNothing,
+        reason: 'opening in the full editor still closes the task dialog, '
+            'same as before the in-place preview existed',
+      );
     });
   });
 

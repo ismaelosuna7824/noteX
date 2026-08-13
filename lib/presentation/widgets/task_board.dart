@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../application/use_cases/task/resolve_task_note_link_use_case.dart';
 import '../../application/use_cases/timer/get_time_entries_use_case.dart';
+import '../../application/use_cases/update_note_use_case.dart';
 import '../../domain/entities/note.dart';
 import '../../domain/entities/task.dart';
 import '../../domain/entities/time_entry.dart';
@@ -728,6 +729,25 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   final Map<String, NoteLinkResolution> _noteResolutions = {};
   bool _loadingNotes = true;
 
+  // The linked note currently shown in place of the notes list — the
+  // "preview/edit without leaving the task" surface (settled decision:
+  // "hacer en preview para que no se salgan de esa tarea"). `null` means
+  // the NOTES section renders its normal list/link/create affordances.
+  // Only ever set for a `NoteLinkStatus.found` note (see [_openNote]) — a
+  // trashed note must not open an editable preview as if it were fine.
+  Note? _previewedNote;
+
+  // Debounced write path for [_previewedNote]'s content, entirely separate
+  // from this dialog's own title/description/blockedReason save-on-close
+  // flow ([_closeDialog]/[_isDirty]) and from the global
+  // `AppState.autoSaveService` (owned by the full note editor page — using
+  // it here would fight over its single watched-note slot). Content edits
+  // go straight through [UpdateNoteUseCase] on a short debounce via
+  // [_onPreviewChanged]/[_flushPreview], so merely opening or editing a
+  // note here never touches the TASK's `updatedAt`.
+  Timer? _previewDebounce;
+  String _previewContent = '';
+
   // The project this task is assigned to — mirrors the noteIds pattern
   // above: a local copy updated as the user reassigns it within this
   // dialog session, so the selector reflects the change immediately
@@ -790,6 +810,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   @override
   void dispose() {
+    // Belt-and-suspenders only — every real dismissal path already flushes
+    // the preview via [_closeDialog] before the pop that eventually leads
+    // here (see that method's doc), so there is nothing left to await.
+    _previewDebounce?.cancel();
     _titleController.dispose();
     _blockedReasonController.dispose();
     _notesScrollController.dispose();
@@ -873,6 +897,11 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// fall back on, so silence would mean the user's edit vanished without a
   /// trace.
   Future<void> _closeDialog() async {
+    // Flush any pending, debounced note-preview edit first — an entirely
+    // separate write path (see [_flushPreview]'s doc) that must never be
+    // skipped just because the TASK itself has nothing dirty to save.
+    await _flushPreview();
+    if (!mounted) return;
     if (_isDirty) {
       final messenger = ScaffoldMessenger.of(context);
       final title = _titleController.text.trim();
@@ -1027,6 +1056,80 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     }
   }
 
+  /// Shows [note]'s content in place of the linked-notes list — the
+  /// "preview/edit without leaving the task" surface. Flushes whatever was
+  /// previously being previewed first (defensive: normally there is
+  /// nothing pending, since every path that leaves a preview already
+  /// flushes before getting here).
+  Future<void> _openPreview(Note note) async {
+    await _flushPreview();
+    if (!mounted) return;
+    setState(() {
+      _previewedNote = note;
+      _previewContent = note.content;
+    });
+  }
+
+  /// Returns from the in-place preview back to the linked-notes list,
+  /// flushing any pending edit first.
+  Future<void> _closePreview() async {
+    await _flushPreview();
+    if (!mounted) return;
+    setState(() => _previewedNote = null);
+  }
+
+  /// The secondary "open in full editor" action — demoted, not deleted
+  /// (settled decision: still useful for long writing). Flushes the
+  /// in-place preview's pending edit first, then falls back to the
+  /// pre-existing navigate-away path: [AppState.selectNote] plus closing
+  /// this task dialog, exactly like activating a linked note used to work
+  /// for every note before the in-place preview existed.
+  Future<void> _openInFullEditor(Note note) async {
+    await _flushPreview();
+    if (!mounted) return;
+    final navigator = Navigator.of(context);
+    await GetIt.instance<AppState>().selectNote(note);
+    navigator.pop();
+  }
+
+  /// Marks the in-place preview dirty and (re)starts its debounce — mirrors
+  /// the shape of `AutoSaveService.markDirty`/`_tick`, but scoped locally
+  /// to this dialog and this one note, deliberately NOT the global
+  /// `AppState.autoSaveService` singleton (that instance is owned by the
+  /// full note editor page's own watch/flush lifecycle; sharing it here
+  /// would mean this dialog and the editor page fight over its single
+  /// watched-note slot).
+  void _onPreviewChanged(String value) {
+    _previewContent = value;
+    _previewDebounce?.cancel();
+    _previewDebounce = Timer(
+      const Duration(milliseconds: 600),
+      () => unawaited(_flushPreview()),
+    );
+  }
+
+  /// Persists [_previewContent] for [_previewedNote] through
+  /// [UpdateNoteUseCase] directly — entirely separate from this dialog's
+  /// own title/description/blockedReason save-on-close flow ([_isDirty]),
+  /// so a note edit here never marks the TASK dirty or touches its
+  /// `updatedAt`. A no-op write (nothing actually changed) is skipped by
+  /// [UpdateNoteUseCase] itself. Safe to call with no preview open or
+  /// nothing pending — every closing path calls this unconditionally.
+  Future<void> _flushPreview() async {
+    _previewDebounce?.cancel();
+    _previewDebounce = null;
+    final note = _previewedNote;
+    if (note == null) return;
+    if (_previewContent == note.content) return;
+    final updated = await GetIt.instance<UpdateNoteUseCase>().execute(
+      noteId: note.id,
+      content: _previewContent,
+    );
+    if (updated != null && mounted && _previewedNote?.id == note.id) {
+      setState(() => _previewedNote = updated);
+    }
+  }
+
   /// Opens the note picker and appends the chosen note to this task's
   /// links (`LinkNoteToTaskUseCase` via [TaskState.linkNoteToTask] — a task
   /// carries N notes, decision architecture/task-note-linking-model).
@@ -1078,10 +1181,13 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   }
 
   /// Resolves and opens the note at [noteId] through the three affordance
-  /// states (design D9): found and live → navigate to it; found and
-  /// soft-deleted → offer to restore, then open; not found → offer to
-  /// unlink just this entry. Always via [ResolveTaskNoteLinkUseCase], never
-  /// the deletedAt-filtered in-memory note list.
+  /// states (design D9): found and live → preview/edit it in place
+  /// ([_openPreview], without leaving this task — settled decision); found
+  /// and soft-deleted → offer to restore, then preview it the same way
+  /// (never opens an editable preview of a note still in the trash); not
+  /// found → offer to unlink just this entry. Always via
+  /// [ResolveTaskNoteLinkUseCase], never the deletedAt-filtered in-memory
+  /// note list.
   Future<void> _openNote(String noteId) async {
     final resolution = _noteResolutions[noteId] ??
         await GetIt.instance<ResolveTaskNoteLinkUseCase>().execute(noteId);
@@ -1089,9 +1195,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
     switch (resolution.status) {
       case NoteLinkStatus.found:
-        final navigator = Navigator.of(context);
-        await GetIt.instance<AppState>().selectNote(resolution.note!);
-        navigator.pop();
+        await _openPreview(resolution.note!);
       case NoteLinkStatus.inTrash:
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final restore = await showDialog<bool>(
@@ -1133,15 +1237,17 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           ),
         );
         if (restore != true || !mounted) return;
-        final navigator = Navigator.of(context);
         final appState = GetIt.instance<AppState>();
         await appState.restoreNote(resolution.note!.id);
         final restored = await GetIt.instance<ResolveTaskNoteLinkUseCase>()
             .execute(noteId);
+        if (!mounted) return;
+        setState(() => _noteResolutions[noteId] = restored);
         if (restored.status == NoteLinkStatus.found) {
-          await appState.selectNote(restored.note!);
+          // Restoring makes it live — open it the same way any other live
+          // note opens, in place, rather than the old navigate-away path.
+          await _openPreview(restored.note!);
         }
-        navigator.pop();
       case NoteLinkStatus.missing:
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final unlink = await showDialog<bool>(
@@ -1438,8 +1544,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   /// Notes section — the count lives in the header itself ("Notes · 3"),
   /// so the list body only ever has to render rows, not also announce how
-  /// many there are.
+  /// many there are. While [_previewedNote] is set, renders the in-place
+  /// preview/edit surface instead of the list — the notes section is one
+  /// place that shows either its list-and-actions state or its preview
+  /// state, never both at once.
   Widget _buildNotesSection(bool isDark) {
+    final previewed = _previewedNote;
+    if (previewed != null) {
+      return _buildNotePreviewSection(isDark, previewed);
+    }
     final header =
         _noteIds.isEmpty ? 'Notes' : 'Notes · ${_noteIds.length}';
     return Column(
@@ -1447,6 +1560,90 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       children: [
         _sectionHeader(header, isDark),
         _buildLinkedNotesSection(isDark),
+      ],
+    );
+  }
+
+  /// Height given to the in-place preview/edit editor — matches
+  /// [_buildDescriptionSection]'s own stacked-layout fixed height (260)
+  /// closely enough to read as a deliberate, comparably-sized writing
+  /// surface, not a cramped afterthought bolted onto the sidebar.
+  static const double _notePreviewHeight = 240;
+
+  /// The in-place preview/edit surface for [note] — what replaces the
+  /// linked-notes list while a live linked note is open (settled decision:
+  /// "hacer en preview para que no se salgan de esa tarea"). Reuses
+  /// [NoteMarkdownEditor] verbatim, the app's own settled editor, and it is
+  /// EDITABLE — a read-only preview would defeat the "create a note from
+  /// here" capability, since the user would have to leave anyway just to
+  /// write in it. Edits flow through [_onPreviewChanged] ->
+  /// [_flushPreview] -> [UpdateNoteUseCase] directly: entirely separate
+  /// from this dialog's own title/description/blockedReason save-on-close
+  /// flow, so opening or editing a note here never marks the TASK dirty
+  /// (see [_isDirty]'s doc). "Open in full editor" ([_openInFullEditor])
+  /// is kept as a secondary action for long writing, not deleted.
+  Widget _buildNotePreviewSection(bool isDark, Note note) {
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader('Notes', isDark),
+        Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back_rounded, size: 18),
+              tooltip: 'Back to notes',
+              splashRadius: 16,
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              padding: EdgeInsets.zero,
+              onPressed: () => unawaited(_closePreview()),
+            ),
+            Expanded(
+              child: Text(
+                note.title.isEmpty ? 'Untitled' : note.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: mutedColor,
+                ),
+              ),
+            ),
+            IconButton(
+              icon: const Icon(Icons.open_in_new_rounded, size: 16),
+              tooltip: 'Open in full editor',
+              splashRadius: 16,
+              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+              padding: EdgeInsets.zero,
+              onPressed: () => unawaited(_openInFullEditor(note)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Container(
+          key: const Key('task-note-preview'),
+          height: _notePreviewHeight,
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.grey.shade300,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: NoteMarkdownEditor(
+            // Keyed by note id (not just a constant) so switching which
+            // note is previewed — even if this widget were ever kept
+            // mounted across that switch — always seeds a fresh
+            // controller from the new note's own content rather than
+            // reusing State built for a different note.
+            key: ValueKey('task-note-preview-editor-${note.id}'),
+            initialContent: note.content,
+            toolbar: EditorToolbarProfile.minimal,
+            onChanged: _onPreviewChanged,
+          ),
+        ),
       ],
     );
   }
