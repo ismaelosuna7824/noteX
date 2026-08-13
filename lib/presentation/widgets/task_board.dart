@@ -710,8 +710,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   // mirror, persists immediately" shape as [_projectId] above. `null`
   // means backlog. Persisted through [_setScheduledDate] ->
   // [TaskState.setTaskScheduledDate] -> [UpdateTaskUseCase], never
-  // [_save] — a schedule change is a deliberate edit, not part of the
-  // title/description Save flow, and must never touch `status`.
+  // [_closeDialog] — a schedule change is a deliberate edit, not one of
+  // the fields [_closeDialog] defers to close time, and must never touch
+  // `status`.
   late DateTime? _scheduledDate;
 
   // Local mirror of the task's status, updated as the user changes it via
@@ -728,6 +729,18 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   // stretch is its own entry; see TimeEntry.stop's doc).
   List<TimeEntry> _timeEntries = [];
 
+  // Snapshot of the fields this dialog owns and defers to close time
+  // (title, description, blockedReason), taken at open time and compared
+  // against in [_isDirty]. Normalized the same way [_persistIfDirty]
+  // normalizes them before sending, so the comparison matches exactly what
+  // would (or would not) be written. Every other field — status, project,
+  // scheduledDate, note links — already persists immediately through its
+  // own dedicated verb the moment it changes, so it has no snapshot here
+  // and never routes through the close-triggered save.
+  late final String _originalTitle;
+  late final String _originalDescription;
+  late final String _originalBlockedReason;
+
   @override
   void initState() {
     super.initState();
@@ -739,6 +752,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _projectId = widget.task.projectId;
     _scheduledDate = widget.task.scheduledDate;
     _status = widget.task.status;
+    _originalTitle = widget.task.title.trim();
+    _originalDescription = widget.task.description;
+    _originalBlockedReason = widget.task.blockedReason?.trim() ?? '';
     unawaited(_loadLinkedNotes());
     unawaited(_loadTimeEntries());
   }
@@ -792,28 +808,67 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     });
   }
 
-  Future<void> _save() async {
-    final title = _titleController.text.trim();
+  /// True only if a field this dialog actually persists on close (title,
+  /// description, or — while blocked — blockedReason) differs from what it
+  /// opened with. Deliberately excludes status/project/scheduledDate/note
+  /// links: those already persist immediately through their own dedicated
+  /// verbs (see [_changeStatus], [_assignProject], [_setScheduledDate],
+  /// [_linkNote]/[_unlinkNote]), so merely opening a task to look at it —
+  /// touching none of these three fields — must never write. Saving
+  /// unconditionally on every close would bump `updatedAt`, flip the row to
+  /// `pendingSync`, and generate sync traffic just from opening a task,
+  /// which matters more than usual here given this app's sync layer already
+  /// carries known defects around row writes.
+  bool get _isDirty {
+    if (_titleController.text.trim() != _originalTitle) return true;
+    if (_description != _originalDescription) return true;
     // blockedReason is rendered — and therefore only ever edited — while
     // status == blocked (design D3: retained but hidden otherwise, never
     // destroyed by an edit to an unrelated field). Uses the LOCAL _status,
     // not widget.task.status — the sidebar status control can change it
-    // within this same dialog session, before Save is pressed.
-    final isBlocked = _status == TaskStatus.blocked;
-    if (isBlocked) {
-      final reason = _blockedReasonController.text.trim();
-      await widget.taskState.updateTask(
-        widget.task.id,
-        title: title.isEmpty ? null : title,
-        description: _description,
-        blockedReason: reason.isEmpty ? null : reason,
-      );
-    } else {
-      await widget.taskState.updateTask(
-        widget.task.id,
-        title: title.isEmpty ? null : title,
-        description: _description,
-      );
+    // within this same dialog session, before the dialog closes.
+    if (_status == TaskStatus.blocked &&
+        _blockedReasonController.text.trim() != _originalBlockedReason) {
+      return true;
+    }
+    return false;
+  }
+
+  /// Persists title/description/blockedReason — but only when [_isDirty] —
+  /// then closes. This is the SINGLE path every way of closing this dialog
+  /// funnels through (the header X below, and the barrier/Escape via the
+  /// `PopScope` in [build]), replacing the old explicit Save/Cancel
+  /// footer (this dialog's reference model — a Jira issue modal — has
+  /// neither: edits persist and the dialog just closes). A save failure is
+  /// surfaced via `SnackBar` rather than swallowed — there is no Cancel to
+  /// fall back on, so silence would mean the user's edit vanished without a
+  /// trace.
+  Future<void> _closeDialog() async {
+    if (_isDirty) {
+      final messenger = ScaffoldMessenger.of(context);
+      final title = _titleController.text.trim();
+      final isBlocked = _status == TaskStatus.blocked;
+      try {
+        if (isBlocked) {
+          final reason = _blockedReasonController.text.trim();
+          await widget.taskState.updateTask(
+            widget.task.id,
+            title: title.isEmpty ? null : title,
+            description: _description,
+            blockedReason: reason.isEmpty ? null : reason,
+          );
+        } else {
+          await widget.taskState.updateTask(
+            widget.task.id,
+            title: title.isEmpty ? null : title,
+            description: _description,
+          );
+        }
+      } catch (e) {
+        messenger.showSnackBar(
+          SnackBar(content: Text('Could not save changes: $e')),
+        );
+      }
     }
     if (mounted) Navigator.of(context).pop();
   }
@@ -869,8 +924,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   /// Reassigns this task's project — a deliberate edit, never a status
   /// change (design D3), persisted through [TaskState.setTaskProject]
-  /// rather than [TaskState.updateTask]/`_save` so it takes effect
-  /// immediately, independent of the title/description Save button.
+  /// rather than [TaskState.updateTask]/[_closeDialog] so it takes effect
+  /// immediately, independent of the dialog's save-on-close title/
+  /// description/blockedReason flow.
   Future<void> _assignProject(String? projectId) async {
     setState(() => _projectId = projectId);
     await widget.taskState.setTaskProject(widget.task.id, projectId);
@@ -1168,7 +1224,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// Project selector — "No Project" plus every project [TimerState] knows
   /// about (settled decision: "link con los proyectos del timer"). Persists
   /// immediately through [_assignProject]; unlike title/description, a
-  /// project change does not wait for the Save button.
+  /// project change does not wait for the dialog to close.
   ///
   /// If [_projectId] points at a project [TimerState.projects] doesn't
   /// carry (soft-deleted — mirrors a trashed linked note's degrade-the-
@@ -1430,10 +1486,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   /// The scheduled-date control — tap to pick a date (a backlog task gets
   /// one), tap the close icon to clear it back to the backlog. Persists
-  /// immediately through [_setScheduledDate], the same "no Save button
-  /// needed" pattern as the Project selector and status control — a
-  /// schedule change is a deliberate edit, distinct from the
-  /// title/description Save flow.
+  /// immediately through [_setScheduledDate], the same "does not wait for
+  /// the dialog to close" pattern as the Project selector and status
+  /// control — a schedule change is a deliberate edit, distinct from the
+  /// title/description/blockedReason save-on-close flow.
   Widget _buildScheduledDateControl(bool isDark) {
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
     final date = _scheduledDate;
@@ -1640,7 +1696,11 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           icon: const Icon(Icons.close_rounded, size: 20),
           tooltip: 'Close',
           constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-          onPressed: () => Navigator.of(context).pop(),
+          // Routes through the same save-then-close path as the barrier
+          // and Escape (see [build]'s `PopScope`) rather than popping
+          // directly — one of the three ways this dialog can close, and
+          // all three must persist identically.
+          onPressed: _closeDialog,
         ),
       ],
     );
@@ -1712,50 +1772,51 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     final dialogHeight = math.max(320.0, math.min(availableHeight, _dialogHeight));
     final stacked = dialogWidth < _stackBreakpointWidth;
 
-    return AlertDialog(
-      // Mirrors `TimeEntryEditor`'s `AlertDialog.backgroundColor` — the
-      // app's own dark-neutral surface, not the ambient (seed-tinted)
-      // theme default. See [surfaceColor]'s doc for why.
-      backgroundColor: Color.alphaBlend(
-        widget.surfaceColor.withValues(alpha: 0.96),
-        isDark ? Colors.black : Colors.white,
-      ),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      content: SizedBox(
-        width: dialogWidth,
-        height: dialogHeight,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildHeader(isDark),
-            const SizedBox(height: 16),
-            Expanded(child: _buildBody(isDark, stacked: stacked)),
-          ],
+    return PopScope(
+      // Always false: the framework never gets to pop this route on its
+      // own. Every dismissal — the barrier tap and Escape both resolve to
+      // `Navigator.maybePop` (see `ModalBarrier.onDismiss` and
+      // `_DismissModalAction` in the framework's routes.dart), which
+      // consults `canPop` and, finding it false, blocks the pop and calls
+      // `onPopInvokedWithResult` below with `didPop: false` instead. That
+      // is what actually triggers [_closeDialog] for those two paths. The
+      // header X (in [_buildHeader]) calls [_closeDialog] directly, whose
+      // own `Navigator.pop` is an imperative pop that bypasses `canPop`
+      // and reports back here with `didPop: true` — already handled, so
+      // it is a no-op. Net effect: three ways to close this dialog, one
+      // path (`_closeDialog`) that decides what gets persisted first.
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        unawaited(_closeDialog());
+      },
+      child: AlertDialog(
+        // Mirrors `TimeEntryEditor`'s `AlertDialog.backgroundColor` — the
+        // app's own dark-neutral surface, not the ambient (seed-tinted)
+        // theme default. See [surfaceColor]'s doc for why.
+        backgroundColor: Color.alphaBlend(
+          widget.surfaceColor.withValues(alpha: 0.96),
+          isDark ? Colors.black : Colors.white,
         ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _save,
-          style: FilledButton.styleFrom(
-            backgroundColor: widget.accentColor,
-            // Same fix as `TimeEntryEditor`'s Save button: left to the
-            // ambient theme, the label resolves against
-            // `colorScheme.onPrimary` (computed for the SEED's tonal
-            // "primary", not for the literal `accentColor` used as this
-            // button's background) — for a light/bright accent that reads
-            // as a low-contrast, muted label instead of a clearly
-            // pressable accent-coloured button.
-            foregroundColor: widget.accentColor.computeLuminance() > 0.5
-                ? Colors.black
-                : Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: SizedBox(
+          width: dialogWidth,
+          height: dialogHeight,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(isDark),
+              const SizedBox(height: 16),
+              Expanded(child: _buildBody(isDark, stacked: stacked)),
+            ],
           ),
-          child: const Text('Save'),
         ),
-      ],
+        // No Save/Cancel footer (settled decision: the reference model —
+        // a Jira issue modal — has neither; edits persist on close, see
+        // [_closeDialog]). Removing `actions` also reclaims the vertical
+        // space `AlertDialog` reserved for that row.
+      ),
     );
   }
 }

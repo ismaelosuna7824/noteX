@@ -421,8 +421,8 @@ void main() {
     });
 
     testWidgets(
-        'the Save button label contrasts with the literal accent colour, '
-        'not a mismatched theme-computed foreground', (tester) async {
+        'no Save/Cancel footer renders — the dialog has no explicit-accent '
+        'FilledButton to mismatch in the first place', (tester) async {
       await repository.save(Task.create(id: 'r1', title: 'Save button'));
       await taskState.initialize();
       await pumpTaskPage(tester);
@@ -430,25 +430,16 @@ void main() {
       await tester.tap(find.text('Save button'));
       await tester.pumpAndSettle();
 
-      final saveButton = tester.widget<FilledButton>(
-        find.widgetWithText(FilledButton, 'Save'),
-      );
-      final expectedForeground =
-          themeState.accentColor.computeLuminance() > 0.5
-              ? Colors.black
-              : Colors.white;
-      expect(
-        saveButton.style?.foregroundColor?.resolve(<WidgetState>{}),
-        expectedForeground,
-        reason: 'the Save label must be computed against the literal '
-            'accent colour used as its background (same fix as '
-            "TimeEntryEditor's own Save button), not left to the ambient "
-            'theme default',
-      );
-      expect(
-        saveButton.style?.backgroundColor?.resolve(<WidgetState>{}),
-        themeState.accentColor,
-      );
+      // The task detail dialog persists on close (save-on-close) instead
+      // of an explicit Save/Cancel footer — see task_board_test.dart's
+      // dedicated 'save on close' group for the FilledButton-foreground
+      // contrast fix as it now applies to the nested dialogs that DO
+      // still carry one (_CreateProjectDialog, the note-in-trash/
+      // note-not-found confirmations).
+      final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
+      expect(dialog.actions, isNull);
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Cancel'), findsNothing);
     });
   });
 }

@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
 import 'package:notex/application/services/auto_save_service.dart';
@@ -128,6 +129,26 @@ class _SpyTransitionUseCase extends TransitionTaskStatusUseCase {
   Future<Task?> execute(String taskId, TaskStatus next) async {
     calls.add((taskId, next));
     return super.execute(taskId, next);
+  }
+}
+
+/// An [UpdateTaskUseCase] that always throws — proves the task detail
+/// dialog's save-on-close surfaces a failure (SnackBar) rather than
+/// swallowing it. There is no Cancel to fall back on once Save/Cancel are
+/// gone, so silence would mean the user's edit vanished without a trace.
+class _ThrowingUpdateTaskUseCase extends UpdateTaskUseCase {
+  _ThrowingUpdateTaskUseCase(super.repository);
+
+  @override
+  Future<Task?> execute(
+    String taskId, {
+    String? title,
+    String? description,
+    Object? scheduledDate,
+    Object? blockedReason,
+    Object? projectId,
+  }) async {
+    throw StateError('simulated save failure');
   }
 }
 
@@ -260,7 +281,7 @@ void main() {
     await db.close();
   });
 
-  Future<void> pumpBoard(WidgetTester tester) async {
+  Future<void> pumpBoard(WidgetTester tester, {TaskState? overrideTaskState}) async {
     // The redesigned task detail dialog is taller/wider than the default
     // 800x600 test surface can host without a false layout overflow — this
     // app is desktop-first (sdd-init), so a generous window size here
@@ -270,6 +291,7 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
+    final boardTaskState = overrideTaskState ?? taskState;
     await tester.pumpWidget(
       MaterialApp(
         // Avoids the splash-shader throw under this test SDK — same trick
@@ -280,9 +302,9 @@ void main() {
             width: 1000,
             height: 700,
             child: AnimatedBuilder(
-              animation: Listenable.merge([taskState, timerState]),
+              animation: Listenable.merge([boardTaskState, timerState]),
               builder: (context, _) => TaskBoard(
-                taskState: taskState,
+                taskState: boardTaskState,
                 themeState: themeState,
                 timerState: timerState,
               ),
@@ -437,7 +459,10 @@ void main() {
         find.widgetWithText(TextField, 'Blocked reason'),
         'waiting on legal',
       );
-      await tester.tap(find.text('Save'));
+      // Save-on-close (no explicit Save button anymore): the header X is
+      // one of the three ways to close, all persisting identically — see
+      // the dedicated 'save on close' group below.
+      await tester.tap(find.byTooltip('Close'));
       await tester.pumpAndSettle();
 
       // Rendered while blocked.
@@ -1165,8 +1190,8 @@ void main() {
     });
 
     testWidgets(
-        'the timer control sits with the task, separated from the '
-        'Cancel/Save dialog actions row', (tester) async {
+        'no Save/Cancel footer renders — save-on-close replaced it, and '
+        'the timer control still sits with the task', (tester) async {
       await repository.save(Task.create(id: 'r1', title: 'Separate me'));
       await taskState.initialize();
       await pumpBoard(tester);
@@ -1174,26 +1199,23 @@ void main() {
       await tester.tap(find.text('Separate me'));
       await tester.pumpAndSettle();
 
-      // The AlertDialog's own actions row holds only Cancel and Save now —
-      // the timer control was lifted out of it.
+      // The old actions row (Cancel/Save) is gone entirely — removed along
+      // with the buttons themselves (save-on-close replaces them; see the
+      // dedicated 'save on close' group below), reclaiming the vertical
+      // space AlertDialog reserved for it.
       final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
       expect(
         dialog.actions,
-        hasLength(2),
-        reason: 'Cancel/Save act on the dialog; the timer acts on the '
-            'task — they must not share the same actions row',
+        isNull,
+        reason: 'the footer was removed along with Save/Cancel, not just '
+            'the timer control lifted out of it',
       );
+      expect(find.text('Save'), findsNothing);
+      expect(find.text('Cancel'), findsNothing);
 
-      // The timer control renders above the footer, inside the task
-      // section, not inline with Cancel/Save.
-      final timerY = tester.getTopLeft(find.text('Start timer')).dy;
-      final cancelY = tester.getTopLeft(find.text('Cancel')).dy;
-      expect(
-        timerY,
-        lessThan(cancelY),
-        reason: 'the timer control must sit above the footer, grouped '
-            'with the task rather than the dialog actions',
-      );
+      // The timer control still renders inside the task section, grouped
+      // with the task rather than any footer.
+      expect(find.text('Start timer'), findsOneWidget);
     });
 
     testWidgets('the title field has a visible label, not just a hint',
@@ -1702,6 +1724,135 @@ void main() {
         ),
         findsOneWidget,
         reason: 'the control must reflect the backlog immediately',
+      );
+    });
+  });
+
+  group('task detail dialog — save on close (no explicit Save/Cancel)', () {
+    testWidgets('closing via the header X persists a changed title',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Old title'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Old title'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'New title via X',
+      );
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.title, 'New title via X');
+    });
+
+    testWidgets('closing via Escape persists a changed title',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Old title'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Old title'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'New title via Escape',
+      );
+      // The framework's default WidgetsApp shortcut maps Escape ->
+      // DismissIntent, which the modal route's own action handler resolves
+      // via Navigator.maybePop — the exact same path the barrier below
+      // uses, and the one PopScope's `canPop: false` in _TaskDetailDialog
+      // intercepts to persist first.
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.title, 'New title via Escape');
+    });
+
+    testWidgets('closing via the barrier persists a changed title',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Old title'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Old title'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'New title via barrier',
+      );
+      // The dialog is centered and capped well under the 1400x1200 test
+      // surface (see pumpBoard's own doc) — this corner is guaranteed to
+      // be outside the dialog's own content and land on the ModalBarrier.
+      await tester.tapAt(const Offset(10, 10));
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.title, 'New title via barrier');
+    });
+
+    testWidgets(
+        'opening and closing without editing anything writes nothing '
+        '(updatedAt unchanged)', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Untouched'));
+      final before = await repository.getById('r1');
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Untouched'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      final after = await repository.getById('r1');
+      expect(
+        after!.updatedAt,
+        before!.updatedAt,
+        reason: 'opening a task to merely look at it must never write — '
+            'none of the fields this dialog defers to close time (title, '
+            'description, blockedReason) were touched, so updateTask must '
+            'never have been called',
+      );
+    });
+
+    testWidgets(
+        'a save failure surfaces via SnackBar rather than disappearing',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Will fail'));
+      final failingTaskState = TaskState(
+        createReminder: CreateTaskUseCase(repository),
+        getReminders: GetTasksUseCase(repository),
+        completeReminder: transitionSpy,
+        updateReminder: _ThrowingUpdateTaskUseCase(repository),
+        deleteReminder: DeleteTaskUseCase(repository, _NoopSyncEngine()),
+        linkNote: LinkNoteToTaskUseCase(repository),
+        unlinkNote: UnlinkNoteFromTaskUseCase(repository),
+      );
+      await failingTaskState.initialize();
+      await pumpBoard(tester, overrideTaskState: failingTaskState);
+
+      await tester.tap(find.text('Will fail'));
+      await tester.pumpAndSettle();
+
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'Changed but will fail',
+      );
+      await tester.tap(find.byTooltip('Close'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.textContaining('Could not save changes'),
+        findsOneWidget,
+        reason: 'a save failure must surface — there is no Cancel button '
+            'to fall back on, so silence would mean the edit vanished '
+            'without a trace',
       );
     });
   });
