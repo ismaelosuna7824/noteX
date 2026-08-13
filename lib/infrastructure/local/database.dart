@@ -13,6 +13,7 @@ import '../../domain/entities/markdown_project.dart' as domain_mdp;
 import '../../domain/entities/note_project.dart' as domain_np;
 import '../../domain/entities/reminder.dart' as domain_reminder;
 import '../../domain/value_objects/sync_status.dart';
+import 'task_status_migration.dart';
 
 part 'database.g.dart';
 
@@ -85,6 +86,8 @@ class TimeEntries extends Table {
   TextColumn get syncStatus =>
       text().withDefault(const Constant('localOnly'))();
   TextColumn get userId => text().nullable()();
+  // v18: schema only, unused until slice 3 (timer↔task link).
+  TextColumn get taskId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -173,6 +176,23 @@ class ReminderEntries extends Table {
       text().withDefault(const Constant('localOnly'))();
   TextColumn get userId => text().nullable()();
 
+  // ── v18: task-tracker columns (schema only in this phase; Reminder→Task
+  // rename and status-as-source-of-truth wiring land in later phases). ──
+  TextColumn get status => text().withDefault(const Constant('todo'))();
+  DateTimeColumn get statusChangedAt => dateTime().nullable()();
+  // Local only — never serialized to Supabase. See task_status_migration.dart
+  // and the D10 push-payload contract in the design doc.
+  BoolColumn get statusPendingPush =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  TextColumn get blockedReason => text().nullable()();
+  TextColumn get noteId => text().nullable()();
+  TextColumn get externalProvider => text().nullable()();
+  TextColumn get externalId => text().nullable()();
+  TextColumn get externalUrl => text().nullable()();
+  TextColumn get externalCachedTitle => text().nullable()();
+  DateTimeColumn get externalLastSyncedAt => dateTime().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 
@@ -233,7 +253,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 18;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -382,6 +402,40 @@ class AppDatabase extends _$AppDatabase {
         // Derived data only — nothing here was ever authoritative, so the drop
         // loses nothing that note bodies do not already contain.
         await customStatement('DROP TABLE IF EXISTS note_links');
+      }
+      if (from < 18) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+
+        // Written against the pre-rename symbol `reminderEntries` — the
+        // schema lands here (C2), the Reminder→Task rename lands separately
+        // (C3), so this migration cannot hide a rename bug.
+        await safeAddColumn(reminderEntries, reminderEntries.status);
+        await safeAddColumn(reminderEntries, reminderEntries.statusChangedAt);
+        await safeAddColumn(
+            reminderEntries, reminderEntries.statusPendingPush);
+        await safeAddColumn(reminderEntries, reminderEntries.description);
+        await safeAddColumn(reminderEntries, reminderEntries.blockedReason);
+        await safeAddColumn(reminderEntries, reminderEntries.noteId);
+        await safeAddColumn(
+            reminderEntries, reminderEntries.externalProvider);
+        await safeAddColumn(reminderEntries, reminderEntries.externalId);
+        await safeAddColumn(reminderEntries, reminderEntries.externalUrl);
+        await safeAddColumn(
+            reminderEntries, reminderEntries.externalCachedTitle);
+        await safeAddColumn(
+            reminderEntries, reminderEntries.externalLastSyncedAt);
+
+        // Schema only, unused until slice 3.
+        await safeAddColumn(timeEntries, timeEntries.taskId);
+
+        await backfillTaskStatus(this);
       }
     },
   );
