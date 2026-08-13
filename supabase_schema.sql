@@ -197,7 +197,21 @@ create table public.reminders (
   status_changed_at timestamp with time zone,
   description text not null default '',
   blocked_reason text,
+  -- v18. DEPRECATED as of v20 — superseded by `note_ids` below, which
+  -- corrects a design error: a task links to N notes, not one (decision
+  -- architecture/task-note-linking-model). Kept, unused, rather than
+  -- dropped — dropping it buys nothing and the local side keeps its own
+  -- deprecated `note_id` column for the same reason. Not read or written
+  -- by any v20+ client.
   note_id uuid,
+  -- v20. A task's links to zero or more notes, JSON-encoded as text — the
+  -- same shape the local Drift `noteIds` column and `TaskSupabaseMapper`
+  -- use. NOT NULL / `'[]'` default for the same load-bearing-DEFAULT
+  -- reason as `status` above. Apply via supabase_v20_task_notes.sql — THIS
+  -- FILE DESCRIBES THE TARGET SCHEMA ONLY and does not record whether any
+  -- environment has actually been migrated. Until the migration is
+  -- applied, pushing `note_ids` fails outright.
+  note_ids text not null default '[]',
   external_provider text,
   external_id text,
   external_url text,

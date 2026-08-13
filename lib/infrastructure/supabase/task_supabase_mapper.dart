@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import '../../domain/entities/task.dart';
 import '../../domain/value_objects/sync_status.dart';
 import '../../domain/value_objects/task_status_resolution.dart';
@@ -40,7 +42,14 @@ class TaskSupabaseMapper {
       'scheduled_date': t.scheduledDate?.toUtc().toIso8601String(),
       'description': t.description,
       'blocked_reason': t.blockedReason,
-      'note_id': t.noteId,
+      // v20 (decision architecture/task-note-linking-model) — a task links
+      // to N notes, JSON-encoded as text, the same shape as the local
+      // column. Deliberately no `note_id` key: this branch carries no
+      // backward-compatibility burden (see the decision record — no
+      // released client has ever read or written `note_id`), so there is
+      // no dual-write. Requires the remote `note_ids` column to exist
+      // (v20 DDL) before a client can push this.
+      'note_ids': jsonEncode(t.noteIds),
       'external_provider': t.externalProvider,
       'external_id': t.externalId,
       'external_url': t.externalUrl,
@@ -90,7 +99,10 @@ class TaskSupabaseMapper {
       completedAt: resolution.completedAt,
       description: m['description'] as String? ?? '',
       blockedReason: m['blocked_reason'] as String?,
-      noteId: m['note_id'] as String?,
+      // Parsed defensively — a row written before the v20 DDL lands (or by
+      // an older, unreleased build) has no `note_ids` key at all, which
+      // must read as "no links", not a parse error.
+      noteIds: _decodeNoteIds(m['note_ids']),
       externalProvider: m['external_provider'] as String?,
       externalId: m['external_id'] as String?,
       externalUrl: m['external_url'] as String?,
@@ -105,5 +117,21 @@ class TaskSupabaseMapper {
           : null,
       userId: m['user_id'] as String?,
     );
+  }
+
+  /// Decodes an inbound `note_ids` value into a `List<String>`. Defensive:
+  /// missing key, null, malformed JSON, or a JSON value that isn't a list
+  /// of strings all degrade to "no links" rather than throwing — matching
+  /// every other v18/v19/v20 field's defensive-parse convention on this
+  /// inbound path.
+  static List<String> _decodeNoteIds(dynamic value) {
+    if (value == null) return const [];
+    try {
+      final decoded = value is String ? jsonDecode(value) : value;
+      if (decoded is List) return decoded.whereType<String>().toList();
+    } catch (_) {
+      // Malformed JSON — degrade to "no links" rather than crash.
+    }
+    return const [];
   }
 }

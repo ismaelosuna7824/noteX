@@ -30,7 +30,7 @@ void main() {
       completedAt: completedAt,
       blockedReason: blockedReason,
       description: 'get oat milk',
-      noteId: 'note-1',
+      noteIds: const ['note-1', 'note-2'],
       externalProvider: externalProvider,
       externalId: externalId,
       externalUrl: externalUrl,
@@ -336,7 +336,7 @@ void main() {
       expect(roundTripped.completedAt, original.completedAt);
       expect(roundTripped.description, original.description);
       expect(roundTripped.blockedReason, original.blockedReason);
-      expect(roundTripped.noteId, original.noteId);
+      expect(roundTripped.noteIds, original.noteIds);
       expect(roundTripped.externalProvider, original.externalProvider);
       expect(roundTripped.externalId, original.externalId);
       expect(roundTripped.externalUrl, original.externalUrl);
@@ -369,6 +369,74 @@ void main() {
       );
 
       expect(roundTripped.scheduledDate, isNull);
+    });
+  });
+
+  group('note_ids — v20, N notes (decision '
+      'architecture/task-note-linking-model)', () {
+    test('toMap emits note_ids as a JSON-encoded array, unconditionally '
+        '(not gated by includeStatusFields)', () {
+      final task = buildTask();
+
+      final withStatus = TaskSupabaseMapper.toMap(
+        task,
+        includeStatusFields: true,
+      );
+      final withoutStatus = TaskSupabaseMapper.toMap(
+        task,
+        includeStatusFields: false,
+      );
+
+      expect(withStatus['note_ids'], '["note-1","note-2"]');
+      expect(withoutStatus['note_ids'], '["note-1","note-2"]');
+    });
+
+    test('toMap never emits a note_id key — no dual-write to the '
+        'deprecated column', () {
+      final map = TaskSupabaseMapper.toMap(
+        buildTask(),
+        includeStatusFields: true,
+      );
+
+      expect(map.containsKey('note_id'), isFalse);
+    });
+
+    test('fromMap decodes a JSON-array note_ids string', () {
+      final row = rowFor(TaskStatus.todo, false);
+      row['note_ids'] = '["a","b","c"]';
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.noteIds, ['a', 'b', 'c']);
+    });
+
+    test('fromMap defaults to no links when note_ids is absent — a row '
+        'written before the v20 DDL lands', () {
+      final row = rowFor(TaskStatus.todo, false);
+      row.remove('note_ids');
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.noteIds, isEmpty);
+    });
+
+    test('fromMap defaults to no links when note_ids is null', () {
+      final row = rowFor(TaskStatus.todo, false);
+      row['note_ids'] = null;
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.noteIds, isEmpty);
+    });
+
+    test('fromMap degrades malformed JSON to no links rather than throwing',
+        () {
+      final row = rowFor(TaskStatus.todo, false);
+      row['note_ids'] = 'not-json';
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.noteIds, isEmpty);
     });
   });
 }
