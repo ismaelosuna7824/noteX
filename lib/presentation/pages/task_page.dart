@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/task_board.dart';
 
 /// Full CRUD page for managing reminders.
 class TaskPage extends StatefulWidget {
@@ -235,8 +236,13 @@ class _TaskPageState extends State<TaskPage> {
                       ),
                     ),
                     const Spacer(),
+                    _ViewToggle(themeState: widget.themeState),
+                    const SizedBox(width: 10),
                     FilledButton.icon(
-                      onPressed: () => _showAddReminderDialog(context),
+                      onPressed: () => widget.themeState.taskViewMode == 'board'
+                          ? showAddTaskDialog(
+                              context, _reminderState, widget.themeState)
+                          : _showAddReminderDialog(context),
                       icon: const Icon(Icons.add, size: 18),
                       label: const Text('New Reminder'),
                       style: FilledButton.styleFrom(
@@ -252,43 +258,50 @@ class _TaskPageState extends State<TaskPage> {
                 Divider(color: dividerColor),
                 const SizedBox(height: 8),
 
-                // Content
+                // Content — the flat list stays the default surface; the
+                // Kanban board (design's "additional surface") is opt-in via
+                // the toggle above and remembered across restarts.
                 Expanded(
-                  child: reminders.isEmpty
-                      ? _buildEmptyState(isDark, accentColor)
-                      : ListView(
-                          children: [
-                            if (pending.isNotEmpty) ...[
-                              _buildSectionHeader(
-                                'Pending',
-                                pending.length,
-                                accentColor,
-                                isDark,
-                              ),
-                              const SizedBox(height: 8),
-                              ...pending.map((r) => _buildReminderTile(
-                                    r,
-                                    isDark,
+                  child: widget.themeState.taskViewMode == 'board'
+                      ? TaskBoard(
+                          taskState: _reminderState,
+                          themeState: widget.themeState,
+                        )
+                      : reminders.isEmpty
+                          ? _buildEmptyState(isDark, accentColor)
+                          : ListView(
+                              children: [
+                                if (pending.isNotEmpty) ...[
+                                  _buildSectionHeader(
+                                    'Pending',
+                                    pending.length,
                                     accentColor,
-                                  )),
-                            ],
-                            if (completed.isNotEmpty) ...[
-                              const SizedBox(height: 16),
-                              _buildSectionHeader(
-                                'Completed',
-                                completed.length,
-                                Colors.green,
-                                isDark,
-                              ),
-                              const SizedBox(height: 8),
-                              ...completed.map((r) => _buildReminderTile(
-                                    r,
                                     isDark,
-                                    accentColor,
-                                  )),
-                            ],
-                          ],
-                        ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ...pending.map((r) => _buildReminderTile(
+                                        r,
+                                        isDark,
+                                        accentColor,
+                                      )),
+                                ],
+                                if (completed.isNotEmpty) ...[
+                                  const SizedBox(height: 16),
+                                  _buildSectionHeader(
+                                    'Completed',
+                                    completed.length,
+                                    Colors.green,
+                                    isDark,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  ...completed.map((r) => _buildReminderTile(
+                                        r,
+                                        isDark,
+                                        accentColor,
+                                      )),
+                                ],
+                              ],
+                            ),
                 ),
               ],
             ),
@@ -535,6 +548,97 @@ class _ReminderTileState extends State<_ReminderTile> {
                 tooltip: 'Delete',
               ),
             ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// List/Board view toggle — remembered across restarts, same pattern as the
+// timer page's list/calendar toggle (ThemeState.taskViewMode).
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ViewToggle extends StatelessWidget {
+  const _ViewToggle({required this.themeState});
+
+  final ThemeState themeState;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final board = themeState.taskViewMode == 'board';
+
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ViewToggleButton(
+            icon: Icons.view_list_rounded,
+            tooltip: 'List view',
+            selected: !board,
+            themeState: themeState,
+            isDark: isDark,
+            onTap: () => themeState.setTaskViewMode('list'),
+          ),
+          _ViewToggleButton(
+            icon: Icons.view_column_rounded,
+            tooltip: 'Board view',
+            selected: board,
+            themeState: themeState,
+            isDark: isDark,
+            onTap: () => themeState.setTaskViewMode('board'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ViewToggleButton extends StatelessWidget {
+  const _ViewToggleButton({
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.themeState,
+    required this.isDark,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final ThemeState themeState;
+  final bool isDark;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: selected
+            ? themeState.accentColor.withValues(alpha: 0.18)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(6),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            child: Icon(
+              icon,
+              size: 16,
+              color: selected
+                  ? themeState.accentColor
+                  : (isDark ? Colors.white54 : Colors.grey.shade600),
+            ),
           ),
         ),
       ),

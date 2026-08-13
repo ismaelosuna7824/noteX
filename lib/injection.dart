@@ -425,6 +425,7 @@ Future<void> setupDependencies() async {
       createReminder: getIt<CreateTaskUseCase>(),
       getReminders: getIt<GetTasksUseCase>(),
       completeReminder: getIt<TransitionTaskStatusUseCase>(),
+      updateReminder: getIt<UpdateTaskUseCase>(),
       deleteReminder: getIt<DeleteTaskUseCase>(),
     ),
   );
