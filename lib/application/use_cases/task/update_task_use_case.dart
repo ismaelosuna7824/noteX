@@ -29,6 +29,15 @@ class UpdateTaskUseCase {
     // from "omitted" via the sentinel below — see design D3/D5.
     Object? scheduledDate = const _Unset(),
     Object? blockedReason = const _Unset(),
+    // Omit to leave the project unchanged; pass a value to (re)assign it;
+    // pass `null` for "No Project". Same omit/set/clear shape as
+    // scheduledDate/blockedReason above — a project assignment is a field
+    // replacement, not a status change, so it belongs here rather than a
+    // dedicated verb (contrast with LinkNoteToTaskUseCase, which is a list
+    // append/remove and does not fit this shape). See
+    // TaskState.setTaskProject, which always passes a concrete value here,
+    // never this class's own sentinel.
+    Object? projectId = const _Unset(),
   }) async {
     final existing = await _repository.getById(taskId);
     if (existing == null) return null;
@@ -46,6 +55,8 @@ class UpdateTaskUseCase {
       blockedReason: blockedReason is _Unset
           ? existing.blockedReason
           : blockedReason as String?,
+      projectId:
+          projectId is _Unset ? existing.projectId : projectId as String?,
       updatedAt: DateTime.now(),
       syncStatus: newSyncStatus,
     );

@@ -166,6 +166,68 @@ void main() {
     expect(result!.syncStatus, SyncStatus.localOnly);
   });
 
+  test('preserves projectId when omitted', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      projectId: 'proj-1',
+    ));
+
+    final result = await useCase.execute('r1', title: 'Buy oat milk');
+
+    expect(result!.projectId, 'proj-1');
+  });
+
+  test('reassigns projectId when a value is passed', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      projectId: 'proj-1',
+    ));
+
+    final result = await useCase.execute('r1', projectId: 'proj-2');
+
+    expect(result!.projectId, 'proj-2');
+  });
+
+  test('clears projectId — "No Project" — when explicitly passed null',
+      () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      projectId: 'proj-1',
+    ));
+
+    final result = await useCase.execute('r1', projectId: null);
+
+    expect(result!.projectId, isNull);
+  });
+
+  test('assigning a project does not touch status', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      status: TaskStatus.doing,
+    ));
+
+    final result = await useCase.execute('r1', projectId: 'proj-1');
+
+    expect(result!.status, TaskStatus.doing);
+    expect(result.statusPendingPush, isFalse);
+  });
+
   test('promotes a synced task to pendingSync', () async {
     await repository.save(Task(
       id: 'r1',

@@ -165,6 +165,19 @@ class TaskState extends ChangeNotifier {
     return result;
   }
 
+  /// Assigns [projectId] to task [id] — pass `null` for "No Project". A
+  /// dedicated verb rather than an optional param on [updateTask]: it
+  /// always carries a concrete value (the dialog's project selector always
+  /// has a definite choice), so no sentinel ever needs resolving here, and
+  /// [UpdateTaskUseCase]'s own `_Unset` default is simply never taken —
+  /// never touches `status` (design D3; a project change is not a status
+  /// change).
+  Future<Task?> setTaskProject(String id, String? projectId) async {
+    final result = await _updateReminder.execute(id, projectId: projectId);
+    await refreshReminders();
+    return result;
+  }
+
   /// Soft-delete a reminder.
   Future<void> deleteReminder(String id) async {
     await _deleteReminder.execute(id);

@@ -216,7 +216,17 @@ create table public.reminders (
   external_id text,
   external_url text,
   external_cached_title text,
-  external_last_synced_at timestamp with time zone
+  external_last_synced_at timestamp with time zone,
+  -- v21. Links a task to one of the timer feature's projects — tracked
+  -- time started from a task inherits it. Real foreign key (unlike
+  -- note_id/note_ids): a project is only ever soft-deleted, never
+  -- permanently removed, so this can never block a user's own delete
+  -- action, matching `time_entries.project_id`'s existing convention. Apply
+  -- via supabase_v21_task_project.sql — THIS FILE DESCRIBES THE TARGET
+  -- SCHEMA ONLY and does not record whether any environment has actually
+  -- been migrated. Until the migration is applied, pushing `project_id`
+  -- fails outright.
+  project_id uuid references public.projects(id)
 );
 
 -- Enable RLS
