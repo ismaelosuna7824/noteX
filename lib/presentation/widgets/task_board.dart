@@ -1082,11 +1082,18 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// opening or editing a note here never marks the TASK dirty (see
   /// [_isDirty]'s doc).
   ///
-  /// A non-null return means the user tapped "Open in full editor" inside
-  /// the modal, with its own pending edit already flushed — handled the
-  /// same way [_openInFullEditor] always has.
+  /// Every dismissal returns the freshest (post-flush) [Note] alongside a
+  /// flag for whether "Open in full editor" was requested. The freshest
+  /// [Note] is used UNCONDITIONALLY to refresh [_noteResolutions] — not
+  /// only on the full-editor path — so the next [_openNote] (a reopen from
+  /// this same still-open task dialog) reads the just-saved edit instead of
+  /// the pre-edit [Note] this method was called with. Without this
+  /// refresh, [_noteResolutions] keeps serving the stale cached [Note]
+  /// indefinitely, which reads to the user exactly like their edit was
+  /// never saved — a stale in-memory read, not data loss (the write itself,
+  /// [_NoteEditorDialogState._flush], is unaffected by this fix).
   Future<void> _openNoteEditor(Note note) async {
-    final requestedFullEditor = await showAnimatedDialog<Note>(
+    final result = await showAnimatedDialog<(Note, bool)>(
       context: context,
       builder: (_) => _NoteEditorDialog(
         note: note,
@@ -1094,8 +1101,15 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         surfaceColor: widget.surfaceColor,
       ),
     );
-    if (!mounted || requestedFullEditor == null) return;
-    await _openInFullEditor(requestedFullEditor);
+    if (!mounted || result == null) return;
+    final (updatedNote, openFullEditor) = result;
+    setState(() {
+      _noteResolutions[updatedNote.id] =
+          NoteLinkResolution(NoteLinkStatus.found, updatedNote);
+    });
+    if (openFullEditor) {
+      await _openInFullEditor(updatedNote);
+    }
   }
 
   /// The secondary "open in full editor" action — demoted, not deleted
@@ -2039,12 +2053,14 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 /// intercept the barrier/Escape paths rather than letting them pop
 /// silently.
 ///
-/// "Open in full editor" pops this modal with the freshest [Note] instead
-/// of closing it silently; the caller
-/// ([_TaskDetailDialogState._openNoteEditor]) then navigates away and
-/// closes the task dialog too — same secondary action as before this
-/// modal existed, just requested through the pop result instead of a
-/// shared field.
+/// Every dismissal pops with the freshest [Note] (post-flush) alongside a
+/// flag for whether "Open in full editor" was requested — the caller
+/// ([_TaskDetailDialogState._openNoteEditor]) uses the freshest [Note] to
+/// refresh its own `_noteResolutions` cache unconditionally, not only on
+/// the full-editor path. Without that refresh, the cache keeps serving the
+/// PRE-edit [Note] on the next open, which reads to the user exactly like
+/// their edit was never saved (it was — see this class's own persistence
+/// doc above; that failure mode is a stale in-memory read, not data loss).
 class _NoteEditorDialog extends StatefulWidget {
   const _NoteEditorDialog({
     required this.note,
@@ -2124,12 +2140,12 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
 
   Future<void> _close() async {
     await _flush();
-    if (mounted) Navigator.of(context).pop();
+    if (mounted) Navigator.of(context).pop((_note, false));
   }
 
   Future<void> _openFullEditor() async {
     await _flush();
-    if (mounted) Navigator.of(context).pop(_note);
+    if (mounted) Navigator.of(context).pop((_note, true));
   }
 
   @override

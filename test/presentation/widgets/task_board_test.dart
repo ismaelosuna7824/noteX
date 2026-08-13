@@ -1041,6 +1041,83 @@ void main() {
     });
   });
 
+  group(
+      'notes section — regression: stale _noteResolutions cache after the '
+      'note modal closes (bug report: "cuando cierras ese modal no se '
+      'guarda la nota")', () {
+    testWidgets(
+        'reopening a linked note from the still-open task dialog shows the '
+        'freshly typed content — not a stale cached Note (the content WAS '
+        'persisted; only the in-memory read was stale)', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      final before = await repository.getById('r1');
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      // Toggle to editing, type new content, close the modal via the
+      // header X — the FIRST close, not a reopen.
+      await tester.tap(find.byIcon(Icons.edit));
+      await tester.pumpAndSettle();
+      final previewField = find.descendant(
+        of: find.byKey(const Key('task-note-preview')),
+        matching: find.byType(TextField),
+      );
+      await tester.enterText(previewField, 'freshly typed content');
+      await tester.tap(find.byTooltip('Close note'));
+      await tester.pumpAndSettle();
+
+      // Back to just the task dialog — still open, never navigated away.
+      expect(find.byType(AlertDialog), findsOneWidget);
+
+      // The REAL reproduction: reopen the SAME note from the still-open
+      // task dialog. A test that only checked the repository here would
+      // have passed against the broken build — this reopen is what exposes
+      // a stale in-memory `_noteResolutions` cache that never refreshed
+      // after the modal closed.
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      final rendered = tester.widget<NoteXMarkdownView>(
+        find.descendant(
+          of: find.byKey(const Key('task-note-preview')),
+          matching: find.byType(NoteXMarkdownView),
+        ),
+      );
+      expect(
+        rendered.data,
+        'freshly typed content',
+        reason: 'reopening from the still-open task dialog must show the '
+            'just-typed content, not the pre-edit Note cached before the '
+            'first close',
+      );
+
+      final after = await repository.getById('r1');
+      expect(
+        after!.updatedAt,
+        before!.updatedAt,
+        reason: 'the edit-close-reopen round trip must never touch the '
+            "TASK's own updatedAt",
+      );
+    });
+  });
+
   group('backlog task dragged to Done — regression for the vanishing gap',
       () {
     testWidgets(
