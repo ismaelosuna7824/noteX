@@ -19,7 +19,7 @@ import 'calendar_page.dart';
 import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
-import 'reminder_page.dart';
+import 'task_page.dart';
 import 'graph_page.dart';
 import 'trash_page.dart';
 import 'goodbye_screen.dart';
@@ -695,7 +695,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
           themeState: widget.themeState,
         );
       case 7:
-        return ReminderPage(
+        return TaskPage(
           key: const ValueKey('reminders'),
           appState: widget.appState,
           themeState: widget.themeState,

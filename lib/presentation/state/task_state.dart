@@ -8,10 +8,10 @@ import '../../application/use_cases/task/get_tasks_use_case.dart';
 import '../../application/use_cases/task/transition_task_status_use_case.dart';
 import '../../application/use_cases/task/delete_task_use_case.dart';
 
-/// Presentation state for the Reminder feature.
+/// Presentation state for the Task feature.
 ///
-/// Manages all reminders and the pending-today subset used by the Home card.
-class ReminderState extends ChangeNotifier {
+/// Manages all tasks and the pending-today subset used by the Home card.
+class TaskState extends ChangeNotifier {
   final CreateTaskUseCase _createReminder;
   final GetTasksUseCase _getReminders;
   final TransitionTaskStatusUseCase _completeReminder;
@@ -20,7 +20,7 @@ class ReminderState extends ChangeNotifier {
   List<Task> _reminders = [];
   List<Task> _pendingToday = [];
 
-  ReminderState({
+  TaskState({
     required CreateTaskUseCase createReminder,
     required GetTasksUseCase getReminders,
     required TransitionTaskStatusUseCase completeReminder,

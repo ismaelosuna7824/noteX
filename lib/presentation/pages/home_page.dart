@@ -6,7 +6,7 @@ import 'package:get_it/get_it.dart';
 import 'package:morphable_shape/morphable_shape.dart';
 import '../../domain/entities/note.dart';
 import '../state/app_state.dart';
-import '../state/reminder_state.dart';
+import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import '../state/writing_stats_state.dart';
@@ -1930,9 +1930,9 @@ class _ReminderCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: GetIt.instance<ReminderState>(),
+      listenable: GetIt.instance<TaskState>(),
       builder: (context, _) {
-        final reminderState = GetIt.instance<ReminderState>();
+        final reminderState = GetIt.instance<TaskState>();
         if (!reminderState.hasPendingToday) {
           return const SizedBox.shrink();
         }
@@ -2016,7 +2016,7 @@ class _ReminderCard extends StatelessWidget {
                   checkColor: checkColor,
                   shadows: const [],
                   onComplete: () {
-                    GetIt.instance<ReminderState>().completeReminder(
+                    GetIt.instance<TaskState>().completeReminder(
                       reminder.id,
                     );
                   },

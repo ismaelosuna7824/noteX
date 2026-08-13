@@ -3,27 +3,27 @@ import 'package:get_it/get_it.dart';
 
 import '../../domain/entities/task.dart';
 import '../state/app_state.dart';
-import '../state/reminder_state.dart';
+import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../widgets/animated_dialog.dart';
 
 /// Full CRUD page for managing reminders.
-class ReminderPage extends StatefulWidget {
+class TaskPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
-  const ReminderPage({
+  const TaskPage({
     super.key,
     required this.appState,
     required this.themeState,
   });
 
   @override
-  State<ReminderPage> createState() => _ReminderPageState();
+  State<TaskPage> createState() => _TaskPageState();
 }
 
-class _ReminderPageState extends State<ReminderPage> {
-  final _reminderState = GetIt.instance<ReminderState>();
+class _TaskPageState extends State<TaskPage> {
+  final _reminderState = GetIt.instance<TaskState>();
 
   static const _monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',

@@ -17,7 +17,7 @@ import 'calendar_page.dart';
 import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
-import 'reminder_page.dart';
+import 'task_page.dart';
 import 'trash_page.dart';
 
 /// Mobile application shell — bottom navigation + content area.
@@ -431,7 +431,7 @@ class _MobileAppShellState extends State<MobileAppShell>
           themeState: widget.themeState,
         );
       case 7:
-        return ReminderPage(
+        return TaskPage(
           key: const ValueKey('reminders'),
           appState: widget.appState,
           themeState: widget.themeState,

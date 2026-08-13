@@ -6,7 +6,7 @@ import '../state/theme_state.dart';
 import '../widgets/animated_dialog.dart';
 
 /// Page displaying soft-deleted notes with restore and permanent delete options.
-/// Follows the same container/card pattern as ReminderPage.
+/// Follows the same container/card pattern as TaskPage.
 class TrashPage extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;

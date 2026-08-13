@@ -81,7 +81,7 @@ import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
-import 'presentation/state/reminder_state.dart';
+import 'presentation/state/task_state.dart';
 import 'presentation/state/security_state.dart';
 import 'presentation/state/tiling_state.dart';
 import 'presentation/state/writing_stats_state.dart';
@@ -388,7 +388,7 @@ Future<void> setupDependencies() async {
   // Wire sync completion callback so the UI refreshes after each sync
   getIt<SyncEngine>().onSyncComplete = () async {
     await appState.refreshNotes();
-    await getIt<ReminderState>().refreshReminders();
+    await getIt<TaskState>().refreshReminders();
   };
   // Wire sync engine to AppState for user switch detection on sign-in
   appState.syncEngine = getIt<SyncEngine>();
@@ -419,9 +419,9 @@ Future<void> setupDependencies() async {
       autoSaveService: getIt<MarkdownAutoSaveService>(),
     ),
   );
-  // ReminderState
-  getIt.registerSingleton<ReminderState>(
-    ReminderState(
+  // TaskState
+  getIt.registerSingleton<TaskState>(
+    TaskState(
       createReminder: getIt<CreateTaskUseCase>(),
       getReminders: getIt<GetTasksUseCase>(),
       completeReminder: getIt<TransitionTaskStatusUseCase>(),
