@@ -163,9 +163,12 @@ class TaskState extends ChangeNotifier {
   }
 }
 
-// Private sentinel distinguishing "omitted" from "explicitly passed null",
-// forwarded as-is into UpdateTaskUseCase's own sentinel-backed parameter —
-// see update_task_use_case.dart for the same pattern.
+// Private sentinel distinguishing "omitted" from "explicitly passed null".
+// Per-file private class — NEVER forwarded across a file boundary as-is (see
+// updateTask's doc above for why: UpdateTaskUseCase has its own distinct
+// _Unset, and a foreign instance fails its `is _Unset` check silently).
+// Resolved to a concrete value or omitted from the call here, matching the
+// pattern in update_task_use_case.dart.
 class _Unset {
   const _Unset();
 }
