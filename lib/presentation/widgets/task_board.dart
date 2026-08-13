@@ -615,6 +615,14 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   late final TextEditingController _blockedReasonController;
   late String _description;
 
+  /// Drives the linked-notes list AND its [Scrollbar].
+  ///
+  /// Both must share one controller. Without it the Scrollbar falls back to
+  /// the PrimaryScrollController, which a vertical ScrollView only attaches
+  /// to by default on MOBILE platforms — so on macOS it finds no
+  /// ScrollPosition and asserts on every frame the thumb is visible.
+  final ScrollController _notesScrollController = ScrollController();
+
   // Local mirror of the task's linked notes, updated as the user links or
   // unlinks within this dialog session (decision
   // architecture/task-note-linking-model — linking appends and the dialog
@@ -652,6 +660,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   void dispose() {
     _titleController.dispose();
     _blockedReasonController.dispose();
+    _notesScrollController.dispose();
     super.dispose();
   }
 
@@ -947,8 +956,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
           child: SizedBox(
             height: _noteRowHeight * visibleRows,
             child: Scrollbar(
+              controller: _notesScrollController,
               thumbVisibility: overflowing,
               child: ListView.builder(
+                controller: _notesScrollController,
                 padding: EdgeInsets.zero,
                 itemCount: _noteIds.length,
                 itemBuilder: (context, index) {

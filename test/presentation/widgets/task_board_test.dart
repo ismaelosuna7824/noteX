@@ -1,4 +1,5 @@
 import 'package:drift/native.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:get_it/get_it.dart';
@@ -1074,6 +1075,60 @@ void main() {
         isTrue,
         reason: 'an overflowing notes list must show an unmistakable '
             '"there is more" affordance',
+      );
+    });
+
+    testWidgets(
+        'the notes scrollbar shares its list\'s ScrollController, so a '
+        'desktop target platform does not assert on every frame',
+        (tester) async {
+      // Regression test for a bug that reached the running app.
+      //
+      // A vertical ScrollView attaches itself to the PrimaryScrollController
+      // by default ONLY on mobile platforms. flutter_test defaults to a
+      // mobile platform, so a controller-less Scrollbar happens to find a
+      // ScrollPosition here and passes — while on macOS it finds none and
+      // throws "The Scrollbar's ScrollController has no ScrollPosition
+      // attached" on every frame the thumb is visible.
+      //
+      // The platform override is the whole point of this test: without it,
+      // it cannot fail. It must be restored inside the body — the framework
+      // asserts that no foundation debug variable is left changed, and that
+      // check runs before any addTearDown callback.
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      Object? caught;
+      try {
+        await repository.save(
+          Task.create(id: 'r1', title: 'Desktop notes').copyWith(
+            noteIds: const ['n1', 'n2', 'n3', 'n4', 'n5'],
+          ),
+        );
+        for (var i = 1; i <= 5; i++) {
+          await noteRepository.save(Note(
+            id: 'n$i',
+            title: 'Note $i',
+            content: '',
+            createdAt: DateTime(2026, 1, i),
+            updatedAt: DateTime(2026, 1, i),
+          ));
+        }
+        await appState.refreshNotes();
+        await taskState.initialize();
+        await pumpBoard(tester);
+
+        await tester.tap(find.text('Desktop notes'));
+        await tester.pumpAndSettle();
+        caught = tester.takeException();
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+
+      expect(
+        caught,
+        isNull,
+        reason: 'the Scrollbar must be driven by the same ScrollController as '
+            'its ListView — on desktop there is no PrimaryScrollController to '
+            'fall back to',
       );
     });
 
