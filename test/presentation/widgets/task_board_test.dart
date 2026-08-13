@@ -155,6 +155,40 @@ class _ThrowingUpdateTaskUseCase extends UpdateTaskUseCase {
   }
 }
 
+/// Spies on [UpdateTaskUseCase.execute] without changing its behavior —
+/// delegates to the real implementation, so persistence still happens
+/// exactly as it would in the app. Proves the delete-from-dialog path
+/// suppresses save-on-close entirely: if a regression routed the
+/// post-delete pop back through `_TaskDetailDialogState._closeDialog`
+/// instead of a direct `Navigator.pop`, this would record a call even
+/// though the row was just deleted — the exact hazard
+/// `_confirmAndDeleteTask`'s own doc in `task_board.dart` warns about.
+class _SpyUpdateTaskUseCase extends UpdateTaskUseCase {
+  _SpyUpdateTaskUseCase(super.repository);
+
+  final List<String> calls = [];
+
+  @override
+  Future<Task?> execute(
+    String taskId, {
+    String? title,
+    String? description,
+    Object? scheduledDate,
+    Object? blockedReason,
+    Object? projectId,
+  }) async {
+    calls.add(taskId);
+    return super.execute(
+      taskId,
+      title: title,
+      description: description,
+      scheduledDate: scheduledDate,
+      blockedReason: blockedReason,
+      projectId: projectId,
+    );
+  }
+}
+
 /// Widget-level coverage for [TaskBoard] — the only genuinely new
 /// user-facing surface in the task-tracker change, and drag-to-transition
 /// is its riskiest interaction. Wired to a REAL [TaskState] backed by a
@@ -3159,6 +3193,179 @@ void main() {
       expect(find.text('Blocked B'), findsNothing);
       expect(find.text('Done Backlog A'), findsNothing);
       expect(find.text('Done Backlog B'), findsNothing);
+    });
+  });
+
+  group('task detail dialog — delete task (overflow menu)', () {
+    testWidgets(
+        'the delete affordance lives behind an overflow ("more") menu, '
+        'not a bare icon beside Close', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Deletable'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Deletable'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byIcon(Icons.delete_outline_rounded),
+        findsNothing,
+        reason: 'no bare delete icon should render in the header until '
+            'the overflow menu is explicitly opened — an adjacent bare '
+            'delete icon next to Close would invite a mis-click',
+      );
+      expect(find.byTooltip('More options'), findsOneWidget);
+      expect(find.byTooltip('Close'), findsOneWidget);
+      expect(find.text('Delete task'), findsNothing);
+
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete task'), findsOneWidget);
+    });
+
+    testWidgets(
+        'confirming deletes through DeleteTaskUseCase and the row ends '
+        'up soft-deleted', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'To be deleted'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('To be deleted'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete task'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete "To be deleted"?'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted, isNotNull);
+      expect(
+        persisted!.isDeleted,
+        isTrue,
+        reason: 'must go through DeleteTaskUseCase.markDeleted(), never '
+            'a direct repository write',
+      );
+      expect(persisted.deletedAt, isNotNull);
+    });
+
+    testWidgets('cancelling the confirmation leaves the task untouched',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Keep me'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Keep me'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete task'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel'));
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted, isNotNull);
+      expect(persisted!.isDeleted, isFalse);
+      expect(
+        find.text('Task Details'),
+        findsOneWidget,
+        reason: 'cancelling the confirmation must leave the task detail '
+            'dialog open',
+      );
+    });
+
+    testWidgets('the dialog closes after a successful delete',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Bye'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Bye'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete task'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Task Details'), findsNothing);
+      expect(
+        find.text('Bye'),
+        findsNothing,
+        reason: 'the board must refresh so the deleted task disappears '
+            'from view',
+      );
+    });
+
+    testWidgets(
+        'deleting suppresses save-on-close: a dirty title typed just '
+        'before confirming delete is never written back to the '
+        '(now soft-deleted) row', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Original title'));
+      final spyUpdate = _SpyUpdateTaskUseCase(repository);
+      final spyTaskState = TaskState(
+        createReminder: CreateTaskUseCase(repository),
+        getReminders: GetTasksUseCase(repository),
+        completeReminder: transitionSpy,
+        updateReminder: spyUpdate,
+        deleteReminder: DeleteTaskUseCase(repository, _NoopSyncEngine()),
+        linkNote: LinkNoteToTaskUseCase(repository),
+        unlinkNote: UnlinkNoteFromTaskUseCase(repository),
+      );
+      await spyTaskState.initialize();
+      await pumpBoard(tester, overrideTaskState: spyTaskState);
+
+      await tester.tap(find.text('Original title'));
+      await tester.pumpAndSettle();
+
+      // Makes _isDirty true (a changed title) BEFORE deleting — this is
+      // the hazard: a save-on-close path that isn't suppressed would
+      // write this exact edit back onto the row this test is about to
+      // delete, resurrecting it or at least bumping updatedAt/syncStatus
+      // on a row that is supposed to be gone.
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Title'),
+        'Edited but must never be saved',
+      );
+
+      await tester.tap(find.byTooltip('More options'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Delete task'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Delete'));
+      await tester.pumpAndSettle();
+
+      expect(
+        spyUpdate.calls,
+        isEmpty,
+        reason: 'the save-on-close path (_closeDialog -> '
+            'TaskState.updateTask -> UpdateTaskUseCase) must never run '
+            'for a delete-triggered close — only a direct Navigator.pop '
+            'is allowed to close the dialog on this path',
+      );
+
+      final persisted = await repository.getById('r1');
+      expect(persisted, isNotNull);
+      expect(
+        persisted!.deletedAt,
+        isNotNull,
+        reason: 'the row must still be soft-deleted',
+      );
+      expect(
+        persisted.title,
+        'Original title',
+        reason: 'a resurrecting save-on-close write would have '
+            'overwritten this with the dirty text typed above — this '
+            'proves save-on-close never fired after the delete',
+      );
     });
   });
 }

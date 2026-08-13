@@ -1955,7 +1955,20 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// mirroring the reference layout's header bar. Pops without saving,
   /// same as the footer's Cancel — not a new behavior, just an additional
   /// way to reach the same existing dismissal.
+  ///
+  /// The overflow ("more") control holding "Delete task" is deliberately
+  /// NOT a bare delete icon sitting directly beside the close X — the
+  /// reference Jira-style modal this dialog follows puts destructive
+  /// actions behind an overflow menu for exactly this reason: a bare icon
+  /// adjacent to the dismiss control invites a mis-click that deletes
+  /// instead of closes. Opening the menu is itself a non-destructive step,
+  /// and [_confirmAndDeleteTask] requires a second, explicit confirmation
+  /// before anything is written.
   Widget _buildHeader(bool isDark) {
+    final surface = Color.alphaBlend(
+      widget.surfaceColor.withValues(alpha: 0.96),
+      isDark ? Colors.black : Colors.white,
+    );
     return Row(
       children: [
         Expanded(
@@ -1969,6 +1982,42 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
             ),
           ),
         ),
+        PopupMenuButton<String>(
+          tooltip: 'More options',
+          icon: const Icon(Icons.more_vert_rounded, size: 20),
+          // 24 (default iconSize) + 10*2 padding = 44 — meets the app's
+          // minimum tap target without relying on PopupMenuButton's own
+          // default 8px padding (which would fall short at 40x40).
+          padding: const EdgeInsets.all(10),
+          // The app's own dark-neutral surface, never the ambient
+          // seed-tinted `PopupMenuTheme`/`ColorScheme.fromSeed` default —
+          // same theme-mismatch fix already applied to every dialog and
+          // to `AppPickerMenu`'s own opened menu.
+          color: surface,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          onSelected: (value) {
+            if (value == 'delete') unawaited(_confirmAndDeleteTask());
+          },
+          itemBuilder: (ctx) => [
+            PopupMenuItem<String>(
+              value: 'delete',
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.delete_outline_rounded,
+                    size: 16,
+                    color: Colors.red.shade400,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Delete task',
+                    style: TextStyle(fontSize: 13, color: Colors.red.shade400),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
         IconButton(
           icon: const Icon(Icons.close_rounded, size: 20),
           tooltip: 'Close',
@@ -1981,6 +2030,83 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         ),
       ],
     );
+  }
+
+  /// Confirms, then deletes this task via [TaskState.deleteReminder]
+  /// (`DeleteTaskUseCase` — a soft delete, `Task.markDeleted()`;
+  /// deliberately does NOT cascade to time entries or linked notes, same
+  /// "resolve, don't cascade" contract [_openTaskFromTimeEntry] in
+  /// `timer_page.dart` and [ResolveTaskNoteLinkUseCase] already rely on).
+  ///
+  /// On success this pops the dialog with a DIRECT, imperative
+  /// `Navigator.pop` — deliberately NOT [_closeDialog]. [_closeDialog] is
+  /// the save-on-close path: it unconditionally checks [_isDirty] and, if
+  /// true, calls [TaskState.updateTask] before popping. Routing the
+  /// post-delete pop through it would resurrect the just-deleted row (or
+  /// at minimum bump its `updatedAt`/flip `syncStatus` back to
+  /// `pendingSync`) the moment title/description happened to differ from
+  /// what the dialog opened with — a race between "delete" and "save on
+  /// close" that must never be allowed to run. A direct `Navigator.pop`
+  /// avoids the race entirely: it is an imperative pop, which — per
+  /// [build]'s own `PopScope` doc — reports back to
+  /// `onPopInvokedWithResult` with `didPop: true`, a no-op, so
+  /// [_closeDialog] (and its save) never runs at all for this path.
+  ///
+  /// On failure, the dialog stays open and the error surfaces via
+  /// `SnackBar`, matching every other failure path in this dialog — never
+  /// pop as if the delete had worked.
+  Future<void> _confirmAndDeleteTask() async {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final title = widget.task.title;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        // Same theme fix as every other confirmation in this feature — see
+        // [surfaceColor]'s doc.
+        backgroundColor: Color.alphaBlend(
+          widget.surfaceColor.withValues(alpha: 0.96),
+          isDark ? Colors.black : Colors.white,
+        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Delete "$title"?'),
+        // Names what else is affected — the app's existing destructive-
+        // confirmation convention (`timer_page.dart`'s delete-project
+        // dialog) — but here that means stating explicitly what does NOT
+        // happen, since this delete deliberately does not cascade.
+        content: const Text(
+          'This task will be removed from your board and list. Linked '
+          'time entries and notes will not be deleted.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await widget.taskState.deleteReminder(widget.task.id);
+    } catch (e) {
+      if (!mounted) return;
+      messenger.showSnackBar(
+        SnackBar(content: Text('Could not delete task: $e')),
+      );
+      return;
+    }
+    if (!mounted) return;
+    // Direct, imperative pop — deliberately NOT _closeDialog(). See this
+    // method's own doc for why routing through _closeDialog here would
+    // race the delete with a save-on-close write.
+    Navigator.of(context).pop();
   }
 
   /// The two-column body, or its stacked fallback below
