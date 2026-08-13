@@ -260,6 +260,15 @@ void main() {
   });
 
   Future<void> pumpBoard(WidgetTester tester) async {
+    // The redesigned task detail dialog is taller/wider than the default
+    // 800x600 test surface can host without a false layout overflow — this
+    // app is desktop-first (sdd-init), so a generous window size here
+    // reflects real usage, not a test-only workaround for an actual
+    // overflow bug.
+    tester.view.physicalSize = const Size(1400, 1200);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
     await tester.pumpWidget(
       MaterialApp(
         // Avoids the splash-shader throw under this test SDK — same trick
@@ -1009,6 +1018,143 @@ void main() {
         find.byIcon(Icons.timer_rounded),
         findsNothing,
         reason: 'stopping the timer must remove the indicator',
+      );
+    });
+  });
+
+  group('task detail dialog — redesigned layout', () {
+    testWidgets(
+        'the notes list is bounded to a whole number of rows and shows a '
+        'scrollbar affordance once it overflows, instead of clipping a row '
+        'mid-height', (tester) async {
+      await repository.save(
+        Task.create(id: 'r1', title: 'Many notes').copyWith(
+          noteIds: const ['n1', 'n2', 'n3', 'n4', 'n5'],
+        ),
+      );
+      for (var i = 1; i <= 5; i++) {
+        await noteRepository.save(Note(
+          id: 'n$i',
+          title: 'Note $i',
+          content: '',
+          createdAt: DateTime(2026, 1, i),
+          updatedAt: DateTime(2026, 1, i),
+        ));
+      }
+      await appState.refreshNotes();
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Many notes'));
+      await tester.pumpAndSettle();
+
+      // The section header surfaces the count up front (rendered uppercase
+      // as part of the muted small-caps section-header style).
+      expect(find.text('NOTES · 5'), findsOneWidget);
+
+      // The scrollable list area's own height must be an exact multiple of
+      // a single row's height — the structural guarantee that a row is
+      // never cut mid-way, only ever between rows. Each row carries its own
+      // ValueKey (list-state-preservation convention), which doubles as a
+      // stable finder here.
+      final listHeight = tester.getSize(find.byType(ListView).first).height;
+      final rowHeight = tester.getSize(find.byKey(const ValueKey('n1'))).height;
+      expect(
+        listHeight % rowHeight,
+        closeTo(0, 0.5),
+        reason: 'the notes list viewport must cut between rows, not '
+            'through one',
+      );
+
+      // With 5 notes overflowing the bounded viewport, an explicit "there
+      // is more" affordance (a visible scrollbar) must be present.
+      final scrollbar = tester.widget<Scrollbar>(find.byType(Scrollbar));
+      expect(
+        scrollbar.thumbVisibility,
+        isTrue,
+        reason: 'an overflowing notes list must show an unmistakable '
+            '"there is more" affordance',
+      );
+    });
+
+    testWidgets(
+        'a broken note link (note not found) renders a visually distinct, '
+        'de-emphasised row instead of looking like a normal note',
+        (tester) async {
+      await repository.save(
+        Task.create(id: 'r1', title: 'Task with dead link').copyWith(
+          noteIds: const ['ghost-note'],
+        ),
+      );
+      await appState.refreshNotes();
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Task with dead link'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Note not found'), findsOneWidget);
+
+      // Distinct treatment must not rely on colour alone — italic style is
+      // an independent signal alongside the muted/warning colour.
+      final label = tester.widget<Text>(find.text('Note not found'));
+      expect(
+        label.style?.fontStyle,
+        FontStyle.italic,
+        reason: 'a broken link must read as visually distinct from a '
+            'normal note row, not just differently coloured',
+      );
+
+      // The fix is offered inline via a distinctly labelled remove action.
+      expect(find.byTooltip('Remove broken link'), findsOneWidget);
+    });
+
+    testWidgets(
+        'the timer control sits with the task, separated from the '
+        'Cancel/Save dialog actions row', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Separate me'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Separate me'));
+      await tester.pumpAndSettle();
+
+      // The AlertDialog's own actions row holds only Cancel and Save now —
+      // the timer control was lifted out of it.
+      final dialog = tester.widget<AlertDialog>(find.byType(AlertDialog));
+      expect(
+        dialog.actions,
+        hasLength(2),
+        reason: 'Cancel/Save act on the dialog; the timer acts on the '
+            'task — they must not share the same actions row',
+      );
+
+      // The timer control renders above the footer, inside the task
+      // section, not inline with Cancel/Save.
+      final timerY = tester.getTopLeft(find.text('Start timer')).dy;
+      final cancelY = tester.getTopLeft(find.text('Cancel')).dy;
+      expect(
+        timerY,
+        lessThan(cancelY),
+        reason: 'the timer control must sit above the footer, grouped '
+            'with the task rather than the dialog actions',
+      );
+    });
+
+    testWidgets('the title field has a visible label, not just a hint',
+        (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Label me'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Label me'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.widgetWithText(TextField, 'Title'),
+        findsOneWidget,
+        reason: 'the title field must carry a visible label, not rely on '
+            'placeholder-only text',
       );
     });
   });

@@ -439,7 +439,7 @@ class _BoardCard extends StatelessWidget {
         childWhenDragging: Opacity(opacity: 0.3, child: card),
         child: InkWell(
           borderRadius: BorderRadius.circular(10),
-          onTap: () => showDialog<void>(
+          onTap: () => showAnimatedDialog<void>(
             context: context,
             builder: (_) => _TaskDetailDialog(
               task: task,
@@ -876,47 +876,107 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     }
   }
 
+  /// Every linked-note row is exactly this tall (44px content + 4px of
+  /// vertical padding = a comfortable 44×44 minimum tap target for the
+  /// unlink button). The notes list viewport below is always sized to a
+  /// whole multiple of this constant, so it cuts BETWEEN rows and never
+  /// clips one mid-height.
+  static const double _noteRowHeight = 48;
+
+  /// Cap on how many rows are visible before the list scrolls internally.
+  static const int _maxVisibleNoteRows = 3;
+
+  /// Quiet, muted section label — structures the dialog into groups
+  /// (Task / Notes / Description) without shouting over their content.
+  Widget _sectionHeader(String label, bool isDark) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Text(
+        label.toUpperCase(),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.8,
+          color: isDark ? Colors.white38 : Colors.grey.shade500,
+        ),
+      ),
+    );
+  }
+
   /// Renders every linked note as its own row (open + unlink affordances),
   /// plus a "Link (another) note" action — the visibility half of decision
   /// architecture/task-note-linking-model: a list, not a single pill, so a
   /// user can tell exactly which notes a task carries.
+  ///
+  /// Uses `ListView.builder` for lazy row construction and a per-row
+  /// `ValueKey` (Flutter list guidance) so a row's state survives a
+  /// link/unlink reorder. The viewport height is always
+  /// `_noteRowHeight * min(count, _maxVisibleNoteRows)` — an exact multiple
+  /// of one row, so scrolling only ever exposes a whole row, never half of
+  /// one. Once the list overflows that cap, a `Scrollbar` with a permanent
+  /// thumb is the unmistakable "there is more" affordance.
   Widget _buildLinkedNotesSection(bool isDark) {
     if (_noteIds.isEmpty) {
       return OutlinedButton.icon(
         onPressed: _linkNote,
         icon: const Icon(Icons.link, size: 16),
         label: const Text('Link note'),
-        style: OutlinedButton.styleFrom(foregroundColor: widget.accentColor),
+        style: OutlinedButton.styleFrom(
+          foregroundColor: widget.accentColor,
+          minimumSize: const Size(0, 44),
+        ),
       );
     }
+    final visibleRows = _noteIds.length < _maxVisibleNoteRows
+        ? _noteIds.length
+        : _maxVisibleNoteRows;
+    final overflowing = _noteIds.length > _maxVisibleNoteRows;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 110),
-          child: SingleChildScrollView(
-            child: Column(
-              children: [
-                for (final noteId in _noteIds)
-                  _LinkedNoteRow(
+        DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.grey.shade200,
+            ),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: SizedBox(
+            height: _noteRowHeight * visibleRows,
+            child: Scrollbar(
+              thumbVisibility: overflowing,
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: _noteIds.length,
+                itemBuilder: (context, index) {
+                  final noteId = _noteIds[index];
+                  return _LinkedNoteRow(
                     key: ValueKey(noteId),
                     resolution: _noteResolutions[noteId],
-                    loading: _loadingNotes && !_noteResolutions.containsKey(noteId),
+                    loading:
+                        _loadingNotes && !_noteResolutions.containsKey(noteId),
                     isDark: isDark,
                     accentColor: widget.accentColor,
                     onOpen: () => _openNote(noteId),
                     onUnlink: () => _unlinkNote(noteId),
-                  ),
-              ],
+                  );
+                },
+              ),
             ),
           ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 8),
         TextButton.icon(
           onPressed: _linkNote,
           icon: const Icon(Icons.add_link, size: 16),
           label: const Text('Link another note'),
-          style: TextButton.styleFrom(foregroundColor: widget.accentColor),
+          style: TextButton.styleFrom(
+            foregroundColor: widget.accentColor,
+            minimumSize: const Size(0, 44),
+          ),
         ),
       ],
     );
@@ -1016,6 +1076,93 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
+  /// Task-identity section: title, project, the timer control (lifted out
+  /// of the footer — it acts on the TASK, not the dialog, settled
+  /// decision), and — only while blocked — the blocked-reason editor.
+  Widget _buildTaskSection(bool isDark, bool isBlocked) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader('Task', isDark),
+        TextField(
+          controller: _titleController,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
+          decoration: InputDecoration(
+            labelText: 'Title',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        _buildProjectSelector(isDark),
+        const SizedBox(height: 8),
+        _buildTimerControl(isDark),
+        if (isBlocked) ...[
+          const SizedBox(height: 12),
+          TextField(
+            controller: _blockedReasonController,
+            decoration: InputDecoration(
+              labelText: 'Blocked reason',
+              hintText: 'What is this waiting on?',
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// Notes section — the count lives in the header itself ("Notes · 3"),
+  /// so the list body only ever has to render rows, not also announce how
+  /// many there are.
+  Widget _buildNotesSection(bool isDark) {
+    final header =
+        _noteIds.isEmpty ? 'Notes' : 'Notes · ${_noteIds.length}';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader(header, isDark),
+        _buildLinkedNotesSection(isDark),
+      ],
+    );
+  }
+
+  /// Description section — the Markdown editor. The dialog's own total
+  /// height (see `build`) is sized generously enough that this Expanded
+  /// slot naturally lands well above `_kMinEditorHeight`, giving the
+  /// editor a sensible minimum without fighting Expanded's own tight
+  /// constraint (a `ConstrainedBox(minHeight:...)` inside an `Expanded`
+  /// cannot force extra space — it only produces a render overflow when
+  /// the leftover space is smaller than the minimum).
+  Widget _buildDescriptionSection(bool isDark) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader('Description', isDark),
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border.all(
+                color: isDark
+                    ? Colors.white.withValues(alpha: 0.15)
+                    : Colors.grey.shade300,
+              ),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: NoteMarkdownEditor(
+              initialContent: widget.task.description,
+              toolbar: EditorToolbarProfile.minimal,
+              onChanged: (value) => _description = value,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1023,72 +1170,29 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: TextField(
-        controller: _titleController,
-        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 18),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          isDense: true,
-        ),
-      ),
       content: SizedBox(
-        width: 480,
-        height: 380,
+        width: 560,
+        height: 640,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _buildProjectSelector(isDark),
-            const SizedBox(height: 8),
-            _buildLinkedNotesSection(isDark),
-            const SizedBox(height: 12),
-            if (isBlocked) ...[
-              TextField(
-                controller: _blockedReasonController,
-                decoration: const InputDecoration(
-                  labelText: 'Blocked reason',
-                  hintText: 'What is this waiting on?',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-            ],
-            Expanded(
-              child: Container(
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.15)
-                        : Colors.grey.shade300,
-                  ),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: NoteMarkdownEditor(
-                  initialContent: widget.task.description,
-                  toolbar: EditorToolbarProfile.minimal,
-                  onChanged: (value) => _description = value,
-                ),
-              ),
-            ),
+            _buildTaskSection(isDark, isBlocked),
+            const SizedBox(height: 24),
+            _buildNotesSection(isDark),
+            const SizedBox(height: 24),
+            Expanded(child: _buildDescriptionSection(isDark)),
           ],
         ),
       ),
-      actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        _buildTimerControl(isDark),
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            FilledButton(
-              onPressed: _save,
-              style:
-                  FilledButton.styleFrom(backgroundColor: widget.accentColor),
-              child: const Text('Save'),
-            ),
-          ],
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _save,
+          style: FilledButton.styleFrom(backgroundColor: widget.accentColor),
+          child: const Text('Save'),
         ),
       ],
     );
@@ -1120,6 +1224,7 @@ class _LinkedNoteRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final isMissing = resolution?.status == NoteLinkStatus.missing;
     final IconData icon;
     final String label;
     switch (resolution?.status) {
@@ -1139,30 +1244,54 @@ class _LinkedNoteRow extends StatelessWidget {
         label = loading ? 'Loading…' : 'Note';
     }
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: [
-          Icon(icon, size: 15, color: mutedColor),
-          const SizedBox(width: 8),
-          Expanded(
-            child: InkWell(
-              onTap: loading ? null : onOpen,
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12.5, color: mutedColor),
+    // A broken link must read as visually distinct, never at the same
+    // weight as a normal note (diagnosed problem #4) — and must not rely
+    // on colour alone: italic style + a muted-warning tint + an explicit
+    // "Remove" tooltip are three independent signals, not one.
+    final rowColor = isMissing
+        ? (isDark ? Colors.red.shade200 : Colors.red.shade400)
+        : mutedColor;
+
+    return SizedBox(
+      height: 48,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: isMissing
+              ? (isDark ? Colors.red.withValues(alpha: 0.10) : Colors.red.shade50)
+              : null,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(
+            children: [
+              Icon(icon, size: 15, color: rowColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: InkWell(
+                  onTap: loading ? null : onOpen,
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: rowColor,
+                      fontStyle: isMissing ? FontStyle.italic : FontStyle.normal,
+                    ),
+                  ),
+                ),
               ),
-            ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 15),
+                tooltip: isMissing ? 'Remove broken link' : 'Unlink',
+                splashRadius: 16,
+                constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
+                padding: EdgeInsets.zero,
+                onPressed: onUnlink,
+              ),
+            ],
           ),
-          IconButton(
-            icon: const Icon(Icons.close, size: 15),
-            tooltip: 'Unlink',
-            splashRadius: 16,
-            onPressed: onUnlink,
-          ),
-        ],
+        ),
       ),
     );
   }
