@@ -327,6 +327,72 @@ void main() {
     });
   });
 
+  group('getCompletedOn — board Done column, "visible until end of day"', () {
+    test('includes a done task scheduled today', () async {
+      await repository.save(buildTask(
+        id: 'done-today',
+        scheduledDate: DateTime(2026, 3, 10, 9),
+        status: TaskStatus.done,
+        completedAt: DateTime(2026, 3, 10, 9),
+      ));
+
+      final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
+
+      expect(completed.map((r) => r.id), ['done-today']);
+    });
+
+    test('excludes a done task scheduled on a different day — gone after '
+        'rollover', () async {
+      await repository.save(buildTask(
+        id: 'done-yesterday',
+        scheduledDate: DateTime(2026, 3, 9),
+        status: TaskStatus.done,
+        completedAt: DateTime(2026, 3, 9),
+      ));
+
+      final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
+
+      expect(completed, isEmpty);
+    });
+
+    test('excludes a not-yet-done task scheduled today', () async {
+      await repository.save(buildTask(
+        id: 'todo-today',
+        scheduledDate: DateTime(2026, 3, 10),
+        status: TaskStatus.todo,
+      ));
+
+      final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
+
+      expect(completed, isEmpty);
+    });
+
+    test('excludes a done backlog task (null scheduledDate)', () async {
+      await repository.save(buildTask(
+        id: 'done-backlog',
+        scheduledDate: null,
+        status: TaskStatus.done,
+      ));
+
+      final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
+
+      expect(completed, isEmpty);
+    });
+
+    test('excludes soft-deleted tasks even if done today', () async {
+      await repository.save(buildTask(
+        id: 'done-deleted',
+        scheduledDate: DateTime(2026, 3, 10),
+        status: TaskStatus.done,
+        deletedAt: DateTime(2026, 3, 10),
+      ));
+
+      final completed = await repository.getCompletedOn(DateTime(2026, 3, 10));
+
+      expect(completed, isEmpty);
+    });
+  });
+
   group('delete', () {
     test('hard-deletes the row', () async {
       await repository.save(buildTask(id: 'r1', scheduledDate: DateTime(2026, 3, 4)));

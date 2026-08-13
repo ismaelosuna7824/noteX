@@ -13,4 +13,11 @@ class GetTasksUseCase {
   /// Get pending (uncompleted) tasks up to and including [upToDate].
   Future<List<Task>> getPending(DateTime upToDate) =>
       _repository.getPending(upToDate);
+
+  /// Get all non-deleted, blocked tasks.
+  Future<List<Task>> getBlocked() => _repository.getBlocked();
+
+  /// Get non-deleted, done tasks scheduled on [day].
+  Future<List<Task>> getCompletedOn(DateTime day) =>
+      _repository.getCompletedOn(day);
 }

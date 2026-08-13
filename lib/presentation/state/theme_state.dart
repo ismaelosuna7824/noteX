@@ -72,6 +72,11 @@ class ThemeState extends ChangeNotifier {
   /// a second thing to load, migrate and forget.
   String _timerViewMode = 'list';
 
+  /// 'list' or 'board' for the task page. Same rationale as
+  /// [_timerViewMode] — an additional surface, not a replacement; the flat
+  /// list stays available via 'list'.
+  String _taskViewMode = 'list';
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -140,6 +145,7 @@ class ThemeState extends ChangeNotifier {
   /// Last-used editor view mode ('edit', 'preview', or 'split').
   String get editorViewMode => _editorViewMode;
   String get timerViewMode => _timerViewMode;
+  String get taskViewMode => _taskViewMode;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -350,6 +356,7 @@ class ThemeState extends ChangeNotifier {
       _notesDisplayMode = json['notesDisplayMode'] as String? ?? 'list';
       _editorViewMode = json['editorViewMode'] as String? ?? 'preview';
       _timerViewMode = json['timerViewMode'] as String? ?? 'list';
+      _taskViewMode = json['taskViewMode'] as String? ?? 'list';
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -391,6 +398,7 @@ class ThemeState extends ChangeNotifier {
         'notesDisplayMode': _notesDisplayMode,
         'editorViewMode': _editorViewMode,
         'timerViewMode': _timerViewMode,
+        'taskViewMode': _taskViewMode,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -424,6 +432,16 @@ class ThemeState extends ChangeNotifier {
   void setTimerViewMode(String mode) {
     if (_timerViewMode == mode) return;
     _timerViewMode = mode;
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Unlike the editor's mode, this one notifies: the task page is rebuilt
+  /// from it, so a silent write would leave the toggle button out of sync
+  /// with the visible surface.
+  void setTaskViewMode(String mode) {
+    if (_taskViewMode == mode) return;
+    _taskViewMode = mode;
     _saveToDisk();
     notifyListeners();
   }

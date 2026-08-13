@@ -118,4 +118,39 @@ void main() {
 
     expect(result!.statusPendingPush, isTrue);
   });
+
+  // Slice 2 task 2.12 — re-verification. The Kanban board can drag a `done`
+  // card to another column, un-completing it; before slice 2 the only path
+  // to `isDone == false` was disabled once a task was completed
+  // (task_page.dart's checkbox guard). This use case remains the SOLE
+  // producer of that transition regardless of caller (board drag, flat-list
+  // checkbox, or any future path) — see design's row-5 invariant.
+  test('un-completing (done -> todo) writes status and is_completed '
+      'together, never one without the other', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      status: TaskStatus.done,
+      completedAt: DateTime(2026, 3, 3),
+      syncStatus: SyncStatus.synced,
+      statusPendingPush: false,
+    ));
+
+    final result = await useCase.execute('r1', TaskStatus.todo);
+
+    expect(result!.status, TaskStatus.todo);
+    expect(result.isDone, isFalse);
+    expect(result.completedAt, isNull);
+    // The quartet travels as a unit (D10 R1) — this is what keeps row 5 of
+    // the M8 contract table safe: no shipped path can author
+    // is_completed=false without also authoring status.
+    expect(result.statusPendingPush, isTrue);
+
+    final persisted = await repository.getById('r1');
+    expect(persisted!.status, TaskStatus.todo);
+    expect(persisted.isDone, isFalse);
+  });
 }

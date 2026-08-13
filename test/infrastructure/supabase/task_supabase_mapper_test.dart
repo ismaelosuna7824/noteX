@@ -222,6 +222,34 @@ void main() {
     });
   });
 
+  group('toMap — un-completing (row 5 precondition, slice 2 task 2.12)', () {
+    // The board can now drag a `done` card back to another column. Design's
+    // row-5 invariant ("no shipped client authors is_completed=false
+    // without also authoring status") holds only because the quartet is
+    // emitted as one unit (D10 R1). This proves that holds for the newly
+    // reachable un-complete direction, not just the complete direction
+    // already covered above.
+    test('emits is_completed=false together with the new status — never '
+        'is_completed alone', () {
+      final unCompleted = buildTask(
+        status: TaskStatus.todo,
+        statusChangedAt: DateTime(2026, 3, 5),
+        completedAt: null,
+        statusPendingPush: true,
+      );
+
+      final data = TaskSupabaseMapper.toMap(
+        unCompleted,
+        includeStatusFields: true,
+      );
+
+      expect(data['status'], 'todo');
+      expect(data['is_completed'], isFalse);
+      expect(data.containsKey('status'), isTrue);
+      expect(data.containsKey('is_completed'), isTrue);
+    });
+  });
+
   group('backlog task — nullable scheduled_date (schema v19)', () {
     test('toMap emits a null scheduled_date for a backlog task', () {
       final backlog = Task(

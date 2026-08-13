@@ -28,4 +28,13 @@ abstract class TaskRepository {
 
   /// Retrieve all non-deleted tasks with status `blocked`.
   Future<List<Task>> getBlocked();
+
+  /// Retrieve non-deleted, `done` tasks scheduled on [day].
+  ///
+  /// Deliberately separate from [getPending] — the home card's
+  /// `hasPendingToday` badge must not count completed work. Powers "done
+  /// stays visible until end of day" on the board's Done column: a task
+  /// stays visible for the day it was scheduled, then rolls off once that
+  /// day is no longer [day].
+  Future<List<Task>> getCompletedOn(DateTime day);
 }

@@ -89,4 +89,19 @@ class DriftTaskRepository implements TaskRepository {
         .get();
     return rows.map((r) => AppDatabase.taskToDomain(r)).toList();
   }
+
+  @override
+  Future<List<domain.Task>> getCompletedOn(DateTime day) async {
+    final startOfDay = DateTime(day.year, day.month, day.day);
+    final endOfDay = DateTime(day.year, day.month, day.day, 23, 59, 59);
+    final rows = await (_db.select(_db.taskEntries)
+          ..where(
+            (t) =>
+                t.deletedAt.isNull() &
+                t.status.equals('done') &
+                t.scheduledDate.isBetweenValues(startOfDay, endOfDay),
+          ))
+        .get();
+    return rows.map((r) => AppDatabase.taskToDomain(r)).toList();
+  }
 }
