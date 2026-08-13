@@ -5,6 +5,7 @@ import '../../domain/entities/task.dart';
 import '../state/app_state.dart';
 import '../state/task_state.dart';
 import '../state/theme_state.dart';
+import '../state/timer_state.dart';
 import '../widgets/animated_dialog.dart';
 import '../widgets/task_board.dart';
 
@@ -25,6 +26,7 @@ class TaskPage extends StatefulWidget {
 
 class _TaskPageState extends State<TaskPage> {
   final _reminderState = GetIt.instance<TaskState>();
+  final _timerState = GetIt.instance<TimerState>();
 
   static const _monthNames = [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
@@ -193,7 +195,11 @@ class _TaskPageState extends State<TaskPage> {
         isDark ? Colors.white.withValues(alpha: 0.10) : Colors.grey.shade200;
 
     return ListenableBuilder(
-      listenable: _reminderState,
+      // Merged with TimerState so a running task-linked timer's elapsed
+      // time on the board card ticks live — the running-timer indicator
+      // (task_board.dart's _CardBody) reads _timerState.runningEntry on
+      // every rebuild TimerState triggers (its own 1-second ticker).
+      listenable: Listenable.merge([_reminderState, _timerState]),
       builder: (context, _) {
         final reminders = _reminderState.reminders;
         final pending =
@@ -266,6 +272,7 @@ class _TaskPageState extends State<TaskPage> {
                       ? TaskBoard(
                           taskState: _reminderState,
                           themeState: widget.themeState,
+                          timerState: _timerState,
                         )
                       : reminders.isEmpty
                           ? _buildEmptyState(isDark, accentColor)

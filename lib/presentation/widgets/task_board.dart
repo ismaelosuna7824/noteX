@@ -28,10 +28,20 @@ class TaskBoard extends StatelessWidget {
     super.key,
     required this.taskState,
     required this.themeState,
+    required this.timerState,
   });
 
   final TaskState taskState;
   final ThemeState themeState;
+
+  /// Read here only to show a running-timer indicator on the linked task's
+  /// card (elapsed time, ticking) — the coverage gap the verify report and
+  /// the "Start timer does nothing observable" bug report both named: until
+  /// this, starting a timer from the board gave the user no visible
+  /// confirmation anything happened. Callers must rebuild [TaskBoard] on
+  /// [TimerState] changes (e.g. `ListenableBuilder`/`AnimatedBuilder`) for
+  /// the elapsed time to tick.
+  final TimerState timerState;
 
   static const _columns = [
     TaskStatus.todo,
@@ -93,6 +103,7 @@ class TaskBoard extends StatelessWidget {
               tasks: _tasksFor(status),
               taskState: taskState,
               themeState: themeState,
+              timerState: timerState,
               isDark: isDark,
               onCreate: status == TaskStatus.todo
                   ? () => showAddTaskDialog(context, taskState, themeState)
@@ -275,6 +286,7 @@ class _BoardColumn extends StatelessWidget {
     required this.tasks,
     required this.taskState,
     required this.themeState,
+    required this.timerState,
     required this.isDark,
     this.onCreate,
   });
@@ -284,6 +296,7 @@ class _BoardColumn extends StatelessWidget {
   final List<Task> tasks;
   final TaskState taskState;
   final ThemeState themeState;
+  final TimerState timerState;
   final bool isDark;
   final VoidCallback? onCreate;
 
@@ -361,6 +374,7 @@ class _BoardColumn extends StatelessWidget {
                       task: task,
                       taskState: taskState,
                       themeState: themeState,
+                      timerState: timerState,
                       isDark: isDark,
                     ),
                   ),
@@ -373,6 +387,16 @@ class _BoardColumn extends StatelessWidget {
   }
 }
 
+/// `hh:mm:ss` for a running task's elapsed time, matching the format
+/// `timer_page.dart`'s own `_formatDuration` already uses elsewhere in the
+/// timer feature.
+String _formatCardElapsed(Duration d) {
+  final h = d.inHours.toString().padLeft(2, '0');
+  final m = (d.inMinutes % 60).toString().padLeft(2, '0');
+  final s = (d.inSeconds % 60).toString().padLeft(2, '0');
+  return '$h:$m:$s';
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Board card: draggable, opens the detail dialog on tap.
 // ─────────────────────────────────────────────────────────────────────────
@@ -382,17 +406,24 @@ class _BoardCard extends StatelessWidget {
     required this.task,
     required this.taskState,
     required this.themeState,
+    required this.timerState,
     required this.isDark,
   });
 
   final Task task;
   final TaskState taskState;
   final ThemeState themeState;
+  final TimerState timerState;
   final bool isDark;
 
   @override
   Widget build(BuildContext context) {
-    final card = _CardBody(task: task, themeState: themeState, isDark: isDark);
+    final card = _CardBody(
+      task: task,
+      themeState: themeState,
+      timerState: timerState,
+      isDark: isDark,
+    );
     return Padding(
       padding: const EdgeInsets.only(bottom: 6),
       child: Draggable<Task>(
@@ -423,11 +454,13 @@ class _CardBody extends StatelessWidget {
   const _CardBody({
     required this.task,
     required this.themeState,
+    required this.timerState,
     required this.isDark,
   });
 
   final Task task;
   final ThemeState themeState;
+  final TimerState timerState;
   final bool isDark;
 
   @override
@@ -437,6 +470,9 @@ class _CardBody extends StatelessWidget {
     final isDone = task.status == TaskStatus.done;
     final hasReason =
         task.status == TaskStatus.blocked && (task.blockedReason?.trim().isNotEmpty ?? false);
+    final runningEntry = timerState.runningEntry;
+    final isTimerRunning =
+        runningEntry != null && runningEntry.taskId == task.id;
 
     return Container(
       padding: const EdgeInsets.all(10),
@@ -464,6 +500,24 @@ class _CardBody extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 6),
+          if (isTimerRunning) ...[
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.timer_rounded, size: 11, color: accentColor),
+                const SizedBox(width: 4),
+                Text(
+                  _formatCardElapsed(runningEntry.elapsed),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: accentColor,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+          ],
           if (date != null)
             Row(
               mainAxisSize: MainAxisSize.min,

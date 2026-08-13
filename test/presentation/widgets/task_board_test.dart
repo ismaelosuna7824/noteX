@@ -245,9 +245,12 @@ void main() {
             width: 1000,
             height: 700,
             child: AnimatedBuilder(
-              animation: taskState,
-              builder: (context, _) =>
-                  TaskBoard(taskState: taskState, themeState: themeState),
+              animation: Listenable.merge([taskState, timerState]),
+              builder: (context, _) => TaskBoard(
+                taskState: taskState,
+                themeState: themeState,
+                timerState: timerState,
+              ),
             ),
           ),
         ),
@@ -617,10 +620,62 @@ void main() {
       // The dialog closes on success (per _startTimer's implementation).
       expect(find.text('Start timer'), findsNothing);
 
+      // Feedback gap fix: the board card itself must now show a running
+      // timer indicator — closing the "the dialog just closes and the user
+      // has no way to know a clock started" gap named in this bug report.
+      expect(
+        find.byIcon(Icons.timer_rounded),
+        findsOneWidget,
+        reason: 'the task card must show a running-timer indicator once '
+            'the timer starts',
+      );
+
       // TimerState owns a real periodic Timer once a timer is running (see
       // _startTicker) — stop it before the test ends so the widget test
       // binding doesn't flag a pending timer.
       await timerState.stopTimer();
+    });
+  });
+
+  group('running-timer indicator on the board card — feedback gap fix', () {
+    testWidgets(
+        'the indicator is scoped to the linked task and disappears when '
+        'the timer stops', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Tracked'));
+      await repository.save(Task.create(id: 'r2', title: 'Not tracked'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      expect(find.byIcon(Icons.timer_rounded), findsNothing);
+
+      await tester.tap(find.text('Tracked'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start timer'));
+      await tester.pumpAndSettle();
+
+      // Exactly one card shows the indicator — the linked task's, not the
+      // unrelated one's.
+      expect(find.byIcon(Icons.timer_rounded), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.ancestor(
+            of: find.text('Tracked'),
+            matching: find.byType(Container),
+          ),
+          matching: find.byIcon(Icons.timer_rounded),
+        ),
+        findsWidgets,
+        reason: 'the running indicator belongs to the linked task\'s card',
+      );
+
+      await timerState.stopTimer();
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byIcon(Icons.timer_rounded),
+        findsNothing,
+        reason: 'stopping the timer must remove the indicator',
+      );
     });
   });
 }
