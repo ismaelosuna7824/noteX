@@ -18,6 +18,7 @@ import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import 'animated_dialog.dart';
+import 'note_markdown_editor.dart';
 import 'project_colors.dart';
 
 /// Kanban view of tasks, grouped into four columns by [TaskStatus].
@@ -1422,8 +1423,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   }
 
   /// The title field — large, prominent and multi-line (wraps instead of
-  /// scrolling horizontally), the first thing in the dialog's single
-  /// content column.
+  /// scrolling horizontally), the first thing in the left content column.
   Widget _buildTitleField() {
     return TextField(
       controller: _titleController,
@@ -1451,14 +1451,63 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  // Note: the Markdown description editor UI was deliberately removed from
-  // this dialog (settled decision: "quitar, no eliminar" — hide from the
-  // UI, never render it, but keep the underlying data). `Task.description`
-  // still round-trips through [_description]/[_originalDescription]/
-  // [_isDirty]/[_closeDialog] below exactly as before; only the editor
-  // widget that let a user type into it is gone. See [_buildTitleField]'s
-  // doc — title is now the only thing the (former) left content column
-  // renders, so the dialog collapsed to a single column (see [build]).
+  /// Description section — the Markdown editor, given real height. When
+  /// [height] is omitted (the side-by-side layout), the editor fills the
+  /// remaining space of its ancestor `Expanded` — the dialog's own total
+  /// height is sized generously enough that this lands well above
+  /// `_kMinEditorHeight`, without fighting `Expanded`'s own tight
+  /// constraint (a `ConstrainedBox(minHeight:...)` inside an `Expanded`
+  /// cannot force extra space — it only produces a render overflow when
+  /// the leftover space is smaller than the minimum). When [height] is
+  /// given (the stacked layout, inside a `SingleChildScrollView` where
+  /// `Expanded` cannot be used — its incoming height is unbounded), the
+  /// editor gets that fixed height instead.
+  Widget _buildDescriptionSection(bool isDark, {double? height}) {
+    final editor = Container(
+      decoration: BoxDecoration(
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.15)
+              : Colors.grey.shade300,
+        ),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: NoteMarkdownEditor(
+        initialContent: widget.task.description,
+        toolbar: EditorToolbarProfile.minimal,
+        onChanged: (value) => _description = value,
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _sectionHeader('Description', isDark),
+        height != null ? SizedBox(height: height, child: editor) : Expanded(child: editor),
+      ],
+    );
+  }
+
+  /// The left content column: the things the user WRITES — title, then
+  /// description. Linked notes now live in the right sidebar (they are a
+  /// reference/attachment, like Project or Scheduled date, not prose) — so
+  /// the description is the last thing here and its `Expanded` (see below)
+  /// can honestly own the full remaining height instead of leaving room for
+  /// a section that used to follow it. In the stacked layout ([stacked] =
+  /// true, used inside a `SingleChildScrollView`) the description still
+  /// gets a fixed height instead of `Expanded`, since `Expanded` requires a
+  /// bounded incoming height.
+  Widget _buildLeftColumn(bool isDark, {required bool stacked}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildTitleField(),
+        const SizedBox(height: 20),
+        stacked
+            ? _buildDescriptionSection(isDark, height: 260)
+            : Expanded(child: _buildDescriptionSection(isDark)),
+      ],
+    );
+  }
 
   /// A quiet label/value row for the sidebar's Details panel — a small
   /// muted caption above its value, matching the reference layout's
@@ -1662,15 +1711,19 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   /// The right sidebar column: the things the user SETS and the things
   /// ATTACHED to the task — the status control at the top, the Details
-  /// card, the linked-notes section, then the timestamps at the bottom —
-  /// rendered below the title field in the dialog's single column (see
-  /// [build]). Notes render here, not near the title: they are references
-  /// attached to the task, like Project or Scheduled date, not prose the
-  /// user writes.
+  /// card, the linked-notes section, then the timestamps at the bottom
+  /// (reference layout). Linked notes live here rather than in the left
+  /// content column: they are references attached to the task, like
+  /// Project or Scheduled date, not prose the user writes — and keeping
+  /// them out of the left column lets its description editor own the full
+  /// remaining height there instead of sharing it.
   ///
-  /// No `Expanded`/`Spacer` here, deliberately — this whole block sits
-  /// inside [build]'s own `SingleChildScrollView`, whose incoming height is
-  /// unbounded; a `Spacer` would throw under that constraint.
+  /// No `Expanded`/`Spacer` here, deliberately — this same column is reused
+  /// unchanged in both the side-by-side layout (bounded height, inside a
+  /// `SingleChildScrollView` within a Row's `Expanded` — see [_buildBody] —
+  /// so a long notes list scrolls independently instead of overflowing) and
+  /// the stacked layout (unbounded height, inside the body's own
+  /// `SingleChildScrollView`), and a `Spacer` would throw under either.
   Widget _buildSidebar(bool isDark) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1687,10 +1740,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// The quiet heading strip above the single content column — a close
-  /// affordance mirroring the reference layout's header bar. Pops without
-  /// saving, same as the footer's Cancel — not a new behavior, just an
-  /// additional way to reach the same existing dismissal.
+  /// The quiet heading strip above the two columns — a close affordance
+  /// mirroring the reference layout's header bar. Pops without saving,
+  /// same as the footer's Cancel — not a new behavior, just an additional
+  /// way to reach the same existing dismissal.
   Widget _buildHeader(bool isDark) {
     return Row(
       children: [
@@ -1719,50 +1772,71 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
-  /// The single content column: title, then the former sidebar's status
-  /// control, Details card, Notes section and timestamps, in that order
-  /// (settled decision — with the description editor hidden, a second
-  /// column holding only the title field would leave a lopsided layout
-  /// next to a tall, mostly-empty sidebar). Wrapped in its own
-  /// `SingleChildScrollView` in [build] rather than here, so [build] is the
-  /// single place that owns the dialog's scroll/size behaviour.
-  Widget _buildBody(bool isDark) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
+  /// The two-column body, or its stacked fallback below
+  /// [_stackBreakpointWidth]: the sidebar renders below the content column
+  /// instead of squeezing beside it (a `RenderFlex overflow` on a narrow,
+  /// resizable desktop window is a real bug, not a test artifact).
+  ///
+  /// In the side-by-side layout the sidebar is wrapped in its own
+  /// `SingleChildScrollView` — with a bounded-height `Expanded` ancestor
+  /// (from the Row) and no scroll wrapper, a long linked-notes list plus
+  /// the rest of the sidebar's content could exceed the available height
+  /// and overflow; scrolling it independently keeps the left column's own
+  /// height (and the description editor's `Expanded`) unaffected. The
+  /// stacked layout already scrolls both columns together, so it needs no
+  /// separate wrapper here.
+  Widget _buildBody(bool isDark, {required bool stacked}) {
+    if (stacked) {
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildLeftColumn(isDark, stacked: true),
+            const SizedBox(height: 28),
+            _buildSidebar(isDark),
+          ],
+        ),
+      );
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildTitleField(),
-        const SizedBox(height: 20),
-        _buildSidebar(isDark),
+        Expanded(flex: 2, child: _buildLeftColumn(isDark, stacked: false)),
+        const SizedBox(width: 28),
+        Expanded(
+          child: SingleChildScrollView(child: _buildSidebar(isDark)),
+        ),
       ],
     );
   }
 
-  /// Comfortable single-column width — a form, not an issue-tracker's
-  /// wide two-column layout, now that the description editor is hidden.
-  static const double _dialogMaxWidth = 560;
+  /// Comfortable two-column width (reference layout: ~980-1040 logical
+  /// px) — the ceiling the dialog grows to on a wide window.
+  static const double _dialogMaxWidth = 1000;
 
-  /// Ceiling for the dialog's own height. The dialog otherwise SHRINKS to
-  /// fit its content (see [build]'s `SingleChildScrollView` + unconstrained
-  /// `IntrinsicHeight`-free column) instead of reserving this much space
-  /// unconditionally — this is only the cap once content (e.g. a long
-  /// linked-notes list) would otherwise overflow the viewport.
-  static const double _dialogMaxHeight = 640;
+  /// Ceiling for the dialog's own height.
+  static const double _dialogHeight = 680;
+
+  /// Below this width the sidebar stacks under the content column instead
+  /// of squeezing beside it.
+  static const double _stackBreakpointWidth = 720;
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final mediaSize = MediaQuery.of(context).size;
 
-    // Computed from MediaQuery (not a LayoutBuilder inside the dialog) so
-    // the same value both caps the dialog's width and its max height. 80/96
-    // mirror AlertDialog's own default `insetPadding` (40 horizontal, and a
-    // smaller vertical margin here since height already shrinks to content
-    // below that cap).
+    // Computed from MediaQuery (not a LayoutBuilder inside the dialog)
+    // so the SAME value both sizes the dialog's SizedBox and decides
+    // whether to stack — the two can never disagree. 80/96 mirror
+    // AlertDialog's own default `insetPadding` (40 horizontal, and a
+    // smaller vertical margin here since height already has its own
+    // scroll/shrink fallback below).
     final availableWidth = mediaSize.width - 80;
     final dialogWidth = math.max(280.0, math.min(availableWidth, _dialogMaxWidth));
     final availableHeight = mediaSize.height - 96;
-    final maxDialogHeight =
-        math.max(320.0, math.min(availableHeight, _dialogMaxHeight));
+    final dialogHeight = math.max(320.0, math.min(availableHeight, _dialogHeight));
+    final stacked = dialogWidth < _stackBreakpointWidth;
 
     return PopScope(
       // Always false: the framework never gets to pop this route on its
@@ -1792,26 +1866,16 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         ),
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        // A `ConstrainedBox` (not a fixed-height `SizedBox` as before) —
-        // the single column now shrinks to its own content height, only
-        // capped by [maxDialogHeight] once content would otherwise overflow
-        // the viewport, instead of always reserving a tall, mostly-empty
-        // shell.
-        content: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxDialogHeight),
-          child: SizedBox(
-            width: dialogWidth,
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildHeader(isDark),
-                  const SizedBox(height: 16),
-                  _buildBody(isDark),
-                ],
-              ),
-            ),
+        content: SizedBox(
+          width: dialogWidth,
+          height: dialogHeight,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildHeader(isDark),
+              const SizedBox(height: 16),
+              Expanded(child: _buildBody(isDark, stacked: stacked)),
+            ],
           ),
         ),
         // No Save/Cancel footer (settled decision: the reference model —

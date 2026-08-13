@@ -55,7 +55,6 @@ import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/state/timer_state.dart';
-import 'package:notex/presentation/widgets/note_markdown_editor.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
 
 /// Minimal fakes satisfying [SyncEngine]'s collaborators — this suite never
@@ -1244,83 +1243,10 @@ void main() {
     });
   });
 
-  group(
-      'task detail dialog — description editor hidden, single-column '
-      'layout (settled decision: "quitar, no eliminar")', () {
+  group('task detail dialog — two-column issue layout', () {
     testWidgets(
-        'does not render the DESCRIPTION section header or the Markdown '
-        'editor — the section is removed from the UI, not merely collapsed',
-        (tester) async {
-      await repository.save(
-        Task.create(id: 'r1', title: 'Has description').copyWith(
-          description: 'Pre-existing description text',
-        ),
-      );
-      await taskState.initialize();
-      await pumpBoard(tester);
-
-      await tester.tap(find.text('Has description'));
-      await tester.pumpAndSettle();
-
-      expect(
-        find.text('DESCRIPTION'),
-        findsNothing,
-        reason: 'the DESCRIPTION section header must not render at all — '
-            'not collapsed, not zero-height',
-      );
-      expect(
-        find.byType(NoteMarkdownEditor),
-        findsNothing,
-        reason: 'the Markdown description editor must not be built at all',
-      );
-      // The pre-existing text must never leak into the UI through some
-      // other widget either (e.g. as a stray Text) — it should simply not
-      // appear anywhere in the dialog.
-      expect(find.text('Pre-existing description text'), findsNothing);
-    });
-
-    testWidgets(
-        'an existing description survives an open/close round trip '
-        'unchanged, even on a close that DOES write (a different field '
-        'changed) — proves "quitar, no eliminar": hidden, never dropped',
-        (tester) async {
-      await repository.save(
-        Task.create(id: 'r1', title: 'Has description').copyWith(
-          description: 'Pre-existing description text',
-        ),
-      );
-      await taskState.initialize();
-      await pumpBoard(tester);
-
-      await tester.tap(find.text('Has description'));
-      await tester.pumpAndSettle();
-
-      // Edit a field the dialog DOES render (title) — this makes the
-      // dialog dirty and forces a real write on close, through the same
-      // updateTask(..., description: _description) call the hidden
-      // editor used to feed. If hiding the editor had also dropped
-      // `_description`'s value, this write would blank the description.
-      await tester.enterText(
-        find.widgetWithText(TextField, 'Title'),
-        'Has description (edited)',
-      );
-      await tester.tap(find.byTooltip('Close'));
-      await tester.pumpAndSettle();
-
-      final persisted = await repository.getById('r1');
-      expect(persisted!.title, 'Has description (edited)');
-      expect(
-        persisted.description,
-        'Pre-existing description text',
-        reason: 'hiding the editor must never blank out or alter an '
-            'existing description, even when the dialog writes on close '
-            'for an unrelated field',
-      );
-    });
-
-    testWidgets(
-        'renders a single column — title, then status, then details, then '
-        'notes, then timestamps, without a RenderFlex overflow',
+        'renders the left content column (title/description/notes) beside '
+        'a right sidebar (status/details/timestamps) on a wide window',
         (tester) async {
       await noteRepository.save(Note(
         id: 'note-1',
@@ -1331,17 +1257,23 @@ void main() {
       ));
       await appState.refreshNotes();
       await repository.save(
-        Task.create(id: 'r1', title: 'Single column task').copyWith(
+        Task.create(id: 'r1', title: 'Two column task').copyWith(
           noteIds: const ['note-1'],
         ),
       );
       await taskState.initialize();
       await pumpBoard(tester); // 1400x1200 physical size — a wide window.
 
-      await tester.tap(find.text('Single column task'));
+      await tester.tap(find.text('Two column task'));
       await tester.pumpAndSettle();
 
+      // Left column content — title and description only. Linked notes no
+      // longer render here; they moved to the right sidebar (see below).
       expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+      expect(find.text('DESCRIPTION'), findsOneWidget);
+
+      // Right sidebar content — the status control, the Details card's
+      // label/value rows, the linked-notes section, and the timestamps.
       expect(
         find.text('To Do'),
         findsOneWidget,
@@ -1362,46 +1294,42 @@ void main() {
             'scheduledDate',
       );
       expect(find.text('Time tracked'), findsOneWidget);
+      // No redundant "Notes" count row in the Details panel anymore — the
+      // count lives solely in the "NOTES · N" section header below it.
       expect(find.text('Notes'), findsNothing);
       expect(find.text('NOTES · 1'), findsOneWidget);
       expect(find.textContaining('Created'), findsOneWidget);
       expect(find.textContaining('Updated'), findsOneWidget);
 
-      // Single column: every section shares (approximately) the same left
-      // edge — none of them sit beside another (CrossAxisAlignment.stretch
-      // inside one Column), and they stack top-to-bottom in this order.
-      final titleTopLeft =
-          tester.getTopLeft(find.widgetWithText(TextField, 'Title'));
-      final statusTopLeft = tester.getTopLeft(find.text('To Do'));
-      final detailsTopLeft = tester.getTopLeft(find.text('Project'));
-      final notesTopLeft = tester.getTopLeft(find.text('NOTES · 1'));
-      final timestampsTopLeft = tester.getTopLeft(find.textContaining('Created'));
-
+      // Geometrically side-by-side, not stacked: the title field (left
+      // column) sits to the left of the status control (sidebar).
+      final titleX = tester.getTopLeft(find.widgetWithText(TextField, 'Title')).dx;
+      final statusX = tester.getTopLeft(find.text('To Do')).dx;
       expect(
-        statusTopLeft.dx,
-        // Not exact equality: the title field's outline-border padding and
-        // the status control's own Container padding differ slightly. The
-        // tolerance is generous enough to accept that, while still failing
-        // hard on a real two-column regression (previously ~400+px apart).
-        closeTo(titleTopLeft.dx, 40.0),
-        reason: 'the status control must sit in the same column as the '
-            'title, not beside it',
+        titleX,
+        lessThan(statusX),
+        reason: 'on a wide window the sidebar must render beside the '
+            'content column, not below it',
       );
-      expect(titleTopLeft.dy, lessThan(statusTopLeft.dy));
-      expect(statusTopLeft.dy, lessThan(detailsTopLeft.dy));
-      expect(detailsTopLeft.dy, lessThan(notesTopLeft.dy));
-      expect(notesTopLeft.dy, lessThan(timestampsTopLeft.dy));
 
+      // The notes section itself must render inside the sidebar column,
+      // not the left content column — the move this test guards.
+      final notesX = tester.getTopLeft(find.text('NOTES · 1')).dx;
       expect(
-        tester.takeException(),
-        isNull,
-        reason: 'the single-column dialog must never overflow',
+        notesX,
+        greaterThan(titleX),
+        reason: 'the linked-notes section must render in the right '
+            'sidebar, not the left content column',
       );
     });
 
     testWidgets(
-        'a narrow desktop window still renders the single column without a '
-        'RenderFlex overflow', (tester) async {
+        'stacks the sidebar below the content column below a width '
+        'threshold, without a RenderFlex overflow', (tester) async {
+      // A narrow desktop window — narrower than the dialog's comfortable
+      // two-column width. The dialog itself (not TaskBoard) must adapt: a
+      // fixed-width layout here would be the actual overflow bug the brief
+      // calls out.
       tester.view.physicalSize = const Size(760, 1000);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -1432,7 +1360,20 @@ void main() {
       expect(
         tester.takeException(),
         isNull,
-        reason: 'a narrow, resizable desktop window must not overflow',
+        reason: 'a narrow, resizable desktop window must not overflow — it '
+            'must stack instead of squeezing two columns',
+      );
+
+      // Stacked: the sidebar's status control renders below the content
+      // column's title field, not beside it.
+      final titleBottom =
+          tester.getBottomLeft(find.widgetWithText(TextField, 'Title')).dy;
+      final statusTop = tester.getTopLeft(find.text('To Do')).dy;
+      expect(
+        statusTop,
+        greaterThanOrEqualTo(titleBottom),
+        reason: 'below the width threshold, the sidebar must stack under '
+            'the content column',
       );
     });
 
