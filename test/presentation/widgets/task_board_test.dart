@@ -55,6 +55,7 @@ import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/state/timer_state.dart';
+import 'package:notex/presentation/widgets/app_picker_menu.dart';
 import 'package:notex/presentation/widgets/markdown/notex_markdown_view.dart';
 import 'package:notex/presentation/widgets/note_markdown_editor.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
@@ -1413,12 +1414,9 @@ void main() {
       );
       final titleDecoration = titleField.decoration!;
 
-      final folderField = tester.widget<DropdownButtonFormField<String?>>(
+      final folderField = tester.widget<InputDecorator>(
         find.byKey(const Key('task-note-folder-selector')),
       );
-      // DropdownButtonFormField wraps a DropdownButtonFormField's
-      // decoration inside its own FormField build; the widget itself
-      // exposes it via `decoration`.
       final folderDecoration = folderField.decoration;
 
       expect(
@@ -1510,6 +1508,39 @@ void main() {
       expect(openSize.height, greaterThanOrEqualTo(44));
       expect(closeSize.width, greaterThanOrEqualTo(44));
       expect(closeSize.height, greaterThanOrEqualTo(44));
+    });
+
+    testWidgets(
+        'the folder selector\'s own tappable area also meets the 44x44 '
+        'minimum, even though its dense InputDecoration is visually '
+        'compact', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      final inkWell = find.descendant(
+        of: find.byKey(const Key('task-note-folder-selector')),
+        matching: find.byType(InkWell),
+      );
+      final size = tester.getSize(inkWell);
+      expect(size.height, greaterThanOrEqualTo(44));
     });
   });
 
@@ -1921,7 +1952,7 @@ void main() {
       await tester.tap(find.text('Unassigned task'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(AppPickerMenu<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Client work').last);
       await tester.pumpAndSettle();
@@ -2313,7 +2344,7 @@ void main() {
 
       expect(find.text('To Do'), findsOneWidget);
 
-      await tester.tap(find.byType(DropdownButton<TaskStatus>));
+      await tester.tap(find.byType(AppPickerMenu<TaskStatus>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Doing').last);
       await tester.pumpAndSettle();
@@ -2338,7 +2369,7 @@ void main() {
       // Blocked reason row now that the local status is blocked — the
       // display-scoping rule (design D3) applies to a dialog-driven
       // transition exactly as it already does to a drag-driven one.
-      await tester.tap(find.byType(DropdownButton<TaskStatus>));
+      await tester.tap(find.byType(AppPickerMenu<TaskStatus>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Blocked').last);
       await tester.pumpAndSettle();
@@ -2360,8 +2391,36 @@ void main() {
     });
   });
 
-  group('status/project dropdowns release focus after a selection — '
-      'diagnosed problem #1', () {
+  group(
+      'status/project pickers — shared AppPickerMenu, focus release '
+      '(diagnosed problem #1) and 44x44 tap targets', () {
+    testWidgets(
+        'both the status and project pickers meet the 44x44 minimum tap '
+        'target', (tester) async {
+      await projectRepository.save(Project(
+        id: 'proj-1',
+        name: 'Client work',
+        colorValue: 0xFF00FF00,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await repository.save(Task.create(id: 'r1', title: 'Tap target check'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Tap target check'));
+      await tester.pumpAndSettle();
+
+      final statusSize =
+          tester.getSize(find.byType(AppPickerMenu<TaskStatus>));
+      final projectSize =
+          tester.getSize(find.byType(AppPickerMenu<String?>));
+
+      expect(statusSize.height, greaterThanOrEqualTo(44));
+      expect(projectSize.height, greaterThanOrEqualTo(44));
+    });
+
     testWidgets(
         'choosing a status releases focus so no rectangle lingers on the '
         'control', (tester) async {
@@ -2372,7 +2431,7 @@ void main() {
       await tester.tap(find.text('Focus check'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<TaskStatus>));
+      await tester.tap(find.byType(AppPickerMenu<TaskStatus>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Doing').last);
       await tester.pumpAndSettle();
@@ -2408,7 +2467,7 @@ void main() {
       await tester.tap(find.text('Focus check 2'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(AppPickerMenu<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Client work').last);
       await tester.pumpAndSettle();
@@ -2437,7 +2496,7 @@ void main() {
       await tester.tap(find.text('Needs a project'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(AppPickerMenu<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New project…').last);
       await tester.pumpAndSettle();
@@ -2487,7 +2546,7 @@ void main() {
       await tester.tap(find.text('Blank name task'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(AppPickerMenu<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New project…').last);
       await tester.pumpAndSettle();
@@ -2520,7 +2579,7 @@ void main() {
       await tester.tap(find.text('Cancel me'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(AppPickerMenu<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New project…').last);
       await tester.pumpAndSettle();
@@ -2804,7 +2863,7 @@ void main() {
       await tester.tap(find.text('Needs a project'));
       await tester.pumpAndSettle();
 
-      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.tap(find.byType(AppPickerMenu<String?>));
       await tester.pumpAndSettle();
       await tester.tap(find.text('New project…').last);
       await tester.pumpAndSettle();

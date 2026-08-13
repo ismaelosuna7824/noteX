@@ -21,6 +21,7 @@ import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import 'animated_dialog.dart';
+import 'app_picker_menu.dart';
 import 'note_markdown_editor.dart';
 import 'project_colors.dart';
 
@@ -70,6 +71,16 @@ class TaskBoard extends StatelessWidget {
     TaskStatus.doing: 'Doing',
     TaskStatus.blocked: 'Blocked',
     TaskStatus.done: 'Done',
+  };
+
+  /// Leading icon per status for the status picker (_buildStatusControl) —
+  /// the shared [AppPickerMenu] requires one per option; the original
+  /// `DropdownButton` version had none.
+  static const _statusIcons = {
+    TaskStatus.todo: Icons.radio_button_unchecked,
+    TaskStatus.doing: Icons.autorenew_rounded,
+    TaskStatus.blocked: Icons.block_rounded,
+    TaskStatus.done: Icons.check_circle_rounded,
   };
 
   /// [ThemeState.taskBoardProjectFilter] sentinel: show every project's
@@ -763,24 +774,12 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// ScrollPosition and asserts on every frame the thumb is visible.
   final ScrollController _notesScrollController = ScrollController();
 
-  /// Explicit focus nodes for the status and project dropdowns — needed to
-  /// fix diagnosed problem #1 (a lingering focus rectangle after a
-  /// selection).
-  ///
-  /// `DropdownButton` calls its own `focusNode.requestFocus()` when
-  /// opening. While its menu is open, the menu ROUTE's own overlay holds
-  /// primary focus instead — so unfocusing inside `onChanged` (which fires
-  /// once the route has already popped, but is disposed asynchronously,
-  /// still one frame later) has nothing to undo yet: the anchor only
-  /// reclaims focus automatically AFTER `onChanged` returns, when Flutter's
-  /// focus manager falls back to it as the popped route's overlay is torn
-  /// down. A plain `unfocus()`/`canRequestFocus` toggle inside `onChanged`
-  /// therefore runs too early and gets silently overridden a frame later.
-  /// [_suppressFocusReclaim] instead reacts to that hand-back directly: it
-  /// listens for this node actually regaining focus and immediately drops
-  /// it again, for a short window after a selection. A keyboard user who
-  /// tabs TO the control afterward is unaffected — the listener is gone
-  /// well before then.
+  /// Explicit focus nodes for the status and project pickers — passed to
+  /// their [AppPickerMenu]s so it can release focus right after a selection
+  /// (the fix for diagnosed problem #1, a lingering focus rectangle after a
+  /// picker's own async focus hand-back once its menu route pops — see
+  /// [AppPickerMenu]'s own doc for the mechanism, now built into the shared
+  /// widget instead of duplicated here).
   final FocusNode _statusFocusNode = FocusNode(debugLabel: 'task-status');
   final FocusNode _projectFocusNode = FocusNode(debugLabel: 'task-project');
 
@@ -864,24 +863,6 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     _statusFocusNode.dispose();
     _projectFocusNode.dispose();
     super.dispose();
-  }
-
-  /// Reacts to a [DropdownButton]'s automatic "hand focus back to the
-  /// anchor" once its menu route finishes popping (see [_statusFocusNode]'s
-  /// doc) — the fix for diagnosed problem #1. Call right after a selection
-  /// is applied: for a short window afterward, if [node] regains focus, it
-  /// is immediately dropped again. The listener removes itself once that
-  /// window passes, so it never interferes with a later, legitimate
-  /// keyboard/mouse focus on the same control.
-  void _suppressFocusReclaim(FocusNode node) {
-    void reclaimGuard() {
-      if (node.hasFocus) node.unfocus();
-    }
-
-    node.addListener(reclaimGuard);
-    Future.delayed(const Duration(milliseconds: 500), () {
-      node.removeListener(reclaimGuard);
-    });
   }
 
   /// Resolves every linked note's affordance state up front (design D9),
@@ -1491,10 +1472,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// If [_projectId] points at a project [TimerState.projects] doesn't
   /// carry (soft-deleted — mirrors a trashed linked note's degrade-the-
   /// display-keep-the-data rule, design D9), a synthetic "Deleted project"
-  /// entry keeps the dropdown's selected value valid instead of throwing on
-  /// Flutter's "exactly one item must match" assertion, or silently
-  /// clearing the reference.
-  /// Sentinel dropdown value for the "New project…" row — distinct from
+  /// entry keeps the picker's current value valid instead of pointing it at
+  /// a value none of its options carry, or silently clearing the reference.
+  /// Sentinel picker value for the "New project…" row — distinct from
   /// every real project id (a UUID), so selecting it can never collide
   /// with an actual project. Never persisted: selecting it opens
   /// [_createProjectFromSelector] instead of calling [_assignProject].
@@ -1507,61 +1487,77 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         _projectId != null && timerState.projectForId(_projectId) == null;
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
 
-    return Row(
-      children: [
-        Icon(Icons.folder_outlined, size: 15, color: mutedColor),
-        const SizedBox(width: 8),
-        DropdownButton<String?>(
-          value: _projectId,
-          focusNode: _projectFocusNode,
-          isDense: true,
-          underline: const SizedBox.shrink(),
-          style: TextStyle(fontSize: 12.5, color: mutedColor),
-          onChanged: (value) {
-            // Suppress the lingering focus rectangle after a selection
-            // (diagnosed problem #1) — see [_projectFocusNode]'s doc for
-            // why a plain `unfocus()` here does not stick. A keyboard user
-            // tabbing TO the control still sees its own focus ring; only
-            // the auto-reclaim once a choice has been made is suppressed.
-            _suppressFocusReclaim(_projectFocusNode);
-            if (value == _newProjectValue) {
-              unawaited(_createProjectFromSelector());
-            } else {
-              unawaited(_assignProject(value));
-            }
-          },
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('No Project'),
-            ),
-            if (isDangling)
-              DropdownMenuItem<String?>(
-                value: _projectId,
-                child: const Text('Deleted project'),
-              ),
-            for (final p in projects)
-              DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
-            DropdownMenuItem<String?>(
-              value: _newProjectValue,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.add_rounded, size: 14, color: widget.accentColor),
-                  const SizedBox(width: 6),
-                  Text(
-                    'New project…',
-                    style: TextStyle(
-                      color: widget.accentColor,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
+    String currentLabel;
+    Color? currentDot;
+    if (_projectId == null) {
+      currentLabel = 'No Project';
+    } else if (isDangling) {
+      currentLabel = 'Deleted project';
+    } else {
+      final project = timerState.projectForId(_projectId)!;
+      currentLabel = project.name;
+      currentDot = project.color;
+    }
+
+    return AppPickerMenu<String?>(
+      value: _projectId,
+      focusNode: _projectFocusNode,
+      surfaceColor: widget.surfaceColor,
+      accentColor: widget.accentColor,
+      onSelected: (value) {
+        if (value == _newProjectValue) {
+          unawaited(_createProjectFromSelector());
+        } else {
+          unawaited(_assignProject(value));
+        }
+      },
+      options: [
+        const AppPickerOption<String?>(
+          value: null,
+          label: 'No Project',
+          icon: Icons.folder_outlined,
+        ),
+        if (isDangling)
+          AppPickerOption<String?>(
+            value: _projectId,
+            label: 'Deleted project',
+            icon: Icons.folder_off_outlined,
+          ),
+        for (final p in projects)
+          AppPickerOption<String?>(value: p.id, label: p.name, dotColor: p.color),
+        AppPickerOption<String?>.action(
+          value: _newProjectValue,
+          label: 'New project…',
+          icon: Icons.add_rounded,
         ),
       ],
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.folder_outlined, size: 15, color: mutedColor),
+          const SizedBox(width: 8),
+          if (currentDot != null) ...[
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(color: currentDot, shape: BoxShape.circle),
+            ),
+            const SizedBox(width: 6),
+          ],
+          ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                currentLabel,
+                style: TextStyle(fontSize: 12.5, color: mutedColor),
+              ),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Icon(Icons.expand_more_rounded, size: 14, color: mutedColor),
+        ],
+      ),
     );
   }
 
@@ -1856,33 +1852,47 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// colour is a supplementary cue, never the sole signal.
   Widget _buildStatusControl(bool isDark) {
     final accent = widget.accentColor;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: accent.withValues(alpha: isDark ? 0.16 : 0.10),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accent.withValues(alpha: 0.35)),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<TaskStatus>(
-          value: _status,
-          focusNode: _statusFocusNode,
-          isExpanded: true,
-          icon: Icon(Icons.expand_more_rounded, color: accent),
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: accent),
-          onChanged: (next) {
-            // Same focus-reclaim fix as the project selector (diagnosed
-            // problem #1) — see [_statusFocusNode]'s doc for why a plain
-            // `unfocus()` here does not stick.
-            _suppressFocusReclaim(_statusFocusNode);
-            if (next != null) unawaited(_changeStatus(next));
-          },
-          items: [
-            for (final status in TaskBoard._columns)
-              DropdownMenuItem<TaskStatus>(
-                value: status,
-                child: Text(TaskBoard._columnLabels[status]!),
+    return AppPickerMenu<TaskStatus>(
+      value: _status,
+      focusNode: _statusFocusNode,
+      surfaceColor: widget.surfaceColor,
+      accentColor: accent,
+      // Wraps the WHOLE decorated box below (padding included), not just
+      // its inner content — otherwise the tappable area would be only as
+      // tall as the label text, well under the 44x44 floor, even though
+      // the visible box itself is 44 tall.
+      borderRadius: BorderRadius.circular(10),
+      expand: true,
+      onSelected: (next) => unawaited(_changeStatus(next)),
+      options: [
+        for (final status in TaskBoard._columns)
+          AppPickerOption<TaskStatus>(
+            value: status,
+            label: TaskBoard._columnLabels[status]!,
+            icon: TaskBoard._statusIcons[status],
+          ),
+      ],
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: accent.withValues(alpha: isDark ? 0.16 : 0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: accent.withValues(alpha: 0.35)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                TaskBoard._columnLabels[_status]!,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: accent,
+                ),
               ),
+            ),
+            Icon(Icons.expand_more_rounded, color: accent),
           ],
         ),
       ),
@@ -2156,6 +2166,12 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
   late final TextEditingController _titleController;
   Timer? _debounce;
 
+  /// Drives the folder selector's [InputDecorator.isFocused] state (the
+  /// accent-coloured focusedBorder) — the shared [AppPickerMenu] releases
+  /// this node right after a selection (diagnosed problem #1's fix), same
+  /// contract as the task detail dialog's own status/project focus nodes.
+  final FocusNode _folderFocusNode = FocusNode(debugLabel: 'note-folder');
+
   @override
   void initState() {
     super.initState();
@@ -2164,7 +2180,10 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     _title = widget.note.title;
     _projectId = widget.note.projectId;
     _titleController = TextEditingController(text: _title);
+    _folderFocusNode.addListener(_onFolderFocusChanged);
   }
+
+  void _onFolderFocusChanged() => setState(() {});
 
   @override
   void dispose() {
@@ -2173,6 +2192,9 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
     // leads here.
     _debounce?.cancel();
     _titleController.dispose();
+    _folderFocusNode
+      ..removeListener(_onFolderFocusChanged)
+      ..dispose();
     super.dispose();
   }
 
@@ -2292,19 +2314,18 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
         _projectId != null && appState.noteProjectForId(_projectId) == null;
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
 
-    return DropdownButtonFormField<String?>(
+    String currentLabel;
+    if (_projectId == null) {
+      currentLabel = 'No folder';
+    } else if (isDangling) {
+      currentLabel = 'Deleted folder';
+    } else {
+      currentLabel = appState.noteProjectForId(_projectId)!.name;
+    }
+
+    return InputDecorator(
       key: const Key('task-note-folder-selector'),
-      // `initialValue`, not the deprecated `value` — safe here because
-      // this widget carries a fixed `Key`, so Flutter reuses the same
-      // `FormFieldState` across this dialog's rebuilds, and the only
-      // mutator of [_projectId] is this dropdown's own `onChanged`
-      // ([_onFolderChanged]); nothing external ever needs to push a new
-      // selected value into an already-built instance.
-      initialValue: _projectId,
-      isDense: true,
-      isExpanded: true,
-      icon: Icon(Icons.expand_more_rounded, size: 18, color: mutedColor),
-      style: TextStyle(fontSize: 12.5, color: mutedColor),
+      isFocused: _folderFocusNode.hasFocus,
       decoration: InputDecoration(
         isDense: true,
         labelText: 'Folder',
@@ -2317,24 +2338,50 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
           borderSide: BorderSide(color: widget.accentColor, width: 2),
         ),
       ),
-      onChanged: _onFolderChanged,
-      items: [
-        const DropdownMenuItem<String?>(
-          value: null,
-          child: Text('No folder', overflow: TextOverflow.ellipsis),
+      child: AppPickerMenu<String?>(
+        value: _projectId,
+        focusNode: _folderFocusNode,
+        surfaceColor: widget.surfaceColor,
+        accentColor: widget.accentColor,
+        expand: true,
+        onSelected: _onFolderChanged,
+        options: [
+          const AppPickerOption<String?>(
+            value: null,
+            label: 'No folder',
+            icon: Icons.folder_off_outlined,
+          ),
+          if (isDangling)
+            AppPickerOption<String?>(
+              value: _projectId,
+              label: 'Deleted folder',
+              icon: Icons.folder_off_outlined,
+            ),
+          for (final folder in folders)
+            AppPickerOption<String?>(
+              value: folder.id,
+              label: folder.name,
+              icon: Icons.folder_outlined,
+            ),
+        ],
+        child: ConstrainedBox(
+          // 44x44 minimum tap target — the dense InputDecoration otherwise
+          // reports an intrinsic height well under that floor.
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  currentLabel,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: mutedColor),
+                ),
+              ),
+              Icon(Icons.expand_more_rounded, size: 18, color: mutedColor),
+            ],
+          ),
         ),
-        if (isDangling)
-          DropdownMenuItem<String?>(
-            value: _projectId,
-            child:
-                const Text('Deleted folder', overflow: TextOverflow.ellipsis),
-          ),
-        for (final folder in folders)
-          DropdownMenuItem<String?>(
-            value: folder.id,
-            child: Text(folder.name, overflow: TextOverflow.ellipsis),
-          ),
-      ],
+      ),
     );
   }
 

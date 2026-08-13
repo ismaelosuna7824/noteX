@@ -8,6 +8,7 @@ import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/app_picker_menu.dart';
 import '../widgets/task_board.dart';
 
 /// Full CRUD page for managing reminders.
@@ -880,53 +881,81 @@ class _BoardProjectFilter extends StatelessWidget {
     final projects = timerState.projects;
     final current = themeState.taskBoardProjectFilter;
     // Guards against a stale persisted project id (e.g. the project was
-    // deleted since) — falls back to "All projects" rather than throwing on
-    // DropdownButton's "exactly one item must match" assertion.
+    // deleted since) — falls back to "All projects" rather than pointing
+    // the picker at a value none of its options carry.
     final isKnownValue = current == TaskBoard.projectFilterAll ||
         current == TaskBoard.projectFilterNone ||
         projects.any((p) => p.id == current);
+    final resolvedValue = isKnownValue ? current : TaskBoard.projectFilterAll;
 
-    return Container(
-      constraints: const BoxConstraints(minHeight: 44),
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.folder_outlined, size: 16, color: mutedColor),
-          const SizedBox(width: 6),
-          DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: isKnownValue ? current : TaskBoard.projectFilterAll,
-              isDense: true,
+    String currentLabel;
+    Color? currentDot;
+    if (resolvedValue == TaskBoard.projectFilterAll) {
+      currentLabel = 'All projects';
+    } else if (resolvedValue == TaskBoard.projectFilterNone) {
+      currentLabel = 'No Project';
+    } else {
+      final project = projects.firstWhere((p) => p.id == resolvedValue);
+      currentLabel = project.name;
+      currentDot = project.color;
+    }
+
+    return AppPickerMenu<String>(
+      value: resolvedValue,
+      surfaceColor: themeState.editorBgColor,
+      accentColor: themeState.accentColor,
+      onSelected: themeState.setTaskBoardProjectFilter,
+      borderRadius: BorderRadius.circular(8),
+      options: [
+        const AppPickerOption(
+          value: TaskBoard.projectFilterAll,
+          label: 'All projects',
+          icon: Icons.all_inclusive_rounded,
+        ),
+        const AppPickerOption(
+          value: TaskBoard.projectFilterNone,
+          label: 'No Project',
+          icon: Icons.folder_outlined,
+        ),
+        for (final p in projects)
+          AppPickerOption(value: p.id, label: p.name, dotColor: p.color),
+      ],
+      child: Container(
+        constraints: const BoxConstraints(minHeight: 44),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        decoration: BoxDecoration(
+          color: (isDark ? Colors.white : Colors.black).withValues(alpha: 0.06),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (currentDot != null) ...[
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  color: currentDot,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ] else ...[
+              Icon(Icons.folder_outlined, size: 16, color: mutedColor),
+              const SizedBox(width: 6),
+            ],
+            Text(
+              currentLabel,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w500,
                 color: isDark ? Colors.white70 : Colors.grey.shade800,
               ),
-              dropdownColor: themeState.editorBgColor,
-              onChanged: (value) {
-                if (value == null) return;
-                themeState.setTaskBoardProjectFilter(value);
-              },
-              items: [
-                const DropdownMenuItem(
-                  value: TaskBoard.projectFilterAll,
-                  child: Text('All projects'),
-                ),
-                const DropdownMenuItem(
-                  value: TaskBoard.projectFilterNone,
-                  child: Text('No Project'),
-                ),
-                for (final p in projects)
-                  DropdownMenuItem(value: p.id, child: Text(p.name)),
-              ],
             ),
-          ),
-        ],
+            const SizedBox(width: 4),
+            Icon(Icons.expand_more_rounded, size: 16, color: mutedColor),
+          ],
+        ),
       ),
     );
   }

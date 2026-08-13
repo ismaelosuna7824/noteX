@@ -52,6 +52,7 @@ import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/state/timer_state.dart';
+import 'package:notex/presentation/widgets/app_picker_menu.dart';
 import 'package:notex/presentation/widgets/sidebar.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
 
@@ -613,6 +614,19 @@ void main() {
         TaskBoard.projectFilterAll,
         reason: 'the filter must default to All projects',
       );
+    });
+
+    testWidgets('renders through the shared AppPickerMenu and meets the '
+        '44x44 minimum tap target', (tester) async {
+      await taskState.initialize();
+      await pumpTaskPage(tester);
+
+      await tester.tap(find.byTooltip('Board view'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(AppPickerMenu<String>), findsOneWidget);
+      final size = tester.getSize(find.byType(AppPickerMenu<String>));
+      expect(size.height, greaterThanOrEqualTo(44));
     });
 
     testWidgets(
