@@ -2272,6 +2272,14 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
   /// [_onFolderChanged]'s doc for why it goes through the shared debounced
   /// flush instead.
   ///
+  /// Rebalanced header (settled decision: "no se ve proporcional") — Title
+  /// and Folder are peer metadata about the note, both edited before
+  /// writing starts, so this now shares the EXACT same outlined/labelled
+  /// `InputDecoration` recipe as the Title field beside it (radius 12,
+  /// accent-coloured `focusedBorder`) instead of being bare text with no
+  /// container. Do not invent a third input style — see the Title field's
+  /// own decoration doc.
+  ///
   /// If [_projectId] points at a folder [AppState.noteProjects] doesn't
   /// carry (soft-deleted), a synthetic "Deleted folder" entry keeps the
   /// dropdown's selected value valid — same degrade-the-display-keep-the-
@@ -2284,34 +2292,48 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
         _projectId != null && appState.noteProjectForId(_projectId) == null;
     final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
 
-    return Row(
-      children: [
-        Icon(Icons.folder_outlined, size: 15, color: mutedColor),
-        const SizedBox(width: 8),
-        DropdownButton<String?>(
-          key: const Key('task-note-folder-selector'),
-          value: _projectId,
-          isDense: true,
-          underline: const SizedBox.shrink(),
-          style: TextStyle(fontSize: 12.5, color: mutedColor),
-          onChanged: _onFolderChanged,
-          items: [
-            const DropdownMenuItem<String?>(
-              value: null,
-              child: Text('No folder'),
-            ),
-            if (isDangling)
-              DropdownMenuItem<String?>(
-                value: _projectId,
-                child: const Text('Deleted folder'),
-              ),
-            for (final folder in folders)
-              DropdownMenuItem<String?>(
-                value: folder.id,
-                child: Text(folder.name),
-              ),
-          ],
+    return DropdownButtonFormField<String?>(
+      key: const Key('task-note-folder-selector'),
+      // `initialValue`, not the deprecated `value` — safe here because
+      // this widget carries a fixed `Key`, so Flutter reuses the same
+      // `FormFieldState` across this dialog's rebuilds, and the only
+      // mutator of [_projectId] is this dropdown's own `onChanged`
+      // ([_onFolderChanged]); nothing external ever needs to push a new
+      // selected value into an already-built instance.
+      initialValue: _projectId,
+      isDense: true,
+      isExpanded: true,
+      icon: Icon(Icons.expand_more_rounded, size: 18, color: mutedColor),
+      style: TextStyle(fontSize: 12.5, color: mutedColor),
+      decoration: InputDecoration(
+        isDense: true,
+        labelText: 'Folder',
+        prefixIcon: Icon(Icons.folder_outlined, size: 15, color: mutedColor),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: widget.accentColor, width: 2),
+        ),
+      ),
+      onChanged: _onFolderChanged,
+      items: [
+        const DropdownMenuItem<String?>(
+          value: null,
+          child: Text('No folder', overflow: TextOverflow.ellipsis),
+        ),
+        if (isDangling)
+          DropdownMenuItem<String?>(
+            value: _projectId,
+            child:
+                const Text('Deleted folder', overflow: TextOverflow.ellipsis),
+          ),
+        for (final folder in folders)
+          DropdownMenuItem<String?>(
+            value: folder.id,
+            child: Text(folder.name, overflow: TextOverflow.ellipsis),
+          ),
       ],
     );
   }
@@ -2353,6 +2375,16 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Title and Folder are peers (both metadata about the note,
+              // edited before writing starts) sharing one row and one
+              // decoration recipe — settled decision: "no se ve
+              // proporcional", fixed by giving them matching visual weight
+              // instead of a tall bordered title next to bare folder text.
+              // The action icons stay on this same row, vertically centred
+              // by the Row's default `CrossAxisAlignment.center` against
+              // the Title/Folder controls, and are muted rather than
+              // accent-coloured so they read as secondary and never
+              // compete with the Title field for weight.
               Row(
                 children: [
                   Expanded(
@@ -2374,7 +2406,10 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                       // other input that also sets an accent-coloured
                       // `focusedBorder`, so this matches THAT shape rather
                       // than the plain (no focusedBorder) task-detail
-                      // Title field — do not invent a third style.
+                      // Title field — do not invent a third style. The
+                      // Folder selector beside it (`_buildFolderSelector`)
+                      // now shares this exact decoration so the two read
+                      // as one control group.
                       decoration: InputDecoration(
                         isDense: true,
                         labelText: 'Title',
@@ -2390,11 +2425,17 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                       ),
                     ),
                   ),
+                  const SizedBox(width: 12),
+                  SizedBox(
+                    width: 150,
+                    child: _buildFolderSelector(isDark),
+                  ),
+                  const SizedBox(width: 8),
                   IconButton(
                     icon: Icon(
                       Icons.open_in_new_rounded,
                       size: 18,
-                      color: widget.accentColor,
+                      color: mutedColor,
                     ),
                     tooltip: 'Open in full editor',
                     splashRadius: 16,
@@ -2403,7 +2444,8 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                     onPressed: () => unawaited(_openFullEditor()),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close_rounded, size: 20),
+                    icon:
+                        Icon(Icons.close_rounded, size: 20, color: mutedColor),
                     tooltip: 'Close note',
                     splashRadius: 16,
                     constraints:
@@ -2412,9 +2454,7 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
-              _buildFolderSelector(isDark),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Expanded(
                 child: Container(
                   key: const Key('task-note-preview'),
@@ -2424,7 +2464,7 @@ class _NoteEditorDialogState extends State<_NoteEditorDialog> {
                           ? Colors.white.withValues(alpha: 0.15)
                           : Colors.grey.shade300,
                     ),
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: NoteMarkdownEditor(
                     // Keyed by note id only (not content) so a debounced

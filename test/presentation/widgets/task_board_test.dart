@@ -1380,6 +1380,139 @@ void main() {
     });
   });
 
+  group(
+      'note modal header — rebalanced proportion ("no se ve proporcional")',
+      () {
+    testWidgets(
+        'the Folder selector shares the exact same outlined-input '
+        'decoration as the Title field beside it, so the two read as '
+        'peers instead of a tall box next to bare text', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      final titleField = tester.widget<TextField>(
+        find.byKey(const Key('task-note-title-field')),
+      );
+      final titleDecoration = titleField.decoration!;
+
+      final folderField = tester.widget<DropdownButtonFormField<String?>>(
+        find.byKey(const Key('task-note-folder-selector')),
+      );
+      // DropdownButtonFormField wraps a DropdownButtonFormField's
+      // decoration inside its own FormField build; the widget itself
+      // exposes it via `decoration`.
+      final folderDecoration = folderField.decoration;
+
+      expect(
+        folderDecoration.labelText,
+        'Folder',
+        reason: 'the Folder selector must announce itself the same way '
+            'the Title field does — a labelled input, not bare text',
+      );
+      expect(
+        folderDecoration.border,
+        isA<OutlineInputBorder>().having(
+          (b) => b.borderRadius,
+          'borderRadius',
+          (titleDecoration.border! as OutlineInputBorder).borderRadius,
+        ),
+        reason: 'Title and Folder must share the exact same '
+            'OutlineInputBorder shape — matching treatment for peer '
+            'metadata controls',
+      );
+      expect(
+        folderDecoration.focusedBorder,
+        isA<OutlineInputBorder>()
+            .having(
+                (b) => b.borderRadius,
+                'borderRadius',
+                (titleDecoration.focusedBorder! as OutlineInputBorder)
+                    .borderRadius)
+            .having((b) => b.borderSide.color, 'accent-coloured border',
+                themeState.accentColor),
+        reason: 'Folder must use the same accent-coloured focused border '
+            'as Title, not a third input style',
+      );
+    });
+
+    testWidgets(
+        'the "Open in full editor" and "Close" action icons still meet '
+        'the 44x44 minimum tap target after being visually de-emphasised',
+        (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: 'original',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      final openButton = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('Open in full editor'),
+          matching: find.byType(IconButton),
+        ),
+      );
+      final closeButton = tester.widget<IconButton>(
+        find.ancestor(
+          of: find.byTooltip('Close note'),
+          matching: find.byType(IconButton),
+        ),
+      );
+
+      for (final button in [openButton, closeButton]) {
+        expect(
+          button.constraints,
+          isA<BoxConstraints>()
+              .having((c) => c.minWidth, 'minWidth', greaterThanOrEqualTo(44))
+              .having(
+                  (c) => c.minHeight, 'minHeight', greaterThanOrEqualTo(44)),
+          reason: 'de-emphasising these icons (muted colour, smaller '
+              'visual weight) must never shrink their tap target below '
+              'the accessibility floor',
+        );
+      }
+
+      final openSize = tester.getSize(find.byTooltip('Open in full editor'));
+      final closeSize = tester.getSize(find.byTooltip('Close note'));
+      expect(openSize.width, greaterThanOrEqualTo(44));
+      expect(openSize.height, greaterThanOrEqualTo(44));
+      expect(closeSize.width, greaterThanOrEqualTo(44));
+      expect(closeSize.height, greaterThanOrEqualTo(44));
+    });
+  });
+
   group('note modal folder selector — link with the existing note folders',
       () {
     testWidgets(
