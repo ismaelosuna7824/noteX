@@ -55,6 +55,7 @@ import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
 import 'package:notex/presentation/state/timer_state.dart';
+import 'package:notex/presentation/widgets/markdown/notex_markdown_view.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
 
 /// Minimal fakes satisfying [SyncEngine]'s collaborators — this suite never
@@ -236,8 +237,8 @@ void main() {
       ResolveTaskNoteLinkUseCase(noteRepository),
     );
 
-    // "New note" (_TaskDetailDialog._createLinkedNote) and the in-place
-    // note preview's own save path (_TaskDetailDialog._flushPreview)
+    // "New note" (_TaskDetailDialog._createLinkedNote) and the note
+    // editor/preview modal's own save path (_NoteEditorDialogState._flush)
     // resolve CreateNoteUseCase/UpdateNoteUseCase via GetIt directly — REAL
     // instances over the same in-memory note repository as [appState]'s own
     // (registered separately here, mirroring [updateNoteUseCase] above),
@@ -760,13 +761,14 @@ void main() {
   });
 
   group(
-      'notes section — create a note in place, and preview/edit a linked '
-      'note without leaving the task (settled decision: "crear notas desde '
-      'ahí, y también hacer preview")', () {
+      'notes section — create and preview a note as MODALS, rendered by '
+      'default (settled decision: "para crear la nota estaría bien que '
+      'fuera un modal ... y para el preview también ... ya renderizada")',
+      () {
     testWidgets(
         '"New note" creates a note, links it to the task in one gesture, '
-        'and the note is immediately writable without leaving the dialog',
-        (tester) async {
+        'and opens a MODAL that is immediately writable (empty note '
+        'downgrades preview to edit)', (tester) async {
       await repository.save(Task.create(id: 'r1', title: 'Blank task'));
       await taskState.initialize();
       await pumpBoard(tester);
@@ -774,29 +776,51 @@ void main() {
       await tester.tap(find.text('Blank task'));
       await tester.pumpAndSettle();
 
-      // Before creating: only the "New note"/"Link note" pair, no preview.
+      // Before creating: only the "New note"/"Link note" pair, and just the
+      // task dialog itself — no note modal yet.
       expect(find.text('New note'), findsOneWidget);
       expect(find.byKey(const Key('task-note-preview')), findsNothing);
+      expect(find.byType(AlertDialog), findsOneWidget);
 
       await tester.tap(find.text('New note'));
       await tester.pumpAndSettle();
 
-      // The dialog never left the task — the Title field is still on
-      // screen alongside the note preview that just opened in place.
+      // The task dialog never closed — its own Title field is still in the
+      // tree, layered BEHIND the note modal that just opened on top of it.
       expect(find.widgetWithText(TextField, 'Title'), findsOneWidget);
+      expect(
+        find.byType(AlertDialog),
+        findsNWidgets(2),
+        reason: 'creating a note opens its own modal on top of the task '
+            'dialog, not an inline takeover of the NOTES section',
+      );
+
+      // A brand-new note is empty, so the preview-by-default surface
+      // downgrades to the plain edit field automatically — ready to type,
+      // not rendering nothing.
       final previewField = find.descendant(
         of: find.byKey(const Key('task-note-preview')),
         matching: find.byType(TextField),
       );
       expect(previewField, findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('task-note-preview')),
+          matching: find.byType(NoteXMarkdownView),
+        ),
+        findsNothing,
+      );
 
       await tester.enterText(previewField, 'Written from the task');
-      await tester.tap(find.byTooltip('Back to notes'));
+      await tester.tap(find.byTooltip('Close note'));
       await tester.pumpAndSettle();
+
+      // The modal closed — back to just the task dialog.
+      expect(find.byType(AlertDialog), findsOneWidget);
 
       // Persisted through CreateNoteUseCase + LinkNoteToTaskUseCase —
       // noteIds grew by exactly one, and the new note itself carries the
-      // content typed while still inside the task dialog.
+      // content typed while still inside the task dialog's own flow.
       final persisted = await repository.getById('r1');
       expect(persisted!.noteIds, hasLength(1));
       final note = await noteRepository.getById(persisted.noteIds.first);
@@ -804,8 +828,62 @@ void main() {
     });
 
     testWidgets(
-        "editing a note in the preview persists through the note's own "
-        'path (UpdateNoteUseCase) and does not mark the task dirty',
+        'previewing a linked note WITH content opens a MODAL showing it '
+        'RENDERED, not the source TextField', (tester) async {
+      await noteRepository.save(Note(
+        id: 'note-1',
+        title: 'Meeting notes',
+        content: '# Agenda\n\n- item one\n- item two',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await appState.refreshNotes();
+      await repository.save(
+        Task.create(id: 'r1', title: 'Has a note').copyWith(
+          noteIds: const ['note-1'],
+        ),
+      );
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Has a note'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Meeting notes'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.byType(AlertDialog),
+        findsNWidgets(2),
+        reason: 'previewing a linked note opens its own modal on top of '
+            'the task dialog',
+      );
+
+      // Rendered, not source: the preview container hosts the Markdown
+      // renderer, and no editable TextField for it.
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('task-note-preview')),
+          matching: find.byType(NoteXMarkdownView),
+        ),
+        findsOneWidget,
+        reason: 'a note with content must open already rendered — "que se '
+            'vea el md bien, y no en modo código"',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('task-note-preview')),
+          matching: find.byType(TextField),
+        ),
+        findsNothing,
+        reason: 'rendered preview must not show the raw Markdown source '
+            'TextField',
+      );
+    });
+
+    testWidgets(
+        "the editor's edit⇄preview toggle still switches to editing from "
+        'the preview modal, and edits persist through the note\'s own '
+        'path (UpdateNoteUseCase) without marking the task dirty',
         (tester) async {
       await noteRepository.save(Note(
         id: 'note-1',
@@ -829,14 +907,35 @@ void main() {
       await tester.tap(find.text('Meeting notes'));
       await tester.pumpAndSettle();
 
+      // Opens rendered first (settled contract, asserted above).
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('task-note-preview')),
+          matching: find.byType(NoteXMarkdownView),
+        ),
+        findsOneWidget,
+      );
+
+      // Toggle back to editing — the editor's own edit⇄preview control,
+      // never disabled from this modal.
+      await tester.tap(find.byIcon(Icons.edit));
+      await tester.pumpAndSettle();
+
       final previewField = find.descendant(
         of: find.byKey(const Key('task-note-preview')),
         matching: find.byType(TextField),
       );
       expect(previewField, findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('task-note-preview')),
+          matching: find.byType(NoteXMarkdownView),
+        ),
+        findsNothing,
+      );
 
       await tester.enterText(previewField, 'edited from the task');
-      await tester.tap(find.byTooltip('Back to notes'));
+      await tester.tap(find.byTooltip('Close note'));
       await tester.pumpAndSettle();
 
       final updatedNote = await noteRepository.getById('note-1');
@@ -846,7 +945,7 @@ void main() {
       expect(
         after!.updatedAt,
         before!.updatedAt,
-        reason: 'a note edit in the in-place preview must persist through '
+        reason: 'a note edit in the preview modal must persist through '
             "the note's own path, never the task's save-on-close flow, so "
             "the TASK's updatedAt must stay untouched",
       );
@@ -859,9 +958,8 @@ void main() {
     });
 
     testWidgets(
-        'a trashed note does not open an editable preview — the restore '
-        'confirmation shows instead, and declining leaves no preview open',
-        (tester) async {
+        'a trashed note still offers only restore — no editable preview '
+        'modal opens, before or after declining', (tester) async {
       await noteRepository.save(Note(
         id: 'note-trashed',
         title: 'In the trash',
@@ -889,8 +987,8 @@ void main() {
       expect(
         find.byKey(const Key('task-note-preview')),
         findsNothing,
-        reason: 'a trashed note must not open an editable preview while '
-            'still in the trash',
+        reason: 'a trashed note must not open an editable preview modal '
+            'while still in the trash',
       );
 
       await tester.tap(find.text('Cancel'));
@@ -899,7 +997,7 @@ void main() {
       expect(
         find.byKey(const Key('task-note-preview')),
         findsNothing,
-        reason: 'declining the restore must leave no preview open',
+        reason: 'declining the restore must leave no preview modal open',
       );
     });
 
@@ -937,8 +1035,8 @@ void main() {
       expect(
         find.byType(AlertDialog),
         findsNothing,
-        reason: 'opening in the full editor still closes the task dialog, '
-            'same as before the in-place preview existed',
+        reason: 'opening in the full editor closes BOTH the note modal '
+            'and the task dialog, same as before the modal existed',
       );
     });
   });

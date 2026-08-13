@@ -731,25 +731,6 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   final Map<String, NoteLinkResolution> _noteResolutions = {};
   bool _loadingNotes = true;
 
-  // The linked note currently shown in place of the notes list — the
-  // "preview/edit without leaving the task" surface (settled decision:
-  // "hacer en preview para que no se salgan de esa tarea"). `null` means
-  // the NOTES section renders its normal list/link/create affordances.
-  // Only ever set for a `NoteLinkStatus.found` note (see [_openNote]) — a
-  // trashed note must not open an editable preview as if it were fine.
-  Note? _previewedNote;
-
-  // Debounced write path for [_previewedNote]'s content, entirely separate
-  // from this dialog's own title/description/blockedReason save-on-close
-  // flow ([_closeDialog]/[_isDirty]) and from the global
-  // `AppState.autoSaveService` (owned by the full note editor page — using
-  // it here would fight over its single watched-note slot). Content edits
-  // go straight through [UpdateNoteUseCase] on a short debounce via
-  // [_onPreviewChanged]/[_flushPreview], so merely opening or editing a
-  // note here never touches the TASK's `updatedAt`.
-  Timer? _previewDebounce;
-  String _previewContent = '';
-
   // The project this task is assigned to — mirrors the noteIds pattern
   // above: a local copy updated as the user reassigns it within this
   // dialog session, so the selector reflects the change immediately
@@ -812,10 +793,10 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   @override
   void dispose() {
-    // Belt-and-suspenders only — every real dismissal path already flushes
-    // the preview via [_closeDialog] before the pop that eventually leads
-    // here (see that method's doc), so there is nothing left to await.
-    _previewDebounce?.cancel();
+    // Note editing/preview no longer lives inline here — it is its own
+    // modal route ([_NoteEditorDialog]), which owns and flushes its own
+    // debounce on every dismissal, so there is nothing pending to cancel
+    // here.
     _titleController.dispose();
     _blockedReasonController.dispose();
     _notesScrollController.dispose();
@@ -899,11 +880,11 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// fall back on, so silence would mean the user's edit vanished without a
   /// trace.
   Future<void> _closeDialog() async {
-    // Flush any pending, debounced note-preview edit first — an entirely
-    // separate write path (see [_flushPreview]'s doc) that must never be
-    // skipped just because the TASK itself has nothing dirty to save.
-    await _flushPreview();
-    if (!mounted) return;
+    // Note editing/preview no longer shares this dialog's own close path —
+    // it is its own modal ([_NoteEditorDialog]) with its own flush-on-
+    // dismiss lifecycle, and cannot be open while this dialog's barrier or
+    // Escape reaches this method (a topmost modal route intercepts both
+    // first). Nothing to flush here on its behalf.
     if (_isDirty) {
       final messenger = ScaffoldMessenger.of(context);
       final title = _titleController.text.trim();
@@ -1063,11 +1044,14 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   /// exactly as they are. Goes through [CreateNoteUseCase] then
   /// [TaskState.linkNoteToTask] (wrapping `LinkNoteToTaskUseCase`) — never
   /// a direct write to `Task.noteIds` or the notes table, same rule
-  /// [_linkNote] already follows. Opens the new note immediately in the
-  /// in-place preview/edit surface ([_openPreview]) so the user can start
-  /// writing without leaving the task — a create flow that forced them out
-  /// to the full editor would defeat the point of asking for this
-  /// alongside the preview/edit capability.
+  /// [_linkNote] already follows. Opens the new note immediately in its own
+  /// editor/preview MODAL ([_openNoteEditor]) so the user can start writing
+  /// without leaving the task — a create flow that forced them out to the
+  /// full editor would defeat the point of asking for this alongside the
+  /// preview/edit capability. The new note is empty, so the modal's
+  /// preview-by-default surface downgrades to the plain edit field
+  /// automatically (see [_NoteEditorDialog]'s doc) and is immediately
+  /// typable.
   Future<void> _createLinkedNote() async {
     final note =
         await GetIt.instance<CreateNoteUseCase>().execute(id: const Uuid().v4());
@@ -1085,81 +1069,46 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       _noteResolutions[note.id] = NoteLinkResolution(NoteLinkStatus.found, note);
     });
 
-    await _openPreview(note);
+    await _openNoteEditor(note);
   }
 
-  /// Shows [note]'s content in place of the linked-notes list — the
-  /// "preview/edit without leaving the task" surface. Flushes whatever was
-  /// previously being previewed first (defensive: normally there is
-  /// nothing pending, since every path that leaves a preview already
-  /// flushes before getting here).
-  Future<void> _openPreview(Note note) async {
-    await _flushPreview();
-    if (!mounted) return;
-    setState(() {
-      _previewedNote = note;
-      _previewContent = note.content;
-    });
-  }
-
-  /// Returns from the in-place preview back to the linked-notes list,
-  /// flushing any pending edit first.
-  Future<void> _closePreview() async {
-    await _flushPreview();
-    if (!mounted) return;
-    setState(() => _previewedNote = null);
+  /// Opens [note] in its own MODAL, layered on top of this task dialog —
+  /// the settled decision that BOTH creating and previewing a note are
+  /// modals ("para crear la nota estaría bien que fuera un modal como ya lo
+  /// haces, y para el preview también"), replacing the old in-place NOTES-
+  /// section takeover. See [_NoteEditorDialog]'s doc for the
+  /// rendered-by-default contract and its own persistence/flush lifecycle
+  /// — entirely separate from this dialog's own save-on-close flow, so
+  /// opening or editing a note here never marks the TASK dirty (see
+  /// [_isDirty]'s doc).
+  ///
+  /// A non-null return means the user tapped "Open in full editor" inside
+  /// the modal, with its own pending edit already flushed — handled the
+  /// same way [_openInFullEditor] always has.
+  Future<void> _openNoteEditor(Note note) async {
+    final requestedFullEditor = await showAnimatedDialog<Note>(
+      context: context,
+      builder: (_) => _NoteEditorDialog(
+        note: note,
+        accentColor: widget.accentColor,
+        surfaceColor: widget.surfaceColor,
+      ),
+    );
+    if (!mounted || requestedFullEditor == null) return;
+    await _openInFullEditor(requestedFullEditor);
   }
 
   /// The secondary "open in full editor" action — demoted, not deleted
-  /// (settled decision: still useful for long writing). Flushes the
-  /// in-place preview's pending edit first, then falls back to the
-  /// pre-existing navigate-away path: [AppState.selectNote] plus closing
-  /// this task dialog, exactly like activating a linked note used to work
-  /// for every note before the in-place preview existed.
+  /// (settled decision: still useful for long writing). [note] already
+  /// reflects any pending edit — [_NoteEditorDialog] flushes before
+  /// requesting this — so this only needs the pre-existing navigate-away
+  /// path: [AppState.selectNote] plus closing this task dialog, exactly
+  /// like activating a linked note used to work for every note before the
+  /// preview/edit modal existed.
   Future<void> _openInFullEditor(Note note) async {
-    await _flushPreview();
-    if (!mounted) return;
     final navigator = Navigator.of(context);
     await GetIt.instance<AppState>().selectNote(note);
     navigator.pop();
-  }
-
-  /// Marks the in-place preview dirty and (re)starts its debounce — mirrors
-  /// the shape of `AutoSaveService.markDirty`/`_tick`, but scoped locally
-  /// to this dialog and this one note, deliberately NOT the global
-  /// `AppState.autoSaveService` singleton (that instance is owned by the
-  /// full note editor page's own watch/flush lifecycle; sharing it here
-  /// would mean this dialog and the editor page fight over its single
-  /// watched-note slot).
-  void _onPreviewChanged(String value) {
-    _previewContent = value;
-    _previewDebounce?.cancel();
-    _previewDebounce = Timer(
-      const Duration(milliseconds: 600),
-      () => unawaited(_flushPreview()),
-    );
-  }
-
-  /// Persists [_previewContent] for [_previewedNote] through
-  /// [UpdateNoteUseCase] directly — entirely separate from this dialog's
-  /// own title/description/blockedReason save-on-close flow ([_isDirty]),
-  /// so a note edit here never marks the TASK dirty or touches its
-  /// `updatedAt`. A no-op write (nothing actually changed) is skipped by
-  /// [UpdateNoteUseCase] itself. Safe to call with no preview open or
-  /// nothing pending — every closing path calls this unconditionally.
-  Future<void> _flushPreview() async {
-    _previewDebounce?.cancel();
-    _previewDebounce = null;
-    final note = _previewedNote;
-    if (note == null) return;
-    if (_previewContent == note.content) return;
-    final updated = await GetIt.instance<UpdateNoteUseCase>().execute(
-      noteId: note.id,
-      content: _previewContent,
-    );
-    if (updated != null && mounted && _previewedNote?.id == note.id) {
-      setState(() => _previewedNote = updated);
-    }
   }
 
   /// Opens the note picker and appends the chosen note to this task's
@@ -1213,11 +1162,11 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   }
 
   /// Resolves and opens the note at [noteId] through the three affordance
-  /// states (design D9): found and live → preview/edit it in place
-  /// ([_openPreview], without leaving this task — settled decision); found
-  /// and soft-deleted → offer to restore, then preview it the same way
-  /// (never opens an editable preview of a note still in the trash); not
-  /// found → offer to unlink just this entry. Always via
+  /// states (design D9): found and live → open it in its own editor/preview
+  /// modal ([_openNoteEditor], without leaving this task — settled
+  /// decision); found and soft-deleted → offer to restore, then open it
+  /// the same way (never opens an editable preview of a note still in the
+  /// trash); not found → offer to unlink just this entry. Always via
   /// [ResolveTaskNoteLinkUseCase], never the deletedAt-filtered in-memory
   /// note list.
   Future<void> _openNote(String noteId) async {
@@ -1227,7 +1176,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
     switch (resolution.status) {
       case NoteLinkStatus.found:
-        await _openPreview(resolution.note!);
+        await _openNoteEditor(resolution.note!);
       case NoteLinkStatus.inTrash:
         final isDark = Theme.of(context).brightness == Brightness.dark;
         final restore = await showDialog<bool>(
@@ -1277,8 +1226,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         setState(() => _noteResolutions[noteId] = restored);
         if (restored.status == NoteLinkStatus.found) {
           // Restoring makes it live — open it the same way any other live
-          // note opens, in place, rather than the old navigate-away path.
-          await _openPreview(restored.note!);
+          // note opens, its own editor/preview modal, rather than the old
+          // navigate-away path.
+          await _openNoteEditor(restored.note!);
         }
       case NoteLinkStatus.missing:
         final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -1609,15 +1559,12 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
 
   /// Notes section — the count lives in the header itself ("Notes · 3"),
   /// so the list body only ever has to render rows, not also announce how
-  /// many there are. While [_previewedNote] is set, renders the in-place
-  /// preview/edit surface instead of the list — the notes section is one
-  /// place that shows either its list-and-actions state or its preview
-  /// state, never both at once.
+  /// many there are. Always renders the list-and-actions state: creating or
+  /// previewing a note no longer takes this section over in place — both
+  /// open their own MODAL ([_openNoteEditor]/[_NoteEditorDialog]) layered
+  /// on top of this dialog instead (settled decision: "que fuera un modal
+  /// como ya lo haces").
   Widget _buildNotesSection(bool isDark) {
-    final previewed = _previewedNote;
-    if (previewed != null) {
-      return _buildNotePreviewSection(isDark, previewed);
-    }
     final header =
         _noteIds.isEmpty ? 'Notes' : 'Notes · ${_noteIds.length}';
     return Column(
@@ -1625,90 +1572,6 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       children: [
         _sectionHeader(header, isDark),
         _buildLinkedNotesSection(isDark),
-      ],
-    );
-  }
-
-  /// Height given to the in-place preview/edit editor — matches
-  /// [_buildDescriptionSection]'s own stacked-layout fixed height (260)
-  /// closely enough to read as a deliberate, comparably-sized writing
-  /// surface, not a cramped afterthought bolted onto the sidebar.
-  static const double _notePreviewHeight = 240;
-
-  /// The in-place preview/edit surface for [note] — what replaces the
-  /// linked-notes list while a live linked note is open (settled decision:
-  /// "hacer en preview para que no se salgan de esa tarea"). Reuses
-  /// [NoteMarkdownEditor] verbatim, the app's own settled editor, and it is
-  /// EDITABLE — a read-only preview would defeat the "create a note from
-  /// here" capability, since the user would have to leave anyway just to
-  /// write in it. Edits flow through [_onPreviewChanged] ->
-  /// [_flushPreview] -> [UpdateNoteUseCase] directly: entirely separate
-  /// from this dialog's own title/description/blockedReason save-on-close
-  /// flow, so opening or editing a note here never marks the TASK dirty
-  /// (see [_isDirty]'s doc). "Open in full editor" ([_openInFullEditor])
-  /// is kept as a secondary action for long writing, not deleted.
-  Widget _buildNotePreviewSection(bool isDark, Note note) {
-    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _sectionHeader('Notes', isDark),
-        Row(
-          children: [
-            IconButton(
-              icon: const Icon(Icons.arrow_back_rounded, size: 18),
-              tooltip: 'Back to notes',
-              splashRadius: 16,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              padding: EdgeInsets.zero,
-              onPressed: () => unawaited(_closePreview()),
-            ),
-            Expanded(
-              child: Text(
-                note.title.isEmpty ? 'Untitled' : note.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w600,
-                  color: mutedColor,
-                ),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.open_in_new_rounded, size: 16),
-              tooltip: 'Open in full editor',
-              splashRadius: 16,
-              constraints: const BoxConstraints(minWidth: 44, minHeight: 44),
-              padding: EdgeInsets.zero,
-              onPressed: () => unawaited(_openInFullEditor(note)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 4),
-        Container(
-          key: const Key('task-note-preview'),
-          height: _notePreviewHeight,
-          decoration: BoxDecoration(
-            border: Border.all(
-              color: isDark
-                  ? Colors.white.withValues(alpha: 0.15)
-                  : Colors.grey.shade300,
-            ),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: NoteMarkdownEditor(
-            // Keyed by note id (not just a constant) so switching which
-            // note is previewed — even if this widget were ever kept
-            // mounted across that switch — always seeds a fresh
-            // controller from the new note's own content rather than
-            // reusing State built for a different note.
-            key: ValueKey('task-note-preview-editor-${note.id}'),
-            initialContent: note.content,
-            toolbar: EditorToolbarProfile.minimal,
-            onChanged: _onPreviewChanged,
-          ),
-        ),
       ],
     );
   }
@@ -2144,6 +2007,232 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         // a Jira issue modal — has neither; edits persist on close, see
         // [_closeDialog]). Removing `actions` also reclaims the vertical
         // space `AlertDialog` reserved for that row.
+      ),
+    );
+  }
+}
+
+/// The linked-note editor/preview modal opened from the task detail
+/// dialog's NOTES section — both "create a note" and "preview a linked
+/// note" open here (settled decision: "para crear la nota estaría bien
+/// que fuera un modal como ya lo haces, y para el preview también"),
+/// layered on top of the task dialog rather than taking over its NOTES
+/// section in place, same [showAnimatedDialog] convention every other
+/// dialog in this feature follows.
+///
+/// Reuses [NoteMarkdownEditor] with `initialViewMode: EditorViewMode.preview`
+/// — a note WITH content opens RENDERED ("que se vea el md bien, y no en
+/// modo código"), while a brand-new EMPTY note downgrades to the plain
+/// edit field automatically (see [NoteMarkdownEditor.initialViewMode]'s doc
+/// and `note_markdown_editor_test.dart`'s "preview downgrades to edit on
+/// an empty note"), so a freshly created note is immediately typable.
+/// Editing is never disabled from here — the editor's own edit⇄preview
+/// toggle stays available; rendered is the DEFAULT, not a restriction.
+///
+/// Edits persist through [UpdateNoteUseCase] on a short debounce, entirely
+/// separate from the task detail dialog's own title/description/
+/// blockedReason save-on-close flow, so opening or editing a note here
+/// never marks the TASK dirty. Every dismissal (the header close button,
+/// barrier tap, Escape) flushes any pending edit first, via the same
+/// `PopScope(canPop: false)` pattern [_TaskDetailDialogState.build] itself
+/// uses — see that method's doc for why `canPop: false` is required to
+/// intercept the barrier/Escape paths rather than letting them pop
+/// silently.
+///
+/// "Open in full editor" pops this modal with the freshest [Note] instead
+/// of closing it silently; the caller
+/// ([_TaskDetailDialogState._openNoteEditor]) then navigates away and
+/// closes the task dialog too — same secondary action as before this
+/// modal existed, just requested through the pop result instead of a
+/// shared field.
+class _NoteEditorDialog extends StatefulWidget {
+  const _NoteEditorDialog({
+    required this.note,
+    required this.accentColor,
+    required this.surfaceColor,
+  });
+
+  final Note note;
+  final Color accentColor;
+
+  /// Same fixed dark-neutral surface as the task detail dialog this one
+  /// opens from — see [_TaskDetailDialog.surfaceColor]'s doc for why it is
+  /// threaded explicitly rather than left to `AlertDialog`'s own
+  /// `ColorScheme.fromSeed`-derived default.
+  final Color surfaceColor;
+
+  @override
+  State<_NoteEditorDialog> createState() => _NoteEditorDialogState();
+}
+
+class _NoteEditorDialogState extends State<_NoteEditorDialog> {
+  late Note _note;
+  late String _content;
+  Timer? _debounce;
+
+  @override
+  void initState() {
+    super.initState();
+    _note = widget.note;
+    _content = widget.note.content;
+  }
+
+  @override
+  void dispose() {
+    // Belt-and-suspenders only — every real dismissal path ([_close],
+    // [_openFullEditor]) already flushes before the pop that eventually
+    // leads here.
+    _debounce?.cancel();
+    super.dispose();
+  }
+
+  /// Marks the content dirty and (re)starts its debounce — mirrors the
+  /// shape of `AutoSaveService.markDirty`/`_tick`, but scoped locally to
+  /// this modal and this one note, deliberately NOT the global
+  /// `AppState.autoSaveService` singleton (that instance is owned by the
+  /// full note editor page's own watch/flush lifecycle; sharing it here
+  /// would mean this modal and the editor page fight over its single
+  /// watched-note slot).
+  void _onChanged(String value) {
+    _content = value;
+    _debounce?.cancel();
+    _debounce = Timer(
+      const Duration(milliseconds: 600),
+      () => unawaited(_flush()),
+    );
+  }
+
+  /// Persists [_content] through [UpdateNoteUseCase] directly — entirely
+  /// separate from the task detail dialog's own title/description/
+  /// blockedReason save-on-close flow, so an edit here never marks the
+  /// TASK dirty or touches its `updatedAt`. A no-op write (nothing
+  /// actually changed) is skipped by [UpdateNoteUseCase] itself. Safe to
+  /// call with nothing pending — every dismissal path calls this
+  /// unconditionally.
+  Future<void> _flush() async {
+    _debounce?.cancel();
+    _debounce = null;
+    if (_content == _note.content) return;
+    final updated = await GetIt.instance<UpdateNoteUseCase>().execute(
+      noteId: _note.id,
+      content: _content,
+    );
+    if (updated == null) return;
+    _note = updated;
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _close() async {
+    await _flush();
+    if (mounted) Navigator.of(context).pop();
+  }
+
+  Future<void> _openFullEditor() async {
+    await _flush();
+    if (mounted) Navigator.of(context).pop(_note);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+    final mediaSize = MediaQuery.of(context).size;
+    // Comfortable, bounded writing-surface size — same "clamp to the
+    // available space" shape as [_TaskDetailDialogState.build]'s own
+    // dialog sizing, scaled down for a single-note modal rather than the
+    // two-column task dialog.
+    final width = math.max(320.0, math.min(mediaSize.width - 120, 640.0));
+    final height = math.max(320.0, math.min(mediaSize.height - 160, 560.0));
+
+    return PopScope(
+      // Same contract as the task detail dialog's own PopScope — see
+      // [_TaskDetailDialogState.build]'s doc for why `canPop: false` is
+      // required so the barrier tap and Escape both funnel through
+      // [_close] instead of popping (and skipping the flush) directly.
+      canPop: false,
+      onPopInvokedWithResult: (bool didPop, Object? result) {
+        if (didPop) return;
+        unawaited(_close());
+      },
+      child: AlertDialog(
+        // Same theme fix as the parent task detail dialog — see
+        // [_TaskDetailDialog.surfaceColor]'s doc.
+        backgroundColor: Color.alphaBlend(
+          widget.surfaceColor.withValues(alpha: 0.96),
+          isDark ? Colors.black : Colors.white,
+        ),
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        content: SizedBox(
+          width: width,
+          height: height,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _note.title.isEmpty ? 'Untitled' : _note.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: mutedColor,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: Icon(
+                      Icons.open_in_new_rounded,
+                      size: 18,
+                      color: widget.accentColor,
+                    ),
+                    tooltip: 'Open in full editor',
+                    splashRadius: 16,
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    onPressed: () => unawaited(_openFullEditor()),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    tooltip: 'Close note',
+                    splashRadius: 16,
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    onPressed: () => unawaited(_close()),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Container(
+                  key: const Key('task-note-preview'),
+                  decoration: BoxDecoration(
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.15)
+                          : Colors.grey.shade300,
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: NoteMarkdownEditor(
+                    // Keyed by note id only (not content) so a debounced
+                    // flush's own `setState` never reseeds the editor's
+                    // internal controller mid-edit — same contract the old
+                    // in-place preview editor relied on.
+                    key: ValueKey('task-note-editor-${_note.id}'),
+                    initialContent: _note.content,
+                    initialViewMode: EditorViewMode.preview,
+                    toolbar: EditorToolbarProfile.minimal,
+                    onChanged: _onChanged,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
