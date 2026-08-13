@@ -22,6 +22,15 @@ import 'package:notex/application/use_cases/task/delete_task_use_case.dart';
 import 'package:notex/application/use_cases/task/get_tasks_use_case.dart';
 import 'package:notex/application/use_cases/task/transition_task_status_use_case.dart';
 import 'package:notex/application/use_cases/task/update_task_use_case.dart';
+import 'package:notex/application/use_cases/timer/create_project_use_case.dart';
+import 'package:notex/application/use_cases/timer/delete_project_use_case.dart';
+import 'package:notex/application/use_cases/timer/delete_time_entry_use_case.dart';
+import 'package:notex/application/use_cases/timer/get_projects_use_case.dart';
+import 'package:notex/application/use_cases/timer/get_time_entries_use_case.dart';
+import 'package:notex/application/use_cases/timer/log_time_entry_use_case.dart';
+import 'package:notex/application/use_cases/timer/start_timer_use_case.dart';
+import 'package:notex/application/use_cases/timer/stop_timer_use_case.dart';
+import 'package:notex/application/use_cases/timer/update_time_entry_use_case.dart';
 import 'package:notex/application/use_cases/update_note_use_case.dart';
 import 'package:notex/domain/entities/note.dart';
 import 'package:notex/domain/entities/task.dart';
@@ -33,10 +42,13 @@ import 'package:notex/domain/value_objects/task_status.dart';
 import 'package:notex/infrastructure/local/database.dart';
 import 'package:notex/infrastructure/local/drift_note_project_repository.dart';
 import 'package:notex/infrastructure/local/drift_note_repository.dart';
+import 'package:notex/infrastructure/local/drift_project_repository.dart';
 import 'package:notex/infrastructure/local/drift_task_repository.dart';
+import 'package:notex/infrastructure/local/drift_time_entry_repository.dart';
 import 'package:notex/presentation/state/app_state.dart';
 import 'package:notex/presentation/state/task_state.dart';
 import 'package:notex/presentation/state/theme_state.dart';
+import 'package:notex/presentation/state/timer_state.dart';
 import 'package:notex/presentation/widgets/task_board.dart';
 
 /// Minimal fakes satisfying [SyncEngine]'s collaborators — this suite never
@@ -132,6 +144,8 @@ void main() {
   late ThemeState themeState;
   late DriftNoteRepository noteRepository;
   late AppState appState;
+  late DriftTimeEntryRepository timeEntryRepository;
+  late TimerState timerState;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
@@ -183,11 +197,40 @@ void main() {
       authRepository: _FakeAuthRepositoryWithStream(),
     );
     GetIt.instance.registerSingleton<AppState>(appState);
+
+    // The "Start timer" button (_TaskDetailDialog._startTimer) resolves
+    // TimerState via GetIt.instance<TimerState>() — a REAL TimerState, over
+    // the same in-memory database, so the button exercises the actual
+    // StartTimerUseCase -> TransitionTaskStatusUseCase chain rather than a
+    // stand-in for it. Registering it here also means: if this registration
+    // were ever missing (as it is in production the moment the app's own
+    // injection.dart forgets it), GetIt would throw synchronously inside the
+    // button's onPressed and the failure would surface as a widget-test
+    // error instead of a silent no-op click.
+    timeEntryRepository = DriftTimeEntryRepository(db);
+    final projectRepository = DriftProjectRepository(db);
+    timerState = TimerState(
+      createProject: CreateProjectUseCase(projectRepository),
+      getProjects: GetProjectsUseCase(projectRepository),
+      deleteProject: DeleteProjectUseCase(
+        projectRepository,
+        timeEntryRepository,
+        _NoopSyncEngine(),
+      ),
+      startTimer: StartTimerUseCase(timeEntryRepository, transitionSpy),
+      stopTimer: StopTimerUseCase(timeEntryRepository),
+      getEntries: GetTimeEntriesUseCase(timeEntryRepository),
+      deleteEntry: DeleteTimeEntryUseCase(timeEntryRepository),
+      updateEntry: UpdateTimeEntryUseCase(timeEntryRepository),
+      logEntry: LogTimeEntryUseCase(timeEntryRepository),
+    );
+    GetIt.instance.registerSingleton<TimerState>(timerState);
   });
 
   tearDown(() async {
     await GetIt.instance.reset();
     appState.dispose();
+    timerState.dispose();
     await db.close();
   });
 
@@ -540,6 +583,44 @@ void main() {
             'recorded — proving the change flowed through it, not around '
             'it',
       );
+    });
+  });
+
+  group('"Start timer" button in the task detail dialog — bug report', () {
+    testWidgets(
+        'tapping "Start timer" persists a running TimeEntry linked to the '
+        'task and transitions the task to doing', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Track me'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Track me'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start timer'), findsOneWidget);
+      await tester.tap(find.text('Start timer'));
+      await tester.pumpAndSettle();
+
+      final running = await timeEntryRepository.getRunning();
+      expect(
+        running,
+        isNotNull,
+        reason: 'clicking "Start timer" must persist a running TimeEntry',
+      );
+      expect(running!.taskId, 'r1');
+      expect(running.description, 'Track me');
+
+      expect(transitionSpy.calls, [('r1', TaskStatus.doing)]);
+      final persisted = await repository.getById('r1');
+      expect(persisted!.status, TaskStatus.doing);
+
+      // The dialog closes on success (per _startTimer's implementation).
+      expect(find.text('Start timer'), findsNothing);
+
+      // TimerState owns a real periodic Timer once a timer is running (see
+      // _startTicker) — stop it before the test ends so the widget test
+      // binding doesn't flag a pending timer.
+      await timerState.stopTimer();
     });
   });
 }
