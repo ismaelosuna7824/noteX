@@ -222,6 +222,44 @@ void main() {
     });
   });
 
+  group('backlog task — nullable scheduled_date (schema v19)', () {
+    test('toMap emits a null scheduled_date for a backlog task', () {
+      final backlog = Task(
+        id: 'r1',
+        title: 'Someday',
+        createdAt: DateTime(2026, 1, 1, 8),
+        updatedAt: DateTime(2026, 1, 2, 9),
+      );
+
+      final data = TaskSupabaseMapper.toMap(
+        backlog,
+        includeStatusFields: false,
+      );
+
+      expect(data.containsKey('scheduled_date'), isTrue);
+      expect(data['scheduled_date'], isNull);
+    });
+
+    // Named after design D5's "bounded degradation" claim. A remote row
+    // with a null scheduled_date is legal once the v19 DDL lands (a
+    // backlog task another client created and pushed). This is the root
+    // fix: THIS mapper parses it defensively and returns a backlog task
+    // rather than throwing — it no longer depends on the sync pull loop's
+    // pre-existing per-row try/catch (supabase_sync_adapter.dart:324-329)
+    // to survive a backlog row. That try/catch remains the safety net for
+    // genuinely older, unmodified clients this repo cannot execute in a
+    // test — see design D5's "Accepted, bounded degradation" note.
+    test('fromMap parses a null scheduled_date as a backlog task, without '
+        'throwing', () {
+      final row = rowFor(TaskStatus.todo, false);
+      row['scheduled_date'] = null;
+
+      final task = TaskSupabaseMapper.fromMap(row);
+
+      expect(task.scheduledDate, isNull);
+    });
+  });
+
   group('round trip', () {
     test('fromMap(toMap(t)) preserves every field except statusPendingPush, '
         'which is always false inbound', () {
@@ -241,7 +279,7 @@ void main() {
       // Wire format round-trips through UTC; compare instants, not
       // local-vs-UTC representations.
       expect(
-        roundTripped.scheduledDate.isAtSameMomentAs(original.scheduledDate),
+        roundTripped.scheduledDate!.isAtSameMomentAs(original.scheduledDate!),
         isTrue,
       );
       expect(roundTripped.status, original.status);
@@ -267,6 +305,16 @@ void main() {
       // The one asymmetry: never emitted outbound, forced false inbound.
       expect(original.statusPendingPush, isTrue);
       expect(roundTripped.statusPendingPush, isFalse);
+    });
+
+    test('a backlog task round-trips with scheduledDate staying null', () {
+      final backlog = buildTask().copyWith(scheduledDate: null);
+
+      final roundTripped = TaskSupabaseMapper.fromMap(
+        TaskSupabaseMapper.toMap(backlog, includeStatusFields: true),
+      );
+
+      expect(roundTripped.scheduledDate, isNull);
     });
   });
 }

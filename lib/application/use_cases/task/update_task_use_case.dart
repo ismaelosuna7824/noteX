@@ -18,7 +18,10 @@ class UpdateTaskUseCase {
     String taskId, {
     String? title,
     String? description,
-    DateTime? scheduledDate,
+    // Omit to leave the schedule unchanged; pass a value to (re)schedule;
+    // pass `null` to explicitly send the task to the backlog. Distinguished
+    // from "omitted" via the sentinel below — see design D3/D5.
+    Object? scheduledDate = const _Unset(),
     Object? noteId = const _Unset(),
     Object? blockedReason = const _Unset(),
   }) async {
@@ -32,7 +35,9 @@ class UpdateTaskUseCase {
     final updated = existing.copyWith(
       title: title,
       description: description,
-      scheduledDate: scheduledDate,
+      scheduledDate: scheduledDate is _Unset
+          ? existing.scheduledDate
+          : scheduledDate as DateTime?,
       noteId: noteId is _Unset ? existing.noteId : noteId as String?,
       blockedReason: blockedReason is _Unset
           ? existing.blockedReason

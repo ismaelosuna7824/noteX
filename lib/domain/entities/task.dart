@@ -3,8 +3,9 @@ import '../value_objects/task_status.dart';
 
 /// Core domain entity representing a task.
 ///
-/// Tasks have a title and a scheduled date. Uncompleted tasks
-/// accumulate — they carry over to the next day until marked complete.
+/// Tasks have a title and an optional scheduled date. A task with no date
+/// lives only in the backlog (design D5 / spec #561). Uncompleted, dated
+/// tasks accumulate — they carry over to the next day until marked complete.
 ///
 /// `status` is the single source of truth for a task's lifecycle state —
 /// see design D3. There is no independent `isCompleted` boolean: [isDone]
@@ -12,7 +13,10 @@ import '../value_objects/task_status.dart';
 class Task {
   final String id;
   final String title;
-  final DateTime scheduledDate;
+
+  /// Null means the task has no date and lives only in the backlog.
+  /// See design D5 / spec #561 "create a task with no schedule".
+  final DateTime? scheduledDate;
   final TaskStatus status;
   final DateTime? statusChangedAt;
 
@@ -47,7 +51,7 @@ class Task {
   const Task({
     required this.id,
     required this.title,
-    required this.scheduledDate,
+    this.scheduledDate,
     this.status = TaskStatus.todo,
     this.statusChangedAt,
     this.statusPendingPush = false,
@@ -71,21 +75,24 @@ class Task {
   factory Task.create({
     required String id,
     required String title,
-    required DateTime scheduledDate,
+    // Null creates a backlog task — see design D5 / spec #561.
+    DateTime? scheduledDate,
     String? userId,
   }) {
     final now = DateTime.now();
     return Task(
       id: id,
       title: title,
-      scheduledDate: DateTime(
-        scheduledDate.year,
-        scheduledDate.month,
-        scheduledDate.day,
-        12,
-        0,
-        0,
-      ),
+      scheduledDate: scheduledDate == null
+          ? null
+          : DateTime(
+              scheduledDate.year,
+              scheduledDate.month,
+              scheduledDate.day,
+              12,
+              0,
+              0,
+            ),
       status: TaskStatus.todo,
       // The first push of any task always carries its status (D10).
       statusPendingPush: true,
@@ -103,15 +110,18 @@ class Task {
   /// independently — see the class doc.
   bool get isDone => status == TaskStatus.done;
 
+  /// A backlog task (null [scheduledDate]) never matches any date.
   bool isForDate(DateTime date) {
-    return scheduledDate.year == date.year &&
-        scheduledDate.month == date.month &&
-        scheduledDate.day == date.day;
+    final sd = scheduledDate;
+    if (sd == null) return false;
+    return sd.year == date.year &&
+        sd.month == date.month &&
+        sd.day == date.day;
   }
 
   Task copyWith({
     String? title,
-    DateTime? scheduledDate,
+    Object? scheduledDate = const _Unset(),
     TaskStatus? status,
     Object? statusChangedAt = const _Unset(),
     bool? statusPendingPush,
@@ -133,7 +143,9 @@ class Task {
     return Task(
       id: id,
       title: title ?? this.title,
-      scheduledDate: scheduledDate ?? this.scheduledDate,
+      scheduledDate: scheduledDate is _Unset
+          ? this.scheduledDate
+          : scheduledDate as DateTime?,
       status: status ?? this.status,
       statusChangedAt: statusChangedAt is _Unset
           ? this.statusChangedAt

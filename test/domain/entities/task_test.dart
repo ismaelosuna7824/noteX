@@ -87,6 +87,12 @@ void main() {
 
       expect(task.userId, 'user-1');
     });
+
+    test('creates a backlog task with a null scheduledDate', () {
+      final task = Task.create(id: 'r1', title: 'Someday');
+
+      expect(task.scheduledDate, isNull);
+    });
   });
 
   group('Task.isForDate', () {
@@ -108,6 +114,17 @@ void main() {
       expect(task.isForDate(DateTime(2026, 3, 5)), isFalse);
       expect(task.isForDate(DateTime(2026, 4, 4)), isFalse);
       expect(task.isForDate(DateTime(2027, 3, 4)), isFalse);
+    });
+
+    test('a backlog task (null scheduledDate) never matches any date', () {
+      final backlog = Task(
+        id: 'r2',
+        title: 'Someday',
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      );
+
+      expect(backlog.isForDate(DateTime(2026, 3, 4)), isFalse);
     });
   });
 
@@ -348,6 +365,26 @@ void main() {
       final copy = base.copyWith(deletedAt: newDeletedAt);
 
       expect(copy.deletedAt, newDeletedAt);
+    });
+
+    test('omitting scheduledDate preserves its current value', () {
+      final copy = base.copyWith(title: 'New title');
+
+      expect(copy.scheduledDate, base.scheduledDate);
+    });
+
+    test('explicitly passing null clears scheduledDate — moves to backlog',
+        () {
+      final copy = base.copyWith(scheduledDate: null);
+
+      expect(copy.scheduledDate, isNull);
+    });
+
+    test('passing a value overwrites scheduledDate', () {
+      final newDate = DateTime(2026, 6, 1);
+      final copy = base.copyWith(scheduledDate: newDate);
+
+      expect(copy.scheduledDate, newDate);
     });
 
     test('calling copyWith with no arguments is a full no-op copy', () {

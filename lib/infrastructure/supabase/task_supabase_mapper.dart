@@ -35,7 +35,9 @@ class TaskSupabaseMapper {
       'id': t.id,
       'user_id': t.userId,
       'title': t.title,
-      'scheduled_date': t.scheduledDate.toUtc().toIso8601String(),
+      // Null for a backlog task — see design D5. Requires the remote column
+      // to already be nullable (v19 DDL) before a client can push this.
+      'scheduled_date': t.scheduledDate?.toUtc().toIso8601String(),
       'description': t.description,
       'blocked_reason': t.blockedReason,
       'note_id': t.noteId,
@@ -78,7 +80,10 @@ class TaskSupabaseMapper {
     return Task(
       id: m['id'] as String,
       title: m['title'] as String? ?? '',
-      scheduledDate: DateTime.parse(m['scheduled_date'] as String),
+      // Parsed defensively (`_parseUtc`, matching every other v18 field):
+      // a null `scheduled_date` — legal since v19 — is a backlog task, not
+      // a parse error. See design D5's "bounded degradation" note.
+      scheduledDate: _parseUtc(m['scheduled_date']),
       status: resolution.status,
       statusChangedAt: statusChangedAt,
       statusPendingPush: false,

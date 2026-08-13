@@ -165,7 +165,9 @@ class NoteProjectEntries extends Table {
 class TaskEntries extends Table {
   TextColumn get id => text()();
   TextColumn get title => text().withDefault(const Constant(''))();
-  DateTimeColumn get scheduledDate => dateTime()();
+  // Nullable since v19 — a null row is a backlog task. See design D5 / M9;
+  // this is the ONLY schema change v19 makes.
+  DateTimeColumn get scheduledDate => dateTime().nullable()();
   BoolColumn get isCompleted =>
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get completedAt => dateTime().nullable()();
@@ -259,7 +261,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 18;
+  int get schemaVersion => 19;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -441,6 +443,24 @@ class AppDatabase extends _$AppDatabase {
         await safeAddColumn(timeEntries, timeEntries.taskId);
 
         await backfillTaskStatus(this);
+      }
+      if (from < 19) {
+        // Relaxes `scheduled_date` from NOT NULL to nullable so a task can
+        // live in the backlog (design D5 / M9). SQLite has no
+        // `ALTER COLUMN`, so this requires a full table rebuild via
+        // `Migrator.alterTable`.
+        //
+        // This is the ONLY statement in this block, deliberately. Unlike
+        // the rest of this ladder, `alterTable` runs inside its OWN
+        // transaction (see `Migrator.alterTable`) — the ladder itself is
+        // NOT transactional (design D5 "transaction correction"). Anything
+        // else placed here would run outside that protection.
+        //
+        // `alterTable`/`TableMigration` are drift's own documented mechanism
+        // for a NOT NULL relaxation table rebuild — currently marked
+        // `@experimental` upstream, not a sign this call site is unstable.
+        // ignore: experimental_member_use
+        await m.alterTable(TableMigration(taskEntries));
       }
     },
   );

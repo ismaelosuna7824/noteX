@@ -4301,9 +4301,9 @@ class $TaskEntriesTable extends TaskEntries
       GeneratedColumn<DateTime>(
         'scheduled_date',
         aliasedName,
-        false,
+        true,
         type: DriftSqlType.dateTime,
-        requiredDuringInsert: true,
+        requiredDuringInsert: false,
       );
   static const VerificationMeta _isCompletedMeta = const VerificationMeta(
     'isCompleted',
@@ -4577,8 +4577,6 @@ class $TaskEntriesTable extends TaskEntries
           _scheduledDateMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_scheduledDateMeta);
     }
     if (data.containsKey('is_completed')) {
       context.handle(
@@ -4748,7 +4746,7 @@ class $TaskEntriesTable extends TaskEntries
       scheduledDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}scheduled_date'],
-      )!,
+      ),
       isCompleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_completed'],
@@ -4837,7 +4835,7 @@ class $TaskEntriesTable extends TaskEntries
 class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   final String id;
   final String title;
-  final DateTime scheduledDate;
+  final DateTime? scheduledDate;
   final bool isCompleted;
   final DateTime? completedAt;
   final DateTime createdAt;
@@ -4860,7 +4858,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   const TaskEntry({
     required this.id,
     required this.title,
-    required this.scheduledDate,
+    this.scheduledDate,
     required this.isCompleted,
     this.completedAt,
     required this.createdAt,
@@ -4886,7 +4884,9 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['title'] = Variable<String>(title);
-    map['scheduled_date'] = Variable<DateTime>(scheduledDate);
+    if (!nullToAbsent || scheduledDate != null) {
+      map['scheduled_date'] = Variable<DateTime>(scheduledDate);
+    }
     map['is_completed'] = Variable<bool>(isCompleted);
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
@@ -4935,7 +4935,9 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     return TaskEntriesCompanion(
       id: Value(id),
       title: Value(title),
-      scheduledDate: Value(scheduledDate),
+      scheduledDate: scheduledDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheduledDate),
       isCompleted: Value(isCompleted),
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
@@ -4988,7 +4990,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     return TaskEntry(
       id: serializer.fromJson<String>(json['id']),
       title: serializer.fromJson<String>(json['title']),
-      scheduledDate: serializer.fromJson<DateTime>(json['scheduledDate']),
+      scheduledDate: serializer.fromJson<DateTime?>(json['scheduledDate']),
       isCompleted: serializer.fromJson<bool>(json['isCompleted']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -5020,7 +5022,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'title': serializer.toJson<String>(title),
-      'scheduledDate': serializer.toJson<DateTime>(scheduledDate),
+      'scheduledDate': serializer.toJson<DateTime?>(scheduledDate),
       'isCompleted': serializer.toJson<bool>(isCompleted),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -5048,7 +5050,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   TaskEntry copyWith({
     String? id,
     String? title,
-    DateTime? scheduledDate,
+    Value<DateTime?> scheduledDate = const Value.absent(),
     bool? isCompleted,
     Value<DateTime?> completedAt = const Value.absent(),
     DateTime? createdAt,
@@ -5071,7 +5073,9 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   }) => TaskEntry(
     id: id ?? this.id,
     title: title ?? this.title,
-    scheduledDate: scheduledDate ?? this.scheduledDate,
+    scheduledDate: scheduledDate.present
+        ? scheduledDate.value
+        : this.scheduledDate,
     isCompleted: isCompleted ?? this.isCompleted,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -5240,7 +5244,7 @@ class TaskEntry extends DataClass implements Insertable<TaskEntry> {
 class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   final Value<String> id;
   final Value<String> title;
-  final Value<DateTime> scheduledDate;
+  final Value<DateTime?> scheduledDate;
   final Value<bool> isCompleted;
   final Value<DateTime?> completedAt;
   final Value<DateTime> createdAt;
@@ -5289,7 +5293,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   TaskEntriesCompanion.insert({
     required String id,
     this.title = const Value.absent(),
-    required DateTime scheduledDate,
+    this.scheduledDate = const Value.absent(),
     this.isCompleted = const Value.absent(),
     this.completedAt = const Value.absent(),
     required DateTime createdAt,
@@ -5311,7 +5315,6 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
     this.externalLastSyncedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
-       scheduledDate = Value(scheduledDate),
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
   static Insertable<TaskEntry> custom({
@@ -5371,7 +5374,7 @@ class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   TaskEntriesCompanion copyWith({
     Value<String>? id,
     Value<String>? title,
-    Value<DateTime>? scheduledDate,
+    Value<DateTime?>? scheduledDate,
     Value<bool>? isCompleted,
     Value<DateTime?>? completedAt,
     Value<DateTime>? createdAt,
@@ -7925,7 +7928,7 @@ typedef $$TaskEntriesTableCreateCompanionBuilder =
     TaskEntriesCompanion Function({
       required String id,
       Value<String> title,
-      required DateTime scheduledDate,
+      Value<DateTime?> scheduledDate,
       Value<bool> isCompleted,
       Value<DateTime?> completedAt,
       required DateTime createdAt,
@@ -7951,7 +7954,7 @@ typedef $$TaskEntriesTableUpdateCompanionBuilder =
     TaskEntriesCompanion Function({
       Value<String> id,
       Value<String> title,
-      Value<DateTime> scheduledDate,
+      Value<DateTime?> scheduledDate,
       Value<bool> isCompleted,
       Value<DateTime?> completedAt,
       Value<DateTime> createdAt,
@@ -8349,7 +8352,7 @@ class $$TaskEntriesTableTableManager
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> title = const Value.absent(),
-                Value<DateTime> scheduledDate = const Value.absent(),
+                Value<DateTime?> scheduledDate = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -8399,7 +8402,7 @@ class $$TaskEntriesTableTableManager
               ({
                 required String id,
                 Value<String> title = const Value.absent(),
-                required DateTime scheduledDate,
+                Value<DateTime?> scheduledDate = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 required DateTime createdAt,

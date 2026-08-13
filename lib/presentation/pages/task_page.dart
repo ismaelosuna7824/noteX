@@ -417,10 +417,15 @@ class _ReminderTileState extends State<_ReminderTile> {
 
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
+    // This flat list has no affordance yet to create a task with no date
+    // (that lands with the Kanban board) — the fallback below is a forced
+    // null-safety compile fix, not a new behavior; every task reachable
+    // here today is always dated.
+    final reminderScheduledDate = reminder.scheduledDate ?? now;
     final scheduled = DateTime(
-      reminder.scheduledDate.year,
-      reminder.scheduledDate.month,
-      reminder.scheduledDate.day,
+      reminderScheduledDate.year,
+      reminderScheduledDate.month,
+      reminderScheduledDate.day,
     );
     final isOverdue = !reminder.isDone && scheduled.isBefore(today);
     final isToday = scheduled.isAtSameMomentAs(today);
@@ -502,7 +507,7 @@ class _ReminderTileState extends State<_ReminderTile> {
                 child: Text(
                   isToday
                       ? 'Today'
-                      : '${_monthNames[reminder.scheduledDate.month - 1]} ${reminder.scheduledDate.day}',
+                      : '${_monthNames[reminderScheduledDate.month - 1]} ${reminderScheduledDate.day}',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,

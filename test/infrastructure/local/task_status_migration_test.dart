@@ -25,7 +25,7 @@ void main() {
     await db.into(db.taskEntries).insert(
           TaskEntriesCompanion.insert(
             id: id,
-            scheduledDate: DateTime(2026, 1, 1),
+            scheduledDate: Value(DateTime(2026, 1, 1)),
             isCompleted: Value(isCompleted),
             createdAt: DateTime(2026, 1, 1),
             updatedAt: DateTime(2026, 1, 1),

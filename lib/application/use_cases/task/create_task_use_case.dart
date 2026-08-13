@@ -10,7 +10,8 @@ class CreateTaskUseCase {
   Future<Task> execute({
     required String id,
     required String title,
-    required DateTime scheduledDate,
+    // Null creates a backlog task — see design D5 / spec #561.
+    DateTime? scheduledDate,
   }) async {
     final task = Task.create(
       id: id,

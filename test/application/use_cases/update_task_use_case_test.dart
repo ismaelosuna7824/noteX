@@ -55,6 +55,35 @@ void main() {
     expect(result.scheduledDate, DateTime(2026, 3, 10));
   });
 
+  test('preserves scheduledDate when omitted', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ));
+
+    final result = await useCase.execute('r1', title: 'Buy oat milk');
+
+    expect(result!.scheduledDate, DateTime(2026, 3, 4));
+  });
+
+  test('clears scheduledDate — moves to backlog — when explicitly passed '
+      'null', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+    ));
+
+    final result = await useCase.execute('r1', scheduledDate: null);
+
+    expect(result!.scheduledDate, isNull);
+  });
+
   test('sets noteId when passed a value', () async {
     await repository.save(Task(
       id: 'r1',

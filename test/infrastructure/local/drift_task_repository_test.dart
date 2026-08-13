@@ -20,7 +20,7 @@ void main() {
   Task buildTask({
     required String id,
     String title = 'Task',
-    required DateTime scheduledDate,
+    DateTime? scheduledDate,
     TaskStatus status = TaskStatus.todo,
     DateTime? completedAt,
     DateTime? createdAt,
@@ -84,6 +84,17 @@ void main() {
 
     test('getById returns null for a missing id', () async {
       expect(await repository.getById('missing'), isNull);
+    });
+
+    test('a backlog task (null scheduledDate) saves and round-trips as '
+        'null — schema v19', () async {
+      final task = buildTask(id: 'backlog-1', scheduledDate: null);
+
+      await repository.save(task);
+      final fetched = await repository.getById('backlog-1');
+
+      expect(fetched, isNotNull);
+      expect(fetched!.scheduledDate, isNull);
     });
 
     test('save upserts — saving an existing id updates in place', () async {
@@ -252,6 +263,16 @@ void main() {
       final pending = await repository.getPending(DateTime(2026, 3, 10));
 
       expect(pending, isEmpty);
+    });
+
+    test('a backlog task (null scheduledDate) never leaks into the daily '
+        'list', () async {
+      await repository.save(buildTask(id: 'backlog', scheduledDate: null));
+      await repository.save(buildTask(id: 'dated', scheduledDate: DateTime(2026, 3, 1)));
+
+      final pending = await repository.getPending(DateTime(2026, 3, 10));
+
+      expect(pending.map((r) => r.id), ['dated']);
     });
 
     test('orders results by scheduledDate ascending', () async {
