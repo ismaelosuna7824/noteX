@@ -39,7 +39,10 @@ create table public.time_entries (
   updated_at timestamp with time zone not null,
   deleted_at timestamp with time zone,
   version integer not null default 1,
-  sync_status text not null default 'synced'
+  sync_status text not null default 'synced',
+  -- v18 (task-tracker). No foreign key on purpose: a tracked session must never
+  -- be able to block deleting the task it points at.
+  task_id uuid
 );
 
 -- Create the `note_projects` table
@@ -152,6 +155,7 @@ create index idx_projects_user_updated on public.projects (user_id, updated_at);
 create index idx_time_entries_user_id on public.time_entries (user_id);
 create index idx_time_entries_user_updated on public.time_entries (user_id, updated_at);
 create index idx_time_entries_project_id on public.time_entries (project_id);
+create index idx_time_entries_task_id on public.time_entries (task_id);
 
 -- markdown_projects
 create index idx_markdown_projects_user_id on public.markdown_projects (user_id);
@@ -176,7 +180,25 @@ create table public.reminders (
   updated_at timestamp with time zone not null,
   deleted_at timestamp with time zone,
   version integer not null default 1,
-  sync_status text not null default 'synced'
+  sync_status text not null default 'synced',
+  -- v18 (task-tracker). `status` is the source of truth for task state;
+  -- `is_completed` above is kept as a derived, deprecated column so older
+  -- shipped clients keep working. The 'todo' default is load-bearing: an older
+  -- client omits `status` from its payload, so Postgres applies this default
+  -- instead of rejecting the insert. `note_id` deliberately carries no foreign
+  -- key, so permanently deleting a note is never blocked by a task linking to
+  -- it. The local-only `status_pending_push` column has no counterpart here by
+  -- design. See supabase_v18_task_tracker.sql.
+  status text not null default 'todo',
+  status_changed_at timestamp with time zone,
+  description text not null default '',
+  blocked_reason text,
+  note_id uuid,
+  external_provider text,
+  external_id text,
+  external_url text,
+  external_cached_title text,
+  external_last_synced_at timestamp with time zone
 );
 
 -- Enable RLS
