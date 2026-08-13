@@ -67,7 +67,8 @@ import 'application/use_cases/note/restore_note_use_case.dart';
 import 'application/use_cases/note/permanent_delete_note_use_case.dart';
 import 'application/use_cases/task/create_task_use_case.dart';
 import 'application/use_cases/task/get_tasks_use_case.dart';
-import 'application/use_cases/task/complete_task_use_case.dart';
+import 'application/use_cases/task/transition_task_status_use_case.dart';
+import 'application/use_cases/task/update_task_use_case.dart';
 import 'application/use_cases/task/delete_task_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/use_cases/cleanup_empty_notes_use_case.dart';
@@ -322,8 +323,11 @@ Future<void> setupDependencies() async {
   getIt.registerFactory<GetTasksUseCase>(
     () => GetTasksUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<CompleteTaskUseCase>(
-    () => CompleteTaskUseCase(getIt<TaskRepository>()),
+  getIt.registerFactory<TransitionTaskStatusUseCase>(
+    () => TransitionTaskStatusUseCase(getIt<TaskRepository>()),
+  );
+  getIt.registerFactory<UpdateTaskUseCase>(
+    () => UpdateTaskUseCase(getIt<TaskRepository>()),
   );
   getIt.registerFactory<DeleteTaskUseCase>(
     () => DeleteTaskUseCase(
@@ -420,7 +424,7 @@ Future<void> setupDependencies() async {
     ReminderState(
       createReminder: getIt<CreateTaskUseCase>(),
       getReminders: getIt<GetTasksUseCase>(),
-      completeReminder: getIt<CompleteTaskUseCase>(),
+      completeReminder: getIt<TransitionTaskStatusUseCase>(),
       deleteReminder: getIt<DeleteTaskUseCase>(),
     ),
   );

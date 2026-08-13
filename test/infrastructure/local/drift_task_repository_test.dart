@@ -2,13 +2,15 @@ import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/value_objects/sync_status.dart';
+import 'package:notex/domain/value_objects/task_status.dart';
 import 'package:notex/infrastructure/local/database.dart';
 import 'package:notex/infrastructure/local/drift_task_repository.dart';
 
 /// Characterization tests for [DriftTaskRepository], written BEFORE the
-/// task-tracker rename touches any `lib/` code. `getPending`'s carry-over
-/// query in particular has zero prior coverage and is the exact query the
-/// rename must preserve.
+/// task-tracker rename touches any `lib/` code, extended in Phase 1.4 for
+/// the status-based `getPending`/`getBlocked` rewire (design D3). The
+/// carry-over query in particular had zero prior coverage before this file
+/// was created and is the exact behavior the rename/rewire must preserve.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -19,7 +21,7 @@ void main() {
     required String id,
     String title = 'Task',
     required DateTime scheduledDate,
-    bool isCompleted = false,
+    TaskStatus status = TaskStatus.todo,
     DateTime? completedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -31,7 +33,7 @@ void main() {
       id: id,
       title: title,
       scheduledDate: scheduledDate,
-      isCompleted: isCompleted,
+      status: status,
       completedAt: completedAt,
       createdAt: createdAt ?? _fixedCreatedAt,
       updatedAt: updatedAt ?? _fixedCreatedAt,
@@ -56,7 +58,7 @@ void main() {
         id: 'r1',
         title: 'Buy milk',
         scheduledDate: DateTime(2026, 3, 4, 12),
-        isCompleted: true,
+        status: TaskStatus.done,
         completedAt: DateTime(2026, 3, 3, 9),
         createdAt: DateTime(2026, 1, 1, 8),
         updatedAt: DateTime(2026, 1, 2, 9),
@@ -71,7 +73,8 @@ void main() {
       expect(fetched!.id, task.id);
       expect(fetched.title, task.title);
       expect(fetched.scheduledDate, task.scheduledDate);
-      expect(fetched.isCompleted, task.isCompleted);
+      expect(fetched.status, task.status);
+      expect(fetched.isDone, task.isDone);
       expect(fetched.completedAt, task.completedAt);
       expect(fetched.createdAt, task.createdAt);
       expect(fetched.updatedAt, task.updatedAt);
@@ -167,17 +170,41 @@ void main() {
   });
 
   group('getPending — carry-over invariant', () {
-    test('excludes completed tasks regardless of date', () async {
+    test('excludes done tasks regardless of date', () async {
       await repository.save(buildTask(
         id: 'done',
         scheduledDate: DateTime(2026, 3, 1),
-        isCompleted: true,
+        status: TaskStatus.done,
         completedAt: DateTime(2026, 3, 1),
       ));
 
       final pending = await repository.getPending(DateTime(2026, 3, 10));
 
       expect(pending, isEmpty);
+    });
+
+    test('excludes blocked tasks regardless of date', () async {
+      await repository.save(buildTask(
+        id: 'blocked',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.blocked,
+      ));
+
+      final pending = await repository.getPending(DateTime(2026, 3, 10));
+
+      expect(pending, isEmpty);
+    });
+
+    test('includes doing tasks', () async {
+      await repository.save(buildTask(
+        id: 'doing',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.doing,
+      ));
+
+      final pending = await repository.getPending(DateTime(2026, 3, 10));
+
+      expect(pending.map((r) => r.id), ['doing']);
     });
 
     test('excludes tasks scheduled strictly in the future', () async {
@@ -234,6 +261,48 @@ void main() {
       final pending = await repository.getPending(DateTime(2026, 3, 10));
 
       expect(pending.map((r) => r.id).toList(), ['a', 'b']);
+    });
+  });
+
+  group('getBlocked', () {
+    test('returns only blocked tasks', () async {
+      await repository.save(buildTask(
+        id: 'blocked',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.blocked,
+      ));
+      await repository.save(buildTask(
+        id: 'todo',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.todo,
+      ));
+      await repository.save(buildTask(
+        id: 'doing',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.doing,
+      ));
+      await repository.save(buildTask(
+        id: 'done',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.done,
+      ));
+
+      final blocked = await repository.getBlocked();
+
+      expect(blocked.map((r) => r.id), ['blocked']);
+    });
+
+    test('excludes soft-deleted blocked tasks', () async {
+      await repository.save(buildTask(
+        id: 'blocked-deleted',
+        scheduledDate: DateTime(2026, 3, 1),
+        status: TaskStatus.blocked,
+        deletedAt: DateTime(2026, 3, 2),
+      ));
+
+      final blocked = await repository.getBlocked();
+
+      expect(blocked, isEmpty);
     });
   });
 

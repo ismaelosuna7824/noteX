@@ -196,9 +196,9 @@ class _ReminderPageState extends State<ReminderPage> {
       builder: (context, _) {
         final reminders = _reminderState.reminders;
         final pending =
-            reminders.where((r) => !r.isCompleted).toList();
+            reminders.where((r) => !r.isDone).toList();
         final completed =
-            reminders.where((r) => r.isCompleted).toList();
+            reminders.where((r) => r.isDone).toList();
 
         return Padding(
           padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
@@ -422,7 +422,7 @@ class _ReminderTileState extends State<_ReminderTile> {
       reminder.scheduledDate.month,
       reminder.scheduledDate.day,
     );
-    final isOverdue = !reminder.isCompleted && scheduled.isBefore(today);
+    final isOverdue = !reminder.isDone && scheduled.isBefore(today);
     final isToday = scheduled.isAtSameMomentAs(today);
 
     final itemBg = isDark
@@ -456,8 +456,8 @@ class _ReminderTileState extends State<_ReminderTile> {
                 width: 24,
                 height: 24,
                 child: Checkbox(
-                  value: reminder.isCompleted,
-                  onChanged: reminder.isCompleted
+                  value: reminder.isDone,
+                  onChanged: reminder.isDone
                       ? null
                       : (_) => widget.onComplete(),
                   activeColor: accentColor,
@@ -475,10 +475,10 @@ class _ReminderTileState extends State<_ReminderTile> {
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w500,
-                    decoration: reminder.isCompleted
+                    decoration: reminder.isDone
                         ? TextDecoration.lineThrough
                         : null,
-                    color: reminder.isCompleted
+                    color: reminder.isDone
                         ? (isDark ? Colors.white38 : Colors.grey.shade400)
                         : null,
                   ),

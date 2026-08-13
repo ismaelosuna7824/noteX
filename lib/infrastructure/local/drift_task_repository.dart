@@ -72,11 +72,21 @@ class DriftTaskRepository implements TaskRepository {
               ..where(
                 (t) =>
                     t.deletedAt.isNull() &
-                    t.isCompleted.equals(false) &
+                    t.status.isIn(const ['todo', 'doing']) &
                     t.scheduledDate.isSmallerOrEqualValue(endOfDay),
               )
               ..orderBy([(t) => OrderingTerm.asc(t.scheduledDate)]))
             .get();
+    return rows.map((r) => AppDatabase.taskToDomain(r)).toList();
+  }
+
+  @override
+  Future<List<domain.Task>> getBlocked() async {
+    final rows = await (_db.select(_db.taskEntries)
+          ..where(
+            (t) => t.deletedAt.isNull() & t.status.equals('blocked'),
+          ))
+        .get();
     return rows.map((r) => AppDatabase.taskToDomain(r)).toList();
   }
 }

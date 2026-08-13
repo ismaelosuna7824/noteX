@@ -21,7 +21,11 @@ abstract class TaskRepository {
   /// Retrieve tasks modified since [since].
   Future<List<Task>> getModifiedSince(DateTime since);
 
-  /// Retrieve pending (uncompleted) tasks with scheduledDate <= [upToDate].
+  /// Retrieve pending (todo or doing) tasks with scheduledDate <= [upToDate].
   /// This powers the accumulation logic — overdue tasks carry over.
+  /// Excludes `blocked` and `done` tasks.
   Future<List<Task>> getPending(DateTime upToDate);
+
+  /// Retrieve all non-deleted tasks with status `blocked`.
+  Future<List<Task>> getBlocked();
 }

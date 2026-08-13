@@ -1,24 +1,27 @@
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:notex/application/use_cases/task/complete_task_use_case.dart';
+import 'package:notex/application/use_cases/task/transition_task_status_use_case.dart';
 import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/value_objects/sync_status.dart';
+import 'package:notex/domain/value_objects/task_status.dart';
 import 'package:notex/infrastructure/local/database.dart';
 import 'package:notex/infrastructure/local/drift_task_repository.dart';
 
-/// Characterization tests for [CompleteTaskUseCase], written BEFORE the
-/// task-tracker rename touches any `lib/` code.
+/// [TransitionTaskStatusUseCase] replaces `CompleteTaskUseCase` (design D3 —
+/// it is the sole producer of transition writes). These tests replay the
+/// same behavior [CompleteTaskUseCase] used to cover under its new,
+/// status-based shape.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   late AppDatabase db;
   late DriftTaskRepository repository;
-  late CompleteTaskUseCase useCase;
+  late TransitionTaskStatusUseCase useCase;
 
   setUp(() {
     db = AppDatabase.forTesting(NativeDatabase.memory());
     repository = DriftTaskRepository(db);
-    useCase = CompleteTaskUseCase(repository);
+    useCase = TransitionTaskStatusUseCase(repository);
   });
 
   tearDown(() async {
@@ -26,12 +29,12 @@ void main() {
   });
 
   test('returns null when the task id does not exist', () async {
-    final result = await useCase.execute('missing');
+    final result = await useCase.execute('missing', TaskStatus.done);
 
     expect(result, isNull);
   });
 
-  test('marks an existing task as completed and persists it', () async {
+  test('transitions an existing task and persists it', () async {
     await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
@@ -41,14 +44,15 @@ void main() {
       syncStatus: SyncStatus.synced,
     ));
 
-    final result = await useCase.execute('r1');
+    final result = await useCase.execute('r1', TaskStatus.done);
 
     expect(result, isNotNull);
-    expect(result!.isCompleted, isTrue);
+    expect(result!.status, TaskStatus.done);
+    expect(result.isDone, isTrue);
     expect(result.completedAt, isNotNull);
 
     final persisted = await repository.getById('r1');
-    expect(persisted!.isCompleted, isTrue);
+    expect(persisted!.status, TaskStatus.done);
     expect(persisted.completedAt, isNotNull);
   });
 
@@ -62,12 +66,12 @@ void main() {
       syncStatus: SyncStatus.localOnly,
     ));
 
-    final result = await useCase.execute('r1');
+    final result = await useCase.execute('r1', TaskStatus.done);
 
     expect(result!.syncStatus, SyncStatus.localOnly);
   });
 
-  test('promotes a synced task to pendingSync on completion', () async {
+  test('promotes a synced task to pendingSync on transition', () async {
     await repository.save(Task(
       id: 'r1',
       title: 'Buy milk',
@@ -77,12 +81,29 @@ void main() {
       syncStatus: SyncStatus.synced,
     ));
 
-    final result = await useCase.execute('r1');
+    final result = await useCase.execute('r1', TaskStatus.done);
 
     expect(result!.syncStatus, SyncStatus.pendingSync);
   });
 
-  test('promotes a pendingSync task to pendingSync (stays pending)',
+  test('retains blockedReason when moving from blocked to doing', () async {
+    await repository.save(Task(
+      id: 'r1',
+      title: 'Buy milk',
+      scheduledDate: DateTime(2026, 3, 4),
+      createdAt: DateTime(2026, 1, 1),
+      updatedAt: DateTime(2026, 1, 1),
+      status: TaskStatus.blocked,
+      blockedReason: 'waiting on approval',
+    ));
+
+    final result = await useCase.execute('r1', TaskStatus.doing);
+
+    expect(result!.status, TaskStatus.doing);
+    expect(result.blockedReason, 'waiting on approval');
+  });
+
+  test('sets statusPendingPush so the transition is pushed on next sync',
       () async {
     await repository.save(Task(
       id: 'r1',
@@ -90,11 +111,11 @@ void main() {
       scheduledDate: DateTime(2026, 3, 4),
       createdAt: DateTime(2026, 1, 1),
       updatedAt: DateTime(2026, 1, 1),
-      syncStatus: SyncStatus.pendingSync,
+      syncStatus: SyncStatus.synced,
     ));
 
-    final result = await useCase.execute('r1');
+    final result = await useCase.execute('r1', TaskStatus.done);
 
-    expect(result!.syncStatus, SyncStatus.pendingSync);
+    expect(result!.statusPendingPush, isTrue);
   });
 }

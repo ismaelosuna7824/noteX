@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/task.dart';
+import '../../domain/value_objects/task_status.dart';
 import '../../application/use_cases/task/create_task_use_case.dart';
 import '../../application/use_cases/task/get_tasks_use_case.dart';
-import '../../application/use_cases/task/complete_task_use_case.dart';
+import '../../application/use_cases/task/transition_task_status_use_case.dart';
 import '../../application/use_cases/task/delete_task_use_case.dart';
 
 /// Presentation state for the Reminder feature.
@@ -13,7 +14,7 @@ import '../../application/use_cases/task/delete_task_use_case.dart';
 class ReminderState extends ChangeNotifier {
   final CreateTaskUseCase _createReminder;
   final GetTasksUseCase _getReminders;
-  final CompleteTaskUseCase _completeReminder;
+  final TransitionTaskStatusUseCase _completeReminder;
   final DeleteTaskUseCase _deleteReminder;
 
   List<Task> _reminders = [];
@@ -22,7 +23,7 @@ class ReminderState extends ChangeNotifier {
   ReminderState({
     required CreateTaskUseCase createReminder,
     required GetTasksUseCase getReminders,
-    required CompleteTaskUseCase completeReminder,
+    required TransitionTaskStatusUseCase completeReminder,
     required DeleteTaskUseCase deleteReminder,
   })  : _createReminder = createReminder,
         _getReminders = getReminders,
@@ -64,7 +65,7 @@ class ReminderState extends ChangeNotifier {
 
   /// Mark a reminder as completed.
   Future<void> completeReminder(String id) async {
-    await _completeReminder.execute(id);
+    await _completeReminder.execute(id, TaskStatus.done);
     await refreshReminders();
   }
 

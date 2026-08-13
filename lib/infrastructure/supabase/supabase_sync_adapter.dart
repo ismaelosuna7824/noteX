@@ -19,6 +19,7 @@ import '../../domain/services/sync_service.dart';
 import '../../domain/value_objects/sync_result.dart';
 import '../../domain/value_objects/sync_status.dart';
 import '../local/database.dart';
+import 'task_supabase_mapper.dart';
 
 /// Supabase adapter implementing the SyncService port.
 ///
@@ -234,7 +235,10 @@ class SupabaseSyncAdapter implements SyncService {
   }
 
   Future<void> _pushTask(Task task) async {
-    final data = _taskToMap(task);
+    final data = TaskSupabaseMapper.toMap(
+      task,
+      includeStatusFields: task.statusPendingPush,
+    );
     await _supabase.from('reminders').upsert(data, onConflict: 'id');
   }
 
@@ -712,44 +716,13 @@ class SupabaseSyncAdapter implements SyncService {
     return false;
   }
 
-  // ── Task Serialization ────────────────────────────────────────────
-
-  Map<String, dynamic> _taskToMap(Task t) => {
-        'id': t.id,
-        'user_id': t.userId,
-        'title': t.title,
-        'scheduled_date': t.scheduledDate.toUtc().toIso8601String(),
-        'is_completed': t.isCompleted,
-        'completed_at': t.completedAt?.toUtc().toIso8601String(),
-        'created_at': t.createdAt.toUtc().toIso8601String(),
-        'updated_at': t.updatedAt.toUtc().toIso8601String(),
-        'deleted_at': t.deletedAt?.toUtc().toIso8601String(),
-        'version': t.version,
-        'sync_status': 'synced',
-      };
-
-  Task _mapToTask(Map<String, dynamic> m) => Task(
-        id: m['id'] as String,
-        title: m['title'] as String? ?? '',
-        scheduledDate: DateTime.parse(m['scheduled_date'] as String),
-        isCompleted: m['is_completed'] as bool? ?? false,
-        completedAt: m['completed_at'] != null
-            ? DateTime.parse(m['completed_at'] as String)
-            : null,
-        createdAt: DateTime.parse(m['created_at'] as String),
-        updatedAt: DateTime.parse(m['updated_at'] as String),
-        syncStatus: SyncStatus.synced,
-        version: m['version'] as int? ?? 1,
-        deletedAt: m['deleted_at'] != null
-            ? DateTime.parse(m['deleted_at'] as String)
-            : null,
-        userId: m['user_id'] as String?,
-      );
-
   // ── Task Merge Logic ──────────────────────────────────────────────
+  //
+  // Serialization lives in TaskSupabaseMapper (design D6) — pure static
+  // functions, unit-testable without a live SupabaseClient.
 
   Future<bool> _mergeTask(Map<String, dynamic> remoteData) async {
-    final remote = _mapToTask(remoteData);
+    final remote = TaskSupabaseMapper.fromMap(remoteData);
     final local = await _taskRepo.getById(remote.id);
 
     if (local == null) {

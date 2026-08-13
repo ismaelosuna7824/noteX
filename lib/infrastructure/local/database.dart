@@ -13,6 +13,7 @@ import '../../domain/entities/markdown_project.dart' as domain_mdp;
 import '../../domain/entities/note_project.dart' as domain_np;
 import '../../domain/entities/task.dart' as domain_task;
 import '../../domain/value_objects/sync_status.dart';
+import '../../domain/value_objects/task_status_resolution.dart';
 import 'task_status_migration.dart';
 
 part 'database.g.dart';
@@ -697,12 +698,32 @@ class AppDatabase extends _$AppDatabase {
   // ── Tasks ─────────────────────────────────────────────────────────────
 
   static domain_task.Task taskToDomain(TaskEntry row) {
+    // Local rows are self-consistent (this table is the only writer of
+    // both `status` and `is_completed` locally), so this resolution is a
+    // harmless no-op in practice — it is the same parser used for the
+    // Supabase read path (design D2), applied here for symmetry.
+    final resolution = TaskStatusResolution.fromStorage(
+      row.status,
+      isCompleted: row.isCompleted,
+      completedAt: row.completedAt,
+      statusChangedAt: row.statusChangedAt,
+    );
     return domain_task.Task(
       id: row.id,
       title: row.title,
       scheduledDate: row.scheduledDate,
-      isCompleted: row.isCompleted,
-      completedAt: row.completedAt,
+      status: resolution.status,
+      statusChangedAt: row.statusChangedAt,
+      statusPendingPush: row.statusPendingPush,
+      completedAt: resolution.completedAt,
+      description: row.description,
+      blockedReason: row.blockedReason,
+      noteId: row.noteId,
+      externalProvider: row.externalProvider,
+      externalId: row.externalId,
+      externalUrl: row.externalUrl,
+      externalCachedTitle: row.externalCachedTitle,
+      externalLastSyncedAt: row.externalLastSyncedAt,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       version: row.version,
@@ -717,8 +738,19 @@ class AppDatabase extends _$AppDatabase {
       id: Value(t.id),
       title: Value(t.title),
       scheduledDate: Value(t.scheduledDate),
-      isCompleted: Value(t.isCompleted),
+      isCompleted: Value(t.isDone),
       completedAt: Value(t.completedAt),
+      status: Value(t.status.name),
+      statusChangedAt: Value(t.statusChangedAt),
+      statusPendingPush: Value(t.statusPendingPush),
+      description: Value(t.description),
+      blockedReason: Value(t.blockedReason),
+      noteId: Value(t.noteId),
+      externalProvider: Value(t.externalProvider),
+      externalId: Value(t.externalId),
+      externalUrl: Value(t.externalUrl),
+      externalCachedTitle: Value(t.externalCachedTitle),
+      externalLastSyncedAt: Value(t.externalLastSyncedAt),
       createdAt: Value(t.createdAt),
       updatedAt: Value(t.updatedAt),
       version: Value(t.version),
