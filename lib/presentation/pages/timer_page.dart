@@ -1976,7 +1976,17 @@ class _EntryTile extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+              // Same shape as the task-tracker feature's other
+              // accent-coloured buttons: left unset, foregroundColor
+              // resolves against `colorScheme.onPrimary` (the seed's tonal
+              // primary), not the literal background colour actually
+              // painted — same defect, found in a sweep for it.
+              foregroundColor: Colors.red.shade400.computeLuminance() > 0.5
+                  ? Colors.black
+                  : Colors.white,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),

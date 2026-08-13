@@ -391,4 +391,49 @@ void main() {
       expect(find.text('Task Details'), findsOneWidget);
     });
   });
+
+  group(
+      '"Delete Entry" confirmation button resolves its foreground from its '
+      'own background, not a literal (sweep for the same defect as "New '
+      'Task")', () {
+    testWidgets(
+        "the Delete button's foreground contrasts with its own literal red "
+        'background instead of resolving against the seed-tinted '
+        'onPrimary default', (tester) async {
+      final now = DateTime.now();
+      await timeEntryRepository.save(TimeEntry(
+        id: 'entry-1',
+        description: 'To be deleted',
+        startTime: now.subtract(const Duration(hours: 1)),
+        endTime: now,
+        updatedAt: now,
+      ));
+
+      await pumpTimerPage(tester);
+
+      await tester.tap(find.byIcon(Icons.delete_outline_rounded));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Delete Entry'), findsOneWidget);
+
+      final deleteButton = tester.widget<FilledButton>(
+        find.ancestor(
+          of: find.text('Delete'),
+          matching: find.byType(FilledButton),
+        ),
+      );
+      final background =
+          deleteButton.style?.backgroundColor?.resolve(<WidgetState>{});
+      final expectedForeground =
+          background!.computeLuminance() > 0.5 ? Colors.black : Colors.white;
+
+      expect(
+        deleteButton.style?.foregroundColor?.resolve(<WidgetState>{}),
+        expectedForeground,
+        reason: 'left unset, the label resolves against '
+            "colorScheme.onPrimary (the seed's tonal primary), not the "
+            'literal background colour actually painted',
+      );
+    });
+  });
 }
