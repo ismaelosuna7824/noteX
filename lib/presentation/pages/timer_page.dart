@@ -2089,6 +2089,7 @@ Future<void> _openTaskFromTimeEntry(
     task,
     GetIt.instance<TaskState>(),
     themeState.accentColor,
+    surfaceColor: themeState.editorBgColor,
   );
 }
 
