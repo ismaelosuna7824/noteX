@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:get_it/get_it.dart';
 
 import '../../application/use_cases/task/resolve_task_note_link_use_case.dart';
+import '../../application/use_cases/timer/get_time_entries_use_case.dart';
 import '../../domain/entities/note.dart';
 import '../../domain/entities/task.dart';
+import '../../domain/entities/time_entry.dart';
 import '../../domain/value_objects/note_link_resolution.dart';
 import '../../domain/value_objects/task_status.dart';
 import '../../domain/value_objects/task_transition_outcome.dart';
@@ -621,6 +623,18 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
   final Map<String, NoteLinkResolution> _noteResolutions = {};
   bool _loadingNotes = true;
 
+  // The project this task is assigned to — mirrors the noteIds pattern
+  // above: a local copy updated as the user reassigns it within this
+  // dialog session, so the selector reflects the change immediately
+  // without waiting for a full task reload.
+  late String? _projectId;
+
+  // Every TimeEntry ever linked to this task (running or stopped),
+  // powering "total tracked time" — the settled decision that replaces a
+  // pause/resume affordance this app's data model doesn't support (each
+  // stretch is its own entry; see TimeEntry.stop's doc).
+  List<TimeEntry> _timeEntries = [];
+
   @override
   void initState() {
     super.initState();
@@ -629,7 +643,9 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         TextEditingController(text: widget.task.blockedReason ?? '');
     _description = widget.task.description;
     _noteIds = List<String>.from(widget.task.noteIds);
+    _projectId = widget.task.projectId;
     unawaited(_loadLinkedNotes());
+    unawaited(_loadTimeEntries());
   }
 
   @override
@@ -684,16 +700,31 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  /// Starts a timer linked to this task (design D1's own scenario: "the
-  /// user starts the timer from the board and watches the card"). The task
-  /// write is best-effort — a failure never blocks the timer, and is
-  /// surfaced here as a non-blocking SnackBar rather than swallowed.
+  /// Loads every TimeEntry ever linked to this task, for the "total
+  /// tracked time" figure. Re-run after start/stop so the total (and the
+  /// list a running-entry lookup would otherwise miss) stays current.
+  Future<void> _loadTimeEntries() async {
+    final entries = await GetIt.instance<GetTimeEntriesUseCase>()
+        .getByTaskId(widget.task.id);
+    if (!mounted) return;
+    setState(() => _timeEntries = entries);
+  }
+
+  /// Starts a timer linked to this task, inheriting [_projectId] — the
+  /// task's own assigned project, not the timer bar's draft (settled
+  /// decision: "link con los proyectos del timer"). The task write is
+  /// best-effort — a failure never blocks the timer, and is surfaced here
+  /// as a non-blocking SnackBar rather than swallowed.
+  ///
+  /// Unlike the old one-way "Start timer" button, this no longer pops the
+  /// dialog: the user asked to control the timer FROM here, so the dialog
+  /// stays open to watch and stop it (settled decision).
   Future<void> _startTimer() async {
-    final navigator = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final outcome = await GetIt.instance<TimerState>().startTimer(
       taskId: widget.task.id,
       description: widget.task.title,
+      projectId: _projectId,
     );
     if (!mounted) return;
     if (outcome == TaskTransitionOutcome.failed) {
@@ -705,7 +736,26 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         ),
       );
     }
-    navigator.pop();
+    await _loadTimeEntries();
+  }
+
+  /// Stops the timer running for this task — the "pause" half of the
+  /// control. Ends the current TimeEntry stretch; resuming later starts a
+  /// fresh one rather than reopening this one (settled decision: separate
+  /// stretches record when work actually happened, matching Toggl).
+  Future<void> _stopTimer() async {
+    await GetIt.instance<TimerState>().stopTimer();
+    if (!mounted) return;
+    await _loadTimeEntries();
+  }
+
+  /// Reassigns this task's project — a deliberate edit, never a status
+  /// change (design D3), persisted through [TaskState.setTaskProject]
+  /// rather than [TaskState.updateTask]/`_save` so it takes effect
+  /// immediately, independent of the title/description Save button.
+  Future<void> _assignProject(String? projectId) async {
+    setState(() => _projectId = projectId);
+    await widget.taskState.setTaskProject(widget.task.id, projectId);
   }
 
   /// Opens the note picker and appends the chosen note to this task's
@@ -872,6 +922,100 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
     );
   }
 
+  /// Project selector — "No Project" plus every project [TimerState] knows
+  /// about (settled decision: "link con los proyectos del timer"). Persists
+  /// immediately through [_assignProject]; unlike title/description, a
+  /// project change does not wait for the Save button.
+  ///
+  /// If [_projectId] points at a project [TimerState.projects] doesn't
+  /// carry (soft-deleted — mirrors a trashed linked note's degrade-the-
+  /// display-keep-the-data rule, design D9), a synthetic "Deleted project"
+  /// entry keeps the dropdown's selected value valid instead of throwing on
+  /// Flutter's "exactly one item must match" assertion, or silently
+  /// clearing the reference.
+  Widget _buildProjectSelector(bool isDark) {
+    final timerState = GetIt.instance<TimerState>();
+    final projects = timerState.projects;
+    final isDangling =
+        _projectId != null && timerState.projectForId(_projectId) == null;
+    final mutedColor = isDark ? Colors.white54 : Colors.grey.shade600;
+
+    return Row(
+      children: [
+        Icon(Icons.folder_outlined, size: 15, color: mutedColor),
+        const SizedBox(width: 8),
+        DropdownButton<String?>(
+          value: _projectId,
+          isDense: true,
+          underline: const SizedBox.shrink(),
+          style: TextStyle(fontSize: 12.5, color: mutedColor),
+          onChanged: _assignProject,
+          items: [
+            const DropdownMenuItem<String?>(
+              value: null,
+              child: Text('No Project'),
+            ),
+            if (isDangling)
+              DropdownMenuItem<String?>(
+                value: _projectId,
+                child: const Text('Deleted project'),
+              ),
+            for (final p in projects)
+              DropdownMenuItem<String?>(value: p.id, child: Text(p.name)),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// The timer control — replaces the old one-way "Start timer" button.
+  /// Stateful: shows Start when no timer is running for this task; shows
+  /// live-ticking Stop + the running total when one is (settled decision:
+  /// control the timer from here, don't just fire it and forget it).
+  /// Scoped in its own [ListenableBuilder] so only this small subtree
+  /// rebuilds every second a timer runs anywhere, driven by
+  /// [TimerState]'s own ticker.
+  Widget _buildTimerControl(bool isDark) {
+    return ListenableBuilder(
+      listenable: GetIt.instance<TimerState>(),
+      builder: (context, _) {
+        final timerState = GetIt.instance<TimerState>();
+        final runningEntry = timerState.runningEntry;
+        final isRunningHere =
+            runningEntry != null && runningEntry.taskId == widget.task.id;
+        // Every entry's own elapsed getter is already live for a running
+        // entry ((endTime ?? now) - startTime), so this total ticks along
+        // with the rebuild this ListenableBuilder triggers — no separate
+        // "add the live delta" branch needed.
+        final total = _timeEntries.fold(
+          Duration.zero,
+          (Duration acc, e) => acc + e.elapsed,
+        );
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextButton.icon(
+              onPressed: isRunningHere ? _stopTimer : _startTimer,
+              icon: Icon(
+                isRunningHere ? Icons.stop_rounded : Icons.play_arrow_rounded,
+                size: 18,
+              ),
+              label: Text(isRunningHere ? 'Stop' : 'Start timer'),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Total: ${_formatCardElapsed(total)}',
+              style: TextStyle(
+                fontSize: 11,
+                color: isDark ? Colors.white54 : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -893,6 +1037,8 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            _buildProjectSelector(isDark),
+            const SizedBox(height: 8),
             _buildLinkedNotesSection(isDark),
             const SizedBox(height: 12),
             if (isBlocked) ...[
@@ -928,11 +1074,7 @@ class _TaskDetailDialogState extends State<_TaskDetailDialog> {
       ),
       actionsAlignment: MainAxisAlignment.spaceBetween,
       actions: [
-        TextButton.icon(
-          onPressed: _startTimer,
-          icon: const Icon(Icons.play_arrow_rounded, size: 18),
-          label: const Text('Start timer'),
-        ),
+        _buildTimerControl(isDark),
         Row(
           mainAxisSize: MainAxisSize.min,
           children: [

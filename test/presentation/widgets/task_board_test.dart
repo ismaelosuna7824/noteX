@@ -36,6 +36,7 @@ import 'package:notex/application/use_cases/timer/stop_timer_use_case.dart';
 import 'package:notex/application/use_cases/timer/update_time_entry_use_case.dart';
 import 'package:notex/application/use_cases/update_note_use_case.dart';
 import 'package:notex/domain/entities/note.dart';
+import 'package:notex/domain/entities/project.dart';
 import 'package:notex/domain/entities/task.dart';
 import 'package:notex/domain/repositories/auth_repository.dart';
 import 'package:notex/domain/services/connectivity_service.dart';
@@ -148,6 +149,7 @@ void main() {
   late DriftNoteRepository noteRepository;
   late AppState appState;
   late DriftTimeEntryRepository timeEntryRepository;
+  late DriftProjectRepository projectRepository;
   late TimerState timerState;
 
   setUp(() {
@@ -222,7 +224,7 @@ void main() {
     // button's onPressed and the failure would surface as a widget-test
     // error instead of a silent no-op click.
     timeEntryRepository = DriftTimeEntryRepository(db);
-    final projectRepository = DriftProjectRepository(db);
+    projectRepository = DriftProjectRepository(db);
     timerState = TimerState(
       createProject: CreateProjectUseCase(projectRepository),
       getProjects: GetProjectsUseCase(projectRepository),
@@ -239,6 +241,15 @@ void main() {
       logEntry: LogTimeEntryUseCase(timeEntryRepository),
     );
     GetIt.instance.registerSingleton<TimerState>(timerState);
+
+    // The task detail dialog's "total tracked time" figure
+    // (_TaskDetailDialog._loadTimeEntries) resolves
+    // GetIt.instance<GetTimeEntriesUseCase>().getByTaskId(...) — a REAL
+    // instance over the same in-memory database, mirroring every other
+    // GetIt.instance<UseCase>() call site in this dialog.
+    GetIt.instance.registerSingleton<GetTimeEntriesUseCase>(
+      GetTimeEntriesUseCase(timeEntryRepository),
+    );
   });
 
   tearDown(() async {
@@ -742,10 +753,12 @@ void main() {
     });
   });
 
-  group('"Start timer" button in the task detail dialog — bug report', () {
+  group('"Start timer" / "Stop" control in the task detail dialog', () {
     testWidgets(
         'tapping "Start timer" persists a running TimeEntry linked to the '
-        'task and transitions the task to doing', (tester) async {
+        'task, transitions the task to doing, and keeps the dialog open '
+        'showing "Stop" — controlling the timer from here, not '
+        'fire-and-forget', (tester) async {
       await repository.save(Task.create(id: 'r1', title: 'Track me'));
       await taskState.initialize();
       await pumpBoard(tester);
@@ -770,12 +783,16 @@ void main() {
       final persisted = await repository.getById('r1');
       expect(persisted!.status, TaskStatus.doing);
 
-      // The dialog closes on success (per _startTimer's implementation).
+      // The dialog stays open — settled decision: the user asked to
+      // control the timer from here, so the dialog no longer pops on
+      // start; the control itself switches to "Stop".
+      expect(find.text('Stop'), findsOneWidget);
       expect(find.text('Start timer'), findsNothing);
 
-      // Feedback gap fix: the board card itself must now show a running
-      // timer indicator — closing the "the dialog just closes and the user
-      // has no way to know a clock started" gap named in this bug report.
+      // Feedback gap fix retained: the board card itself also shows a
+      // running timer indicator — closing the "the dialog just closes and
+      // the user has no way to know a clock started" gap named in the
+      // original bug report.
       expect(
         find.byIcon(Icons.timer_rounded),
         findsOneWidget,
@@ -783,10 +800,174 @@ void main() {
             'the timer starts',
       );
 
-      // TimerState owns a real periodic Timer once a timer is running (see
-      // _startTicker) — stop it before the test ends so the widget test
-      // binding doesn't flag a pending timer.
       await timerState.stopTimer();
+    });
+
+    testWidgets(
+        'tapping "Stop" ends the running entry and switches the control '
+        'back to "Start timer"', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Track me'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Track me'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start timer'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Stop'), findsOneWidget);
+
+      await tester.tap(find.text('Stop'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Start timer'), findsOneWidget);
+      expect(find.text('Stop'), findsNothing);
+
+      final running = await timeEntryRepository.getRunning();
+      expect(running, isNull, reason: '"Stop" must end the running entry');
+    });
+
+    testWidgets(
+        'total tracked time accumulates across multiple start/stop '
+        'stretches, not just the currently running one', (tester) async {
+      await repository.save(Task.create(id: 'r1', title: 'Multi session'));
+      await taskState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Multi session'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Start timer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stop'));
+      await tester.pumpAndSettle();
+
+      var entries = await timeEntryRepository.getByTaskId('r1');
+      expect(entries, hasLength(1));
+      expect(entries.single.isRunning, isFalse);
+
+      await tester.tap(find.text('Start timer'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Stop'));
+      await tester.pumpAndSettle();
+
+      // Two separate stretches persisted, not one entry overwritten —
+      // "pause" in this app means starting a fresh TimeEntry, never
+      // collapsing gaps into one fictitious span (settled decision).
+      entries = await timeEntryRepository.getByTaskId('r1');
+      expect(entries, hasLength(2));
+      expect(entries.every((e) => !e.isRunning), isTrue);
+
+      // The dialog surfaces a running total reflecting every stretch — the
+      // exact duration is untestable without a controllable clock (named,
+      // not faked, matching this suite's own established convention), but
+      // the label itself must be present and must have re-rendered after
+      // the second stretch was persisted.
+      expect(find.textContaining('Total'), findsOneWidget);
+    });
+  });
+
+  group('task <-> timer project link', () {
+    testWidgets(
+        'starting a timer from the dialog persists the entry with the '
+        "task's assigned project — inherits it, doesn't use the timer "
+        "bar's own draft project", (tester) async {
+      await projectRepository.save(Project(
+        id: 'proj-1',
+        name: 'Client work',
+        colorValue: 0xFF00FF00,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await repository.save(
+        Task.create(id: 'r1', title: 'Track me').copyWith(
+          projectId: 'proj-1',
+        ),
+      );
+      await taskState.initialize();
+      await timerState.initialize();
+      // The draft bar has its own, different project selected — proving
+      // the entry inherits the TASK's project, not the draft's.
+      timerState.setDraftProject('some-other-draft-project');
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Track me'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Start timer'));
+      await tester.pumpAndSettle();
+
+      final running = await timeEntryRepository.getRunning();
+      expect(running!.projectId, 'proj-1');
+
+      await timerState.stopTimer();
+    });
+
+    testWidgets(
+        'a task pointing at a deleted project still opens its dialog '
+        'without crashing, degrading the display rather than breaking it',
+        (tester) async {
+      final deletedProject = Project(
+        id: 'proj-gone',
+        name: 'Old client',
+        colorValue: 0xFF0000FF,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ).markDeleted();
+      await projectRepository.save(deletedProject);
+      await repository.save(
+        Task.create(id: 'r1', title: 'Orphaned project task').copyWith(
+          projectId: 'proj-gone',
+        ),
+      );
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      // Must render the board and open the dialog without throwing.
+      expect(find.text('Orphaned project task'), findsOneWidget);
+      await tester.tap(find.text('Orphaned project task'));
+      await tester.pumpAndSettle();
+
+      // Degrades the display, keeps the data — mirrors the trashed-note
+      // affordance precedent — rather than clearing the dangling link or
+      // crashing the dropdown.
+      expect(find.textContaining('Deleted project'), findsOneWidget);
+      final persisted = await repository.getById('r1');
+      expect(persisted!.projectId, 'proj-gone',
+          reason: 'a since-deleted project reference must not be silently '
+              'cleared');
+    });
+
+    testWidgets(
+        'picking a project from the selector persists it onto the task '
+        'without touching status', (tester) async {
+      await projectRepository.save(Project(
+        id: 'proj-1',
+        name: 'Client work',
+        colorValue: 0xFF00FF00,
+        createdAt: DateTime(2026, 1, 1),
+        updatedAt: DateTime(2026, 1, 1),
+      ));
+      await repository.save(Task.create(id: 'r1', title: 'Unassigned task'));
+      await taskState.initialize();
+      await timerState.initialize();
+      await pumpBoard(tester);
+
+      await tester.tap(find.text('Unassigned task'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byType(DropdownButton<String?>));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Client work').last);
+      await tester.pumpAndSettle();
+
+      final persisted = await repository.getById('r1');
+      expect(persisted!.projectId, 'proj-1');
+      expect(
+        persisted.status,
+        TaskStatus.todo,
+        reason: 'a project change must never touch status (design D3)',
+      );
     });
   });
 
