@@ -199,17 +199,23 @@ class TimerState extends ChangeNotifier {
   /// — including from `blocked` — as a best-effort side effect (design D1).
   /// [description] overrides the draft bar's description without consuming
   /// it, so starting a timer from elsewhere (e.g. a task card) never clears
-  /// what the user was typing in the timer bar. Returns the task-transition
-  /// outcome so callers can surface a non-blocking error on [failed]
-  /// (design D1 — never thrown, never silently swallowed).
+  /// what the user was typing in the timer bar. [projectId] overrides the
+  /// draft bar's project the same way — omit to use the draft bar's
+  /// project as before; pass a value (including `null`, for "No Project")
+  /// to inherit a specific project, e.g. the linked task's own project, so
+  /// tracked time started from a task lands in that task's project. Returns
+  /// the task-transition outcome so callers can surface a non-blocking
+  /// error on [failed] (design D1 — never thrown, never silently
+  /// swallowed).
   Future<TaskTransitionOutcome> startTimer({
     String? taskId,
     String? description,
+    Object? projectId = const _Unset(),
   }) async {
     final result = await _startTimer.execute(
       id: const Uuid().v4(),
       description: description ?? _draftDescription,
-      projectId: _draftProjectId,
+      projectId: projectId is _Unset ? _draftProjectId : projectId as String?,
       taskId: taskId,
     );
     _runningEntry = result.entry;

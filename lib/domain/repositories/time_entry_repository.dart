@@ -18,6 +18,11 @@ abstract class TimeEntryRepository {
   /// All non-deleted entries belonging to a given [projectId].
   Future<List<TimeEntry>> getByProjectId(String projectId);
 
+  /// All non-deleted entries linked to a given [taskId] — every stretch of
+  /// tracked time ever recorded against that task, powering the task
+  /// detail dialog's "total tracked time" figure.
+  Future<List<TimeEntry>> getByTaskId(String taskId);
+
   Future<void> save(TimeEntry entry); // insert or update
   Future<void> delete(String id);
 
