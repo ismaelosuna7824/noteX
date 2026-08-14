@@ -12,6 +12,7 @@ import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import '../utils/app_shortcuts.dart';
 import '../utils/timer_shortcut.dart';
+import '../widgets/shortcuts_help_sheet.dart';
 import '../widgets/sidebar.dart';
 import '../widgets/task_board.dart' show showAddTaskDialog;
 import '../widgets/top_bar.dart';
@@ -365,8 +366,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
   }
 
   void _handleShowShortcutsHelp() {
-    // TODO(shortcuts-help-sheet): wire the Cmd/Ctrl+/ help sheet — landing
-    // in the next commit.
+    showShortcutsHelpSheet(context, widget.themeState);
   }
 
   @override
