@@ -90,6 +90,11 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
   drift_dev: ^2.22.1
+  # Already resolved transitively via drift/sqlite3_flutter_libs. Direct dev
+  # dependency (like `markdown` above) so migration-ladder tests can open a
+  # raw sqlite3 database and hand it to `NativeDatabase.opened(...)` without
+  # the depend_on_referenced_packages lint. Pinned to the resolved version.
+  sqlite3: 2.9.4
   build_runner: ^2.4.14
   flutter_launcher_icons: ^0.14.3
   flutter_native_splash: ^2.4.7

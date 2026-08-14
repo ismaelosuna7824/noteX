@@ -290,7 +290,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 21;
+  int get schemaVersion => 22;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -473,23 +473,31 @@ class AppDatabase extends _$AppDatabase {
 
         await backfillTaskStatus(this);
       }
+      // v19 is DELIBERATELY a no-op. It originally relaxed `scheduled_date`
+      // from NOT NULL to nullable via `Migrator.alterTable`, which rebuilds
+      // the table by copying every column of the CURRENT Dart definition —
+      // not just the columns the table had at the time this block runs
+      // (see `Migrator.alterTable`'s `INSERT INTO tmp (...) SELECT (...)
+      // FROM reminders`, which iterates `table.$columns`, i.e. today's
+      // schema). By the time `noteIds` (v20) and `projectId` (v21) existed
+      // in the Dart definition, a client jumping straight from v17 to v21+
+      // ran this block against a physical `reminders` table that did not
+      // have those columns yet, and the rebuild's SELECT referenced
+      // `note_ids`/`project_id` on a table that lacked them — production
+      // incident: v1.60.0 → v1.61.0 upgrades hit
+      // `SqliteException: no such column: "note_ids"` and the app never
+      // opened (v1.61.1 hotfix).
+      //
+      // The rebuild itself is NOT wrong — it is REQUIRED, because SQLite has
+      // no `ALTER COLUMN` and this ladder is not transactional (design D5
+      // "transaction correction"), so it must stay the ONLY statement in
+      // whichever block runs it. It just cannot run here, where later
+      // columns may not exist yet. It now runs once, at the END of the
+      // ladder (`if (from < 22)` below), after every column it could
+      // possibly need to copy is guaranteed to exist. Do NOT restore a
+      // rebuild in this block.
       if (from < 19) {
-        // Relaxes `scheduled_date` from NOT NULL to nullable so a task can
-        // live in the backlog (design D5 / M9). SQLite has no
-        // `ALTER COLUMN`, so this requires a full table rebuild via
-        // `Migrator.alterTable`.
-        //
-        // This is the ONLY statement in this block, deliberately. Unlike
-        // the rest of this ladder, `alterTable` runs inside its OWN
-        // transaction (see `Migrator.alterTable`) — the ladder itself is
-        // NOT transactional (design D5 "transaction correction"). Anything
-        // else placed here would run outside that protection.
-        //
-        // `alterTable`/`TableMigration` are drift's own documented mechanism
-        // for a NOT NULL relaxation table rebuild — currently marked
-        // `@experimental` upstream, not a sign this call site is unstable.
-        // ignore: experimental_member_use
-        await m.alterTable(TableMigration(taskEntries));
+        // Intentionally empty — see comment above.
       }
       if (from < 20) {
         Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
@@ -522,6 +530,36 @@ class AppDatabase extends _$AppDatabase {
         // backfill — every existing row simply reads back with
         // projectId == null ("No Project"), the same default new rows get.
         await safeAddColumn(taskEntries, taskEntries.projectId);
+      }
+      if (from < 22) {
+        // Relaxes `scheduled_date` from NOT NULL to nullable so a task can
+        // live in the backlog (design D5 / M9). SQLite has no
+        // `ALTER COLUMN`, so this requires a full table rebuild via
+        // `Migrator.alterTable`.
+        //
+        // Moved here (was originally v19 — see the `if (from < 19)` comment
+        // above for the incident this caused) so that every column the
+        // rebuild's SELECT can reference — including `note_ids` (v20) and
+        // `project_id` (v21) — is guaranteed to already exist on the
+        // physical table by the time this runs, regardless of which
+        // version a client is upgrading from.
+        //
+        // This is the ONLY statement in this block, deliberately, same
+        // reasoning as the original v19 block: `alterTable` runs inside its
+        // OWN transaction (see `Migrator.alterTable`) — the ladder itself is
+        // NOT transactional (design D5 "transaction correction"). Anything
+        // else placed here would run outside that protection.
+        //
+        // Also runs harmlessly for a client already at v21 (whose
+        // `scheduled_date` was already relaxed by the original v19 before
+        // this fix, and whose `note_ids`/`project_id` already exist): the
+        // rebuild just recreates the same shape with the same data.
+        //
+        // `alterTable`/`TableMigration` are drift's own documented mechanism
+        // for a NOT NULL relaxation table rebuild — currently marked
+        // `@experimental` upstream, not a sign this call site is unstable.
+        // ignore: experimental_member_use
+        await m.alterTable(TableMigration(taskEntries));
       }
     },
   );
