@@ -25,14 +25,18 @@ SingleActivator primaryActivator(LogicalKeyboardKey key, {bool shift = false}) {
   );
 }
 
-/// How many leading visible sidebar sections get a numeric jump shortcut
-/// (Cmd/Ctrl+1..8). The settled shortcut set only defines 1-8; if the
-/// sidebar ever shows more sections than this, the extra ones simply have
-/// no numeric shortcut yet — see [Sidebar.visiblePageIndices] for the full
-/// list actually rendered.
-const int kNumberedSectionShortcutCount = 8;
+/// How many leading visible sidebar sections get a numeric jump shortcut.
+/// If the sidebar ever shows more sections than this, the extra ones simply
+/// have no numeric shortcut — see [Sidebar.visiblePageIndices] for the full
+/// list actually rendered, and [kSectionDigitKeys] for the keys used.
+const int kNumberedSectionShortcutCount = 9;
 
-const List<LogicalKeyboardKey> _digitKeys = [
+/// The digit keys backing the numeric section shortcuts, in order.
+///
+/// Public so tests drive the real list instead of keeping their own copy —
+/// a hand-copied list here silently went out of range the first time the
+/// shortcut count changed.
+const List<LogicalKeyboardKey> kSectionDigitKeys = [
   LogicalKeyboardKey.digit1,
   LogicalKeyboardKey.digit2,
   LogicalKeyboardKey.digit3,
@@ -41,6 +45,7 @@ const List<LogicalKeyboardKey> _digitKeys = [
   LogicalKeyboardKey.digit6,
   LogicalKeyboardKey.digit7,
   LogicalKeyboardKey.digit8,
+  LogicalKeyboardKey.digit9,
 ];
 
 // ─── Intents ────────────────────────────────────────────────────────────────
@@ -115,10 +120,9 @@ class _ContextCallbackAction<T extends Intent> extends ContextAction<T> {
   }
 }
 
-/// App-wide keyboard shortcuts: sidebar navigation, note/task creation, the
-/// timer toggle, search, the shortcuts help sheet, and zen mode (F11 /
-/// Escape) — the single [Shortcuts]/[Actions] layer for the whole desktop
-/// app shell.
+/// App-wide keyboard shortcuts: sidebar navigation, note/task creation,
+/// search, the shortcuts help sheet, and zen mode (F11 / Escape) — the
+/// single [Shortcuts]/[Actions] layer for the whole desktop app shell.
 ///
 /// This absorbs the app-wide keyboard mechanism that used to live directly
 /// in `AppShell` (a `Focus.onKeyEvent` handling F11/Escape): every app-wide
@@ -177,7 +181,7 @@ class AppShortcuts extends StatelessWidget {
     return Shortcuts(
       shortcuts: {
         for (var i = 1; i <= sectionCount; i++)
-          primaryActivator(_digitKeys[i - 1]):
+          primaryActivator(kSectionDigitKeys[i - 1]):
               NavigateToVisibleSectionIntent(i),
         primaryActivator(LogicalKeyboardKey.keyN): const NewNoteIntent(),
         primaryActivator(LogicalKeyboardKey.keyN, shift: true):

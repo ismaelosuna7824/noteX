@@ -151,17 +151,6 @@ void main() {
     );
   }
 
-  const digitKeys = [
-    LogicalKeyboardKey.digit1,
-    LogicalKeyboardKey.digit2,
-    LogicalKeyboardKey.digit3,
-    LogicalKeyboardKey.digit4,
-    LogicalKeyboardKey.digit5,
-    LogicalKeyboardKey.digit6,
-    LogicalKeyboardKey.digit7,
-    LogicalKeyboardKey.digit8,
-  ];
-
   group('numeric section shortcuts', () {
     testWidgets(
         'each numeric shortcut opens the section the sidebar shows in that '
@@ -179,7 +168,7 @@ void main() {
 
       for (var i = 0; i < kNumberedSectionShortcutCount; i++) {
         await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
-        await tester.sendKeyEvent(digitKeys[i]);
+        await tester.sendKeyEvent(kSectionDigitKeys[i]);
         await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
         await tester.pumpAndSettle();
 
