@@ -20,6 +20,7 @@ import '../../infrastructure/config/app_config.dart';
 import '../../infrastructure/services/background_downloader.dart';
 import 'auth_dialog.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/shortcuts_help_sheet.dart';
 
 /// Settings page for theme, font, background, and auth management.
 ///
@@ -979,6 +980,16 @@ class _SettingsPageState extends State<SettingsPage> {
                             ),
                           ],
                         ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Keyboard Shortcuts
+                      _buildKeyboardShortcutsSection(
+                        context,
+                        isDark,
+                        accentColor,
+                        mutedText,
                       ),
       ],
     );
@@ -2147,6 +2158,33 @@ class _SettingsPageState extends State<SettingsPage> {
           const SizedBox(height: 16),
           child,
         ],
+      ),
+    );
+  }
+
+  /// "Keyboard Shortcuts" section — makes the app-wide shortcut list
+  /// discoverable on-screen instead of only via Cmd/Ctrl+/.
+  ///
+  /// Purely informational (no interaction), so it uses `_buildSection`
+  /// as-is with no `Material`/`ListTile` wrapping needed. Renders through
+  /// `KeyboardShortcutsList`, which reads the same `buildShortcutEntries()`
+  /// the ⌘/ help sheet reads — this is the single shared definition; see
+  /// `shortcuts_help_sheet.dart` for the shortcut list itself.
+  Widget _buildKeyboardShortcutsSection(
+    BuildContext context,
+    bool isDark,
+    Color accentColor,
+    Color mutedText,
+  ) {
+    return _buildSection(
+      context,
+      isDark: isDark,
+      title: 'Keyboard Shortcuts',
+      icon: Icons.keyboard_rounded,
+      accentColor: accentColor,
+      child: KeyboardShortcutsList(
+        accentColor: accentColor,
+        descriptionColor: mutedText,
       ),
     );
   }
