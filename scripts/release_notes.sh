@@ -15,6 +15,19 @@ previous="${2:-$(git describe --tags --abbrev=0 "${current}^" 2>/dev/null || tru
 
 range="${previous:+$previous..}$current"
 
+# An optional hand-written summary, prepended above the generated lists.
+#
+# The generated lists are faithful to the commits but describe the work, not
+# the release: a reader who just downloaded the app learns that an internal
+# widget gained a parameter, not that the app now tracks tasks. For a release
+# that is worth explaining, drop a Markdown file at release_notes/<tag>.md and
+# it goes on top. Releases without one keep the previous behaviour exactly.
+summary="release_notes/${current}.md"
+if [ -f "$summary" ]; then
+  cat "$summary"
+  printf '\n'
+fi
+
 # Subjects only, and no merges: a merge commit repeats what its children
 # already say.
 subjects=$(git log --no-merges --pretty=format:'%s' "$range")
