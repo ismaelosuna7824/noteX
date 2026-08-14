@@ -29,12 +29,19 @@ void main() {
     await pumpAndOpen(tester, ThemeState());
 
     expect(find.text('Keyboard Shortcuts'), findsOneWidget);
-    expect(find.text('Jump to a sidebar section'), findsOneWidget);
-    expect(find.text('New note'), findsOneWidget);
-    expect(find.text('New task'), findsOneWidget);
-    expect(find.text('Start / stop the timer'), findsOneWidget);
-    expect(find.text('Search'), findsOneWidget);
-    expect(find.text('Show this shortcuts list'), findsOneWidget);
+
+    // Driven by the shared definition rather than a hardcoded copy: adding
+    // or removing a shortcut updates this assertion automatically, so the
+    // sheet and the list can never drift apart. A hardcoded list here had
+    // to be edited by hand every time the set changed, which is exactly the
+    // duplication `buildShortcutEntries()` exists to prevent.
+    for (final entry in buildShortcutEntries()) {
+      expect(
+        find.text(entry.description),
+        findsOneWidget,
+        reason: 'the help sheet must list "${entry.description}"',
+      );
+    }
   });
 
   testWidgets('shows the Cmd glyph on macOS', (tester) async {

@@ -34,7 +34,6 @@ List<ShortcutEntry> buildShortcutEntries() {
     ),
     ShortcutEntry('$mod+N', 'New note'),
     ShortcutEntry('$mod+Shift+N', 'New task'),
-    ShortcutEntry('$mod+Shift+T', 'Start / stop the timer'),
     ShortcutEntry('$mod+K', 'Search'),
     ShortcutEntry('$mod+/', 'Show this shortcuts list'),
   ];

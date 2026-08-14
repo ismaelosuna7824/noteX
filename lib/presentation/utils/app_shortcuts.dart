@@ -62,10 +62,6 @@ class NewTaskIntent extends Intent {
   const NewTaskIntent();
 }
 
-class ToggleTimerIntent extends Intent {
-  const ToggleTimerIntent();
-}
-
 class FocusSearchIntent extends Intent {
   const FocusSearchIntent();
 }
@@ -154,7 +150,6 @@ class AppShortcuts extends StatelessWidget {
     required this.child,
     required this.onNewNote,
     required this.onNewTask,
-    required this.onToggleTimer,
     required this.onSearch,
     required this.onShowHelp,
   });
@@ -167,7 +162,6 @@ class AppShortcuts extends StatelessWidget {
   /// context sits above the `Navigator`, so the framework-supplied
   /// invocation context (see [_ContextCallbackAction]) is used instead.
   final void Function(BuildContext context) onNewTask;
-  final VoidCallback onToggleTimer;
   final VoidCallback onSearch;
 
   /// Needs a real dialog-capable [BuildContext] — see [onNewTask].
@@ -188,8 +182,6 @@ class AppShortcuts extends StatelessWidget {
         primaryActivator(LogicalKeyboardKey.keyN): const NewNoteIntent(),
         primaryActivator(LogicalKeyboardKey.keyN, shift: true):
             const NewTaskIntent(),
-        primaryActivator(LogicalKeyboardKey.keyT, shift: true):
-            const ToggleTimerIntent(),
         primaryActivator(LogicalKeyboardKey.keyK): const FocusSearchIntent(),
         primaryActivator(LogicalKeyboardKey.slash):
             const ShowShortcutsHelpIntent(),
@@ -218,12 +210,6 @@ class AppShortcuts extends StatelessWidget {
             },
           ),
           NewTaskIntent: _ContextCallbackAction<NewTaskIntent>(onNewTask),
-          ToggleTimerIntent: CallbackAction<ToggleTimerIntent>(
-            onInvoke: (_) {
-              onToggleTimer();
-              return null;
-            },
-          ),
           FocusSearchIntent: CallbackAction<FocusSearchIntent>(
             onInvoke: (_) {
               onSearch();

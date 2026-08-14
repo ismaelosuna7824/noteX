@@ -8,10 +8,8 @@ import 'pages/splash_screen.dart';
 import 'state/app_state.dart';
 import 'state/task_state.dart';
 import 'state/theme_state.dart';
-import 'state/timer_state.dart';
 import 'utils/app_shortcuts.dart';
 import 'utils/platform_utils.dart';
-import 'utils/timer_shortcut.dart';
 import 'widgets/shortcuts_help_sheet.dart';
 import 'widgets/task_board.dart' show showAddTaskDialog;
 import 'widgets/top_bar.dart' show TopBarState;
@@ -70,10 +68,6 @@ class _NoteXAppState extends State<NoteXApp> {
     showAddTaskDialog(context, getIt<TaskState>(), widget.themeState);
   }
 
-  void _handleToggleTimer() {
-    toggleRunningTimer(getIt<TimerState>());
-  }
-
   void _handleSearch() {
     _topBarKey.currentState?.requestSearchFocus();
   }
@@ -112,7 +106,6 @@ class _NoteXAppState extends State<NoteXApp> {
               appState: widget.appState,
               onNewNote: _handleNewNote,
               onNewTask: _handleNewTask,
-              onToggleTimer: _handleToggleTimer,
               onSearch: _handleSearch,
               onShowHelp: _handleShowShortcutsHelp,
               child: child!,

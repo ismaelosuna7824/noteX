@@ -129,7 +129,6 @@ void main() {
     WidgetTester tester, {
     VoidCallback? onNewNote,
     void Function(BuildContext context)? onNewTask,
-    VoidCallback? onToggleTimer,
     VoidCallback? onSearch,
     void Function(BuildContext context)? onShowHelp,
   }) {
@@ -140,7 +139,6 @@ void main() {
             appState: appState,
             onNewNote: onNewNote ?? () {},
             onNewTask: onNewTask ?? (_) {},
-            onToggleTimer: onToggleTimer ?? () {},
             onSearch: onSearch ?? () {},
             onShowHelp: onShowHelp ?? (_) {},
             // Same shape as AppShell's own wiring: a real autofocus Focus
@@ -243,21 +241,6 @@ void main() {
     expect(called, isTrue);
   });
 
-  testWidgets('Ctrl+Shift+T fires the toggle-timer action', (tester) async {
-    var called = false;
-    await pumpShortcuts(tester, onToggleTimer: () => called = true);
-    await tester.pump();
-
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.shift);
-    await tester.sendKeyEvent(LogicalKeyboardKey.keyT);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.shift);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
-    await tester.pump();
-
-    expect(called, isTrue);
-  });
-
   testWidgets('Ctrl+K fires the search action', (tester) async {
     var called = false;
     await pumpShortcuts(tester, onSearch: () => called = true);
@@ -345,7 +328,6 @@ void main() {
               appState: appState,
               onNewNote: () => called = true,
               onNewTask: (_) {},
-              onToggleTimer: () {},
               onSearch: () {},
               onShowHelp: (_) {},
               child: const Focus(autofocus: true, child: SizedBox.expand()),
@@ -390,7 +372,6 @@ void main() {
             appState: appState,
             onNewNote: () => called = true,
             onNewTask: (_) {},
-            onToggleTimer: () {},
             onSearch: () {},
             onShowHelp: (_) {},
             child: child!,
@@ -432,7 +413,6 @@ void main() {
             appState: appState,
             onNewNote: () => called = true,
             onNewTask: (_) {},
-            onToggleTimer: () {},
             onSearch: () {},
             onShowHelp: (_) {},
             child: child!,
@@ -467,7 +447,6 @@ void main() {
             appState: appState,
             onNewNote: () {},
             onNewTask: (_) {},
-            onToggleTimer: () {},
             onSearch: () {},
             onShowHelp: (_) {},
             child: child!,
@@ -514,7 +493,6 @@ void main() {
               appState: appState,
               onNewNote: () => newNoteCalled = true,
               onNewTask: (_) {},
-              onToggleTimer: () {},
               onSearch: () => searchCalled = true,
               onShowHelp: (_) {},
               child: TextField(controller: controller, autofocus: true),
