@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -126,10 +128,10 @@ void main() {
   Future<void> pumpShortcuts(
     WidgetTester tester, {
     VoidCallback? onNewNote,
-    VoidCallback? onNewTask,
+    void Function(BuildContext context)? onNewTask,
     VoidCallback? onToggleTimer,
     VoidCallback? onSearch,
-    VoidCallback? onShowHelp,
+    void Function(BuildContext context)? onShowHelp,
   }) {
     return tester.pumpWidget(
       MaterialApp(
@@ -137,10 +139,10 @@ void main() {
           body: AppShortcuts(
             appState: appState,
             onNewNote: onNewNote ?? () {},
-            onNewTask: onNewTask ?? () {},
+            onNewTask: onNewTask ?? (_) {},
             onToggleTimer: onToggleTimer ?? () {},
             onSearch: onSearch ?? () {},
-            onShowHelp: onShowHelp ?? () {},
+            onShowHelp: onShowHelp ?? (_) {},
             // Same shape as AppShell's own wiring: a real autofocus Focus
             // node below AppShortcuts so a key event always has somewhere
             // to start bubbling from, without tapping anything first.
@@ -228,7 +230,7 @@ void main() {
 
   testWidgets('Ctrl+Shift+N fires the new-task action', (tester) async {
     var called = false;
-    await pumpShortcuts(tester, onNewTask: () => called = true);
+    await pumpShortcuts(tester, onNewTask: (_) => called = true);
     await tester.pump();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
@@ -271,7 +273,7 @@ void main() {
 
   testWidgets('Ctrl+/ fires the show-help action', (tester) async {
     var called = false;
-    await pumpShortcuts(tester, onShowHelp: () => called = true);
+    await pumpShortcuts(tester, onShowHelp: (_) => called = true);
     await tester.pump();
 
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
@@ -309,6 +311,193 @@ void main() {
     expect(appState.isZenMode, isFalse);
   });
 
+  group('focus-tree placement — the real app bug this file guards against',
+      () {
+    // These reproduce the actual production bug: `AppShortcuts` used to be
+    // mounted inside `AppShell` (a descendant of `MaterialApp`'s `home`
+    // route), not above `MaterialApp`'s `Navigator`. `Shortcuts` dispatches
+    // by walking UP the ancestor chain from whatever is currently focused —
+    // it never looks at sibling subtrees. A dialog pushed via
+    // `showDialog`/`showAnimatedDialog` becomes a SIBLING route in the same
+    // `Navigator`'s `Overlay`, not a descendant of the first route's page
+    // content, so a `Shortcuts` layer mounted inside that first route's page
+    // (the old `AppShell`-level placement) is structurally unreachable from
+    // the dialog's focus chain. `flutter test` never caught this because
+    // every existing test above mounts `AppShortcuts` as the outermost
+    // widget in `pumpShortcuts` — a shape that happens to already sit above
+    // any dialog a test might push, unlike the real app's `AppShell`-nested
+    // placement.
+    testWidgets(
+        'REPRODUCES THE BUG: a Shortcuts layer mounted inside a route (the '
+        'old AppShell-level placement) does NOT fire once a dialog (a '
+        'sibling route on the same Navigator) is open', (tester) async {
+      var called = false;
+      final navigatorKey = GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          home: Scaffold(
+            // Same shape as the pre-fix `AppShell.build()`: AppShortcuts is
+            // a descendant of the route's own page content, not an
+            // ancestor of the Navigator.
+            body: AppShortcuts(
+              appState: appState,
+              onNewNote: () => called = true,
+              onNewTask: (_) {},
+              onToggleTimer: () {},
+              onSearch: () {},
+              onShowHelp: (_) {},
+              child: const Focus(autofocus: true, child: SizedBox.expand()),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // Push a second route on the SAME Navigator — exactly what every
+      // dialog in this app does (New Task, shortcuts help, note modals,
+      // task detail, etc).
+      unawaited(
+        navigatorKey.currentState!.push(
+          DialogRoute<void>(
+            context: navigatorKey.currentContext!,
+            builder: (_) => const AlertDialog(title: Text('A dialog')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pump();
+
+      expect(called, isFalse);
+    });
+
+    testWidgets(
+        'THE FIX: a Shortcuts layer mounted above the Navigator (via '
+        "MaterialApp's builder, wrapping the routed child) DOES fire while "
+        'a dialog (a sibling route) is open', (tester) async {
+      var called = false;
+      final navigatorKey = GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          builder: (context, child) => AppShortcuts(
+            appState: appState,
+            onNewNote: () => called = true,
+            onNewTask: (_) {},
+            onToggleTimer: () {},
+            onSearch: () {},
+            onShowHelp: (_) {},
+            child: child!,
+          ),
+          home: const Scaffold(
+            body: Focus(autofocus: true, child: SizedBox.expand()),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      unawaited(
+        navigatorKey.currentState!.push(
+          DialogRoute<void>(
+            context: navigatorKey.currentContext!,
+            builder: (_) => const AlertDialog(title: Text('A dialog')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pump();
+
+      expect(called, isTrue);
+    });
+
+    testWidgets(
+        'a shortcut fires when nothing was explicitly focused by the test — '
+        "only AppShell's own default autofocus node claimed focus, mounted "
+        'above the Navigator like the real app', (tester) async {
+      var called = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => AppShortcuts(
+            appState: appState,
+            onNewNote: () => called = true,
+            onNewTask: (_) {},
+            onToggleTimer: () {},
+            onSearch: () {},
+            onShowHelp: (_) {},
+            child: child!,
+          ),
+          home: const Scaffold(
+            body: Focus(autofocus: true, child: SizedBox.expand()),
+          ),
+        ),
+      );
+      // No tester.tap(...) anywhere — relies purely on the autofocus node.
+      await tester.pump();
+
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyN);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.control);
+      await tester.pump();
+
+      expect(called, isTrue);
+    });
+
+    testWidgets(
+        'Escape still dismisses a dialog when AppShortcuts wraps the '
+        'Navigator and zen mode is off (ExitZenModeIntent is disabled, so '
+        "the raw key falls through to MaterialApp's own default "
+        'Escape-dismiss handling)', (tester) async {
+      final navigatorKey = GlobalKey<NavigatorState>();
+
+      await tester.pumpWidget(
+        MaterialApp(
+          navigatorKey: navigatorKey,
+          builder: (context, child) => AppShortcuts(
+            appState: appState,
+            onNewNote: () {},
+            onNewTask: (_) {},
+            onToggleTimer: () {},
+            onSearch: () {},
+            onShowHelp: (_) {},
+            child: child!,
+          ),
+          home: const Scaffold(
+            body: Focus(autofocus: true, child: SizedBox.expand()),
+          ),
+        ),
+      );
+      await tester.pump();
+      expect(appState.isZenMode, isFalse);
+
+      unawaited(
+        navigatorKey.currentState!.push(
+          DialogRoute<void>(
+            context: navigatorKey.currentContext!,
+            builder: (_) => const AlertDialog(title: Text('A dialog')),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('A dialog'), findsOneWidget);
+
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+
+      expect(find.text('A dialog'), findsNothing);
+    });
+  });
+
   group('typing into a focused text field', () {
     testWidgets(
         'plain digits/letters without a modifier do not fire any shortcut '
@@ -324,10 +513,10 @@ void main() {
             body: AppShortcuts(
               appState: appState,
               onNewNote: () => newNoteCalled = true,
-              onNewTask: () {},
+              onNewTask: (_) {},
               onToggleTimer: () {},
               onSearch: () => searchCalled = true,
-              onShowHelp: () {},
+              onShowHelp: (_) {},
               child: TextField(controller: controller, autofocus: true),
             ),
           ),

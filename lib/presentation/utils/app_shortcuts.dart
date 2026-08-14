@@ -100,6 +100,25 @@ class _ExitZenModeAction extends Action<ExitZenModeIntent> {
   }
 }
 
+/// Handler for intents whose callback needs to show a dialog (a
+/// [BuildContext] with real [Navigator]/[Theme] ancestors). [AppShortcuts]
+/// is mounted above [MaterialApp]'s `Navigator` (via `builder`), so its own
+/// `build` context is not a valid dialog context — but [ContextAction]
+/// receives the context of whatever is actually focused when the shortcut
+/// fires, which always has the real ancestor chain. See
+/// `lib/presentation/app.dart` for why this widget lives above the
+/// Navigator in the first place.
+class _ContextCallbackAction<T extends Intent> extends ContextAction<T> {
+  _ContextCallbackAction(this.onInvoke);
+  final void Function(BuildContext context) onInvoke;
+
+  @override
+  Object? invoke(T intent, [BuildContext? context]) {
+    if (context != null) onInvoke(context);
+    return null;
+  }
+}
+
 /// App-wide keyboard shortcuts: sidebar navigation, note/task creation, the
 /// timer toggle, search, the shortcuts help sheet, and zen mode (F11 /
 /// Escape) — the single [Shortcuts]/[Actions] layer for the whole desktop
@@ -113,6 +132,21 @@ class _ExitZenModeAction extends Action<ExitZenModeIntent> {
 /// scoped to `NoteMarkdownEditor` itself (see that file) — Flutter's own
 /// focus-subtree scoping is what lets both layers coexist without either
 /// hand-rolling an "which instance is active" guard.
+///
+/// **Must be mounted above `MaterialApp`'s `Navigator`** (via
+/// `MaterialApp.builder`, see `lib/presentation/app.dart`), NOT as a
+/// descendant of a route's page content (the original, buggy placement
+/// inside `AppShell.build()`). `Shortcuts` dispatches by walking UP the
+/// ancestor chain from whichever node currently holds focus — it never
+/// looks at sibling subtrees. Every dialog in this app (`showDialog`,
+/// `showAnimatedDialog`) pushes a new route that becomes a SIBLING of the
+/// first route in the same `Navigator`'s `Overlay`, not a descendant of the
+/// first route's page. A `Shortcuts` layer mounted inside that first
+/// route's page is therefore structurally unreachable from a dialog's focus
+/// chain — every shortcut silently stops firing (and macOS plays its
+/// "unhandled key equivalent" beep) the moment any dialog is open. Mounting
+/// above the `Navigator` makes this widget an ancestor of every route,
+/// dialogs included.
 class AppShortcuts extends StatelessWidget {
   const AppShortcuts({
     super.key,
@@ -128,10 +162,16 @@ class AppShortcuts extends StatelessWidget {
   final AppState appState;
   final Widget child;
   final VoidCallback onNewNote;
-  final VoidCallback onNewTask;
+
+  /// Needs a real dialog-capable [BuildContext] — this widget's own `build`
+  /// context sits above the `Navigator`, so the framework-supplied
+  /// invocation context (see [_ContextCallbackAction]) is used instead.
+  final void Function(BuildContext context) onNewTask;
   final VoidCallback onToggleTimer;
   final VoidCallback onSearch;
-  final VoidCallback onShowHelp;
+
+  /// Needs a real dialog-capable [BuildContext] — see [onNewTask].
+  final void Function(BuildContext context) onShowHelp;
 
   @override
   Widget build(BuildContext context) {
@@ -177,12 +217,7 @@ class AppShortcuts extends StatelessWidget {
               return null;
             },
           ),
-          NewTaskIntent: CallbackAction<NewTaskIntent>(
-            onInvoke: (_) {
-              onNewTask();
-              return null;
-            },
-          ),
+          NewTaskIntent: _ContextCallbackAction<NewTaskIntent>(onNewTask),
           ToggleTimerIntent: CallbackAction<ToggleTimerIntent>(
             onInvoke: (_) {
               onToggleTimer();
@@ -195,12 +230,8 @@ class AppShortcuts extends StatelessWidget {
               return null;
             },
           ),
-          ShowShortcutsHelpIntent: CallbackAction<ShowShortcutsHelpIntent>(
-            onInvoke: (_) {
-              onShowHelp();
-              return null;
-            },
-          ),
+          ShowShortcutsHelpIntent:
+              _ContextCallbackAction<ShowShortcutsHelpIntent>(onShowHelp),
           ToggleZenModeIntent: CallbackAction<ToggleZenModeIntent>(
             onInvoke: (_) {
               appState.toggleZenMode();

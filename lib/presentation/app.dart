@@ -1,12 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
+import '../injection.dart';
 import 'pages/app_shell.dart';
 import 'pages/mobile_app_shell.dart';
 import 'pages/splash_screen.dart';
 import 'state/app_state.dart';
+import 'state/task_state.dart';
 import 'state/theme_state.dart';
+import 'state/timer_state.dart';
+import 'utils/app_shortcuts.dart';
 import 'utils/platform_utils.dart';
+import 'utils/timer_shortcut.dart';
+import 'widgets/shortcuts_help_sheet.dart';
+import 'widgets/task_board.dart' show showAddTaskDialog;
+import 'widgets/top_bar.dart' show TopBarState;
 
 /// Root MaterialApp with dynamic theming.
 class NoteXApp extends StatefulWidget {
@@ -28,6 +36,12 @@ class _NoteXAppState extends State<NoteXApp> {
   bool _fadingOut = false;
   bool _splashDone = false;
 
+  /// Reaches [TopBarState.requestSearchFocus] for the Cmd/Ctrl+K app-wide
+  /// shortcut. Owned here (not by `AppShell`) because `AppShortcuts` must be
+  /// mounted above `MaterialApp`'s `Navigator` — see the `builder:` wiring
+  /// below and `AppShortcuts`'s own doc comment for why.
+  final GlobalKey<TopBarState> _topBarKey = GlobalKey<TopBarState>();
+
   void _onSplashComplete() {
     setState(() => _fadingOut = true);
   }
@@ -39,6 +53,33 @@ class _NoteXAppState extends State<NoteXApp> {
         _splashDone = true;
       });
     }
+  }
+
+  // ── App-wide keyboard shortcuts (Cmd/Ctrl+N/Shift+N/Shift+T/K/…) ────────
+  //
+  // Lives here, not on `AppShell`, because `AppShortcuts` (below, wired via
+  // `MaterialApp.builder`) must wrap the whole routed `Navigator` — including
+  // every dialog route — not just the initial route's page content. See
+  // `AppShortcuts`'s doc comment for the bug this placement fixes.
+
+  void _handleNewNote() {
+    widget.appState.createNewNote();
+  }
+
+  void _handleNewTask(BuildContext context) {
+    showAddTaskDialog(context, getIt<TaskState>(), widget.themeState);
+  }
+
+  void _handleToggleTimer() {
+    toggleRunningTimer(getIt<TimerState>());
+  }
+
+  void _handleSearch() {
+    _topBarKey.currentState?.requestSearchFocus();
+  }
+
+  void _handleShowShortcutsHelp(BuildContext context) {
+    showShortcutsHelpSheet(context, widget.themeState);
   }
 
   @override
@@ -60,6 +101,23 @@ class _NoteXAppState extends State<NoteXApp> {
             Locale('en'),
             Locale('es'),
           ],
+          // Mounted above the `Navigator` (this `builder` wraps `child`,
+          // which IS the built Navigator) so every route — including every
+          // dialog — sits inside `AppShortcuts`'s focus-chain ancestry.
+          // Desktop-only: matches the pre-existing scope of the app-wide
+          // shortcut set (`kIsDesktop ? AppShell : MobileAppShell` below).
+          builder: (context, child) {
+            if (!kIsDesktop) return child!;
+            return AppShortcuts(
+              appState: widget.appState,
+              onNewNote: _handleNewNote,
+              onNewTask: _handleNewTask,
+              onToggleTimer: _handleToggleTimer,
+              onSearch: _handleSearch,
+              onShowHelp: _handleShowShortcutsHelp,
+              child: child!,
+            );
+          },
           home: _showSplash
               ? AnimatedOpacity(
                   opacity: _fadingOut ? 0.0 : 1.0,
@@ -83,6 +141,7 @@ class _NoteXAppState extends State<NoteXApp> {
                       ? AppShell(
                           appState: widget.appState,
                           themeState: widget.themeState,
+                          topBarKey: _topBarKey,
                         )
                       : MobileAppShell(
                           appState: widget.appState,

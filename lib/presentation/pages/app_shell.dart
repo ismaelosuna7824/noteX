@@ -7,14 +7,8 @@ import 'package:window_manager/window_manager.dart';
 import '../../main.dart' show WindowSizeStore;
 
 import '../state/app_state.dart';
-import '../state/task_state.dart';
 import '../state/theme_state.dart';
-import '../state/timer_state.dart';
-import '../utils/app_shortcuts.dart';
-import '../utils/timer_shortcut.dart';
-import '../widgets/shortcuts_help_sheet.dart';
 import '../widgets/sidebar.dart';
-import '../widgets/task_board.dart' show showAddTaskDialog;
 import '../widgets/top_bar.dart';
 import '../widgets/update_banner.dart';
 import 'home_page.dart';
@@ -44,7 +38,20 @@ class AppShell extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
-  const AppShell({super.key, required this.appState, required this.themeState});
+  /// Reaches [TopBarState.requestSearchFocus] for the Cmd/Ctrl+K app-wide
+  /// shortcut — the search [FocusNode] is private to [TopBarState], so this
+  /// is the entry point `AppShortcuts` uses instead of duplicating search UI
+  /// state. Owned by `NoteXApp` (not `AppShell` itself) because `AppShortcuts`
+  /// is now mounted above `MaterialApp`'s `Navigator` — see
+  /// `lib/presentation/app.dart`.
+  final GlobalKey<TopBarState> topBarKey;
+
+  const AppShell({
+    super.key,
+    required this.appState,
+    required this.themeState,
+    required this.topBarKey,
+  });
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -57,11 +64,6 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   /// Tracks the previous page index for direction-aware page transitions.
   int _previousPageIndex = 0;
-
-  /// Reaches [TopBarState.requestSearchFocus] for the Cmd/Ctrl+K shortcut —
-  /// the search [FocusNode] is private to [TopBarState], so this is the
-  /// entry point `AppShortcuts` uses instead of duplicating search UI state.
-  final GlobalKey<TopBarState> _topBarKey = GlobalKey<TopBarState>();
 
   /// Build adaptive shadows that contrast against the wallpaper.
   /// Light hero text (bright bg) → dark shadow; dark hero text → light shadow.
@@ -347,38 +349,14 @@ class _AppShellState extends State<AppShell> with WindowListener {
     if (mounted) setState(() {});
   }
 
-  // ── App-wide keyboard shortcuts (Cmd/Ctrl+N/Shift+N/Shift+T/K) ───────────
-
-  void _handleNewNote() {
-    widget.appState.createNewNote();
-  }
-
-  void _handleNewTask() {
-    showAddTaskDialog(context, getIt<TaskState>(), widget.themeState);
-  }
-
-  void _handleToggleTimer() {
-    toggleRunningTimer(getIt<TimerState>());
-  }
-
-  void _handleSearch() {
-    _topBarKey.currentState?.requestSearchFocus();
-  }
-
-  void _handleShowShortcutsHelp() {
-    showShortcutsHelpSheet(context, widget.themeState);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return AppShortcuts(
-      appState: widget.appState,
-      onNewNote: _handleNewNote,
-      onNewTask: _handleNewTask,
-      onToggleTimer: _handleToggleTimer,
-      onSearch: _handleSearch,
-      onShowHelp: _handleShowShortcutsHelp,
-      child: Focus(
+    // App-wide keyboard shortcuts (`AppShortcuts`) are mounted above
+    // `MaterialApp`'s `Navigator` in `NoteXApp` (see `lib/presentation/
+    // app.dart`), not here — see `AppShortcuts`'s own doc comment for why.
+    // This `Focus` node is still the default autofocus target so the app
+    // always has *something* focused for `Shortcuts` to dispatch from.
+    return Focus(
         autofocus: true,
         child: DragToResizeArea(
       child: ClipRRect(
@@ -438,7 +416,6 @@ class _AppShellState extends State<AppShell> with WindowListener {
         ),
       ),
     ),
-      ),
     );
   }
 
@@ -497,7 +474,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                           return const SizedBox.shrink();
                         }
                         return TopBar(
-                          key: _topBarKey,
+                          key: widget.topBarKey,
                           appState: widget.appState,
                           themeState: widget.themeState,
                           userName: widget.appState.userName,
