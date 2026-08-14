@@ -6,6 +6,16 @@ import '../../domain/services/note_link_parser.dart';
 import '../../infrastructure/content/note_content_format.dart';
 import 'markdown/notex_markdown_view.dart';
 
+/// Toggles between edit and preview — see [NoteMarkdownEditorState._togglePreview].
+class _TogglePreviewIntent extends Intent {
+  const _TogglePreviewIntent();
+}
+
+/// Toggles the side-by-side split view — see [NoteMarkdownEditorState._toggleSplit].
+class _ToggleSplitIntent extends Intent {
+  const _ToggleSplitIntent();
+}
+
 /// Which set of formatting controls the [NoteMarkdownEditor] exposes.
 ///
 /// The three values map to the three editor surfaces in the app:
@@ -160,29 +170,15 @@ class NoteMarkdownEditor extends StatefulWidget {
 }
 
 class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
-  /// The editor instance that currently owns the global Cmd/Ctrl+E toggle.
-  ///
-  /// The toggle is delivered through a process-wide [HardwareKeyboard] handler
-  /// so it fires no matter where focus is (a Focus-subtree handler stops working
-  /// as soon as the user selects preview text or clicks away). When several
-  /// editors are mounted at once (tiling panels) they all register a handler, so
-  /// this static picks a single winner: only the instance identical to
-  /// [_activeInstance] acts on the key. It is claimed on mount (when free) and
-  /// re-claimed whenever an editor's field or preview takes focus, so the
-  /// last-interacted editor wins. The app's AnimatedSwitcher keeps the note
-  /// editor and notes list from being co-mounted, so the common case is a single
-  /// editor that always owns the toggle.
-  static NoteMarkdownEditorState? _activeInstance;
-
   late final TextEditingController _controller;
 
   /// Focus node for the edit [TextField], so a Cmd/Ctrl+E toggle from preview
   /// back to edit can immediately return focus to the field for typing.
   final FocusNode _editFocusNode = FocusNode();
 
-  /// Focus node for the preview subtree. It takes focus while the preview shows
-  /// so this editor claims the active-toggle slot (see [_activeInstance]); the
-  /// toggle itself is delivered globally, not through this node.
+  /// Focus node for the preview subtree. It takes focus while the preview
+  /// shows, so the editor's local Shortcuts (see [build]) keeps receiving the
+  /// Cmd/Ctrl+E toggle while the preview is what the user is looking at.
   final FocusNode _previewFocusNode = FocusNode();
 
   /// Which surface(s) this editor currently shows (edit / preview / split).
@@ -207,19 +203,11 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     // ONLY in split mode where both surfaces are on screen at once.
     _controller.addListener(_handleControllerChange);
 
-    // Claim the active-toggle slot when nothing else holds it, so a single
-    // mounted editor always receives Cmd/Ctrl+E. Read-only surfaces have no
-    // toggle, so they never claim it.
-    if (!widget.readOnly && _activeInstance == null) {
-      _activeInstance = this;
-    }
-    // The primary editor takes over the toggle slot AND focus on mount, so the
-    // shortcut works immediately without a click — even when it opens in edit
-    // or split, which (unlike preview) do not auto-focus a surface. Force the
-    // claim past any editor that already holds it (e.g. the list preview still
-    // mounted behind this page).
+    // The primary editor takes focus on mount, so the Cmd/Ctrl+E toggle (see
+    // [build]'s local Shortcuts) works immediately without a click — even
+    // when it opens in edit or split, which (unlike preview) do not
+    // auto-focus a surface.
     if (widget.autofocus && !widget.readOnly) {
-      _activeInstance = this;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (!mounted) return;
         if (_viewMode == EditorViewMode.preview) {
@@ -229,23 +217,10 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
         }
       });
     }
-    // Re-claim the slot whenever this editor's field or preview gains focus, so
-    // the last-interacted editor wins when several are mounted.
-    _editFocusNode.addListener(_handleFocusChange);
-    _previewFocusNode.addListener(_handleFocusChange);
-    // A process-wide handler makes the toggle focus-independent: it still fires
-    // after focus leaves the editor subtree (e.g. selecting preview text).
-    HardwareKeyboard.instance.addHandler(_globalKeyHandler);
   }
 
   @override
   void dispose() {
-    HardwareKeyboard.instance.removeHandler(_globalKeyHandler);
-    if (identical(_activeInstance, this)) {
-      _activeInstance = null;
-    }
-    _editFocusNode.removeListener(_handleFocusChange);
-    _previewFocusNode.removeListener(_handleFocusChange);
     _controller.removeListener(_handleControllerChange);
     _controller.dispose();
     _editFocusNode.dispose();
@@ -268,16 +243,6 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     return requested;
   }
 
-  /// Claims the active-toggle slot for this editor when its field or preview
-  /// takes focus. Never clears the slot on focus loss — that would break the
-  /// focus-independence the global handler exists to provide.
-  void _handleFocusChange() {
-    if (widget.readOnly) return;
-    if (_editFocusNode.hasFocus || _previewFocusNode.hasFocus) {
-      _activeInstance = this;
-    }
-  }
-
   /// Rebuilds the live preview as the user types, but only in split mode where
   /// the field and preview are on screen together. In edit/preview mode the two
   /// surfaces are never visible at once, so a per-keystroke rebuild would be
@@ -290,10 +255,10 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
 
   /// Flips between edit and preview and moves focus so the target mode is
   /// immediately usable: the [TextField] regains focus when returning to edit,
-  /// the preview subtree takes focus (which re-claims the active-toggle slot).
-  /// From split, this collapses to a single full-width preview.
+  /// the preview subtree takes focus (keeping the toggle reachable via the
+  /// local Shortcuts in [build]). From split, this collapses to a single
+  /// full-width preview.
   void _togglePreview() {
-    _activeInstance = this;
     setState(() {
       _viewMode = _viewMode == EditorViewMode.preview
           ? EditorViewMode.edit
@@ -314,7 +279,6 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// editor; entering it puts focus in the field so typing updates the live
   /// preview immediately.
   void _toggleSplit() {
-    _activeInstance = this;
     setState(() {
       _viewMode = _viewMode == EditorViewMode.split
           ? EditorViewMode.edit
@@ -325,30 +289,6 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       if (!mounted) return;
       _editFocusNode.requestFocus();
     });
-  }
-
-  /// Global keyboard toggles on the Cmd (macOS) / Ctrl (Windows/Linux) + E key:
-  /// * without Shift — preview⇄edit;
-  /// * with Shift — the side-by-side split view.
-  ///
-  /// Registered on [HardwareKeyboard] so it fires regardless of where focus is,
-  /// as long as this editor is mounted and owns the active-toggle slot (see
-  /// [_activeInstance]). Returns true (handled) only when it toggles, so a
-  /// single key press flips exactly once and no other editor also acts.
-  bool _globalKeyHandler(KeyEvent event) {
-    if (!mounted || widget.readOnly) return false;
-    if (!identical(_activeInstance, this)) return false;
-    if (event is! KeyDownEvent) return false;
-    if (event.logicalKey != LogicalKeyboardKey.keyE) return false;
-    final hasModifier = HardwareKeyboard.instance.isMetaPressed ||
-        HardwareKeyboard.instance.isControlPressed;
-    if (!hasModifier) return false;
-    if (HardwareKeyboard.instance.isShiftPressed) {
-      _toggleSplit();
-    } else {
-      _togglePreview();
-    }
-    return true;
   }
 
   // --- markdown-insert helpers ----------------------------------------------
@@ -596,22 +536,56 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     }
 
     final toolbarButtons = _editVisible ? _toolbarButtons() : null;
-    // The Cmd/Ctrl+E toggle is delivered globally via [_globalKeyHandler], so no
-    // Focus wrapper is needed here to catch it. The preview subtree still takes
-    // focus (below) so this editor claims the active-toggle slot when shown.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _buildControlBar(context, toolbarButtons),
-        Divider(
-          height: 1,
-          thickness: 1,
-          color: Theme.of(context).brightness == Brightness.dark
-              ? Colors.white.withValues(alpha: 0.10)
-              : Colors.black.withValues(alpha: 0.06),
+    // Cmd/Ctrl+E (preview⇄edit) and Cmd/Ctrl+Shift+E (split) are scoped to
+    // this editor's own subtree via Shortcuts/Actions — Flutter's own
+    // focus-scoped dispatch is what makes only the currently-focused editor
+    // react when several are mounted (e.g. tiling panels), replacing the
+    // hand-rolled "active instance" guard this editor used to need. Both the
+    // Cmd (macOS) and Ctrl (Windows/Linux) modifiers are accepted regardless
+    // of the running platform, matching this shortcut's long-standing
+    // behavior (unlike the app-wide shortcuts, which use one platform-correct
+    // modifier — see `AppShortcuts`).
+    return Shortcuts(
+      shortcuts: const {
+        SingleActivator(LogicalKeyboardKey.keyE, meta: true):
+            _TogglePreviewIntent(),
+        SingleActivator(LogicalKeyboardKey.keyE, control: true):
+            _TogglePreviewIntent(),
+        SingleActivator(LogicalKeyboardKey.keyE, meta: true, shift: true):
+            _ToggleSplitIntent(),
+        SingleActivator(LogicalKeyboardKey.keyE, control: true, shift: true):
+            _ToggleSplitIntent(),
+      },
+      child: Actions(
+        actions: {
+          _TogglePreviewIntent: CallbackAction<_TogglePreviewIntent>(
+            onInvoke: (_) {
+              _togglePreview();
+              return null;
+            },
+          ),
+          _ToggleSplitIntent: CallbackAction<_ToggleSplitIntent>(
+            onInvoke: (_) {
+              _toggleSplit();
+              return null;
+            },
+          ),
+        },
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _buildControlBar(context, toolbarButtons),
+            Divider(
+              height: 1,
+              thickness: 1,
+              color: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white.withValues(alpha: 0.10)
+                  : Colors.black.withValues(alpha: 0.06),
+            ),
+            Expanded(child: _buildBody(context)),
+          ],
         ),
-        Expanded(child: _buildBody(context)),
-      ],
+      ),
     );
   }
 

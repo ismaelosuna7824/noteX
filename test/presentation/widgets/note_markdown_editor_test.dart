@@ -376,9 +376,13 @@ void main() {
       ),
     );
 
-    // Start in edit mode: field only, no live preview.
+    // Start in edit mode: field only, no live preview. The toggle is
+    // delivered by a Shortcuts/Actions binding scoped to this editor's own
+    // subtree, so it needs real focus somewhere inside that subtree first.
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(NoteXMarkdownView), findsNothing);
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
 
     // Ctrl+Shift+E: edit -> split. Both surfaces are on screen at once.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.control);
@@ -533,8 +537,15 @@ void main() {
   });
 
   testWidgets(
-      'Ctrl+E toggles even when no editor node is focused (global handler)',
-      (tester) async {
+      'Ctrl+E and Meta+E both toggle when the editor field has focus '
+      '(Shortcuts/Actions, not a global handler)', (tester) async {
+    // Regression scope note: this editor used to intercept Cmd/Ctrl+E via a
+    // process-wide HardwareKeyboard handler that fired even with nothing
+    // focused anywhere. It has been consolidated onto Flutter's own
+    // Shortcuts/Actions system (scoped to this editor's own subtree), which
+    // needs real focus somewhere inside that subtree — this test now
+    // establishes that focus explicitly instead of relying on the retired
+    // "claims the slot on mount" behavior.
     await mountEditor(
       tester,
       NoteMarkdownEditor(
@@ -544,10 +555,10 @@ void main() {
       ),
     );
 
-    // Start in edit mode WITHOUT focusing the field: the editor claims the
-    // active-toggle slot on mount, so the global handler still fires.
     expect(find.byType(TextField), findsOneWidget);
     expect(find.byType(NoteXMarkdownView), findsNothing);
+    await tester.tap(find.byType(TextField));
+    await tester.pump();
 
     // A single Ctrl+E press must flip exactly once (edit -> preview): the
     // NoteXMarkdownView appearing and the TextField disappearing proves one toggle
@@ -560,7 +571,10 @@ void main() {
     expect(find.byType(NoteXMarkdownView), findsOneWidget);
     expect(find.byType(TextField), findsNothing);
 
-    // Meta+E (macOS) exercises the same global path from preview -> edit.
+    // Meta+E (macOS) exercises the same binding from preview -> edit. Focus
+    // is still inside the editor: toggling to preview above moves focus to
+    // the preview subtree ([NoteMarkdownEditorState._togglePreview]), which
+    // is still within this editor's own Shortcuts scope.
     await tester.sendKeyDownEvent(LogicalKeyboardKey.meta);
     await tester.sendKeyEvent(LogicalKeyboardKey.keyE);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.meta);
