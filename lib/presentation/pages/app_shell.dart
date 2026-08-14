@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
@@ -19,7 +18,7 @@ import 'calendar_page.dart';
 import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
-import 'reminder_page.dart';
+import 'task_page.dart';
 import 'graph_page.dart';
 import 'trash_page.dart';
 import 'goodbye_screen.dart';
@@ -39,7 +38,20 @@ class AppShell extends StatefulWidget {
   final AppState appState;
   final ThemeState themeState;
 
-  const AppShell({super.key, required this.appState, required this.themeState});
+  /// Reaches [TopBarState.requestSearchFocus] for the Cmd/Ctrl+K app-wide
+  /// shortcut — the search [FocusNode] is private to [TopBarState], so this
+  /// is the entry point `AppShortcuts` uses instead of duplicating search UI
+  /// state. Owned by `NoteXApp` (not `AppShell` itself) because `AppShortcuts`
+  /// is now mounted above `MaterialApp`'s `Navigator` — see
+  /// `lib/presentation/app.dart`.
+  final GlobalKey<TopBarState> topBarKey;
+
+  const AppShell({
+    super.key,
+    required this.appState,
+    required this.themeState,
+    required this.topBarKey,
+  });
 
   @override
   State<AppShell> createState() => _AppShellState();
@@ -339,24 +351,14 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
+    // App-wide keyboard shortcuts (`AppShortcuts`) are mounted above
+    // `MaterialApp`'s `Navigator` in `NoteXApp` (see `lib/presentation/
+    // app.dart`), not here — see `AppShortcuts`'s own doc comment for why.
+    // This `Focus` node is still the default autofocus target so the app
+    // always has *something* focused for `Shortcuts` to dispatch from.
     return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        // F11 toggles zen mode
-        if (event.logicalKey == LogicalKeyboardKey.f11) {
-          widget.appState.toggleZenMode();
-          return KeyEventResult.handled;
-        }
-        // Escape exits zen mode
-        if (event.logicalKey == LogicalKeyboardKey.escape &&
-            widget.appState.isZenMode) {
-          widget.appState.exitZenMode();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: DragToResizeArea(
+        autofocus: true,
+        child: DragToResizeArea(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(_kWindowRadius),
         child: widget.appState.isClosing
@@ -472,6 +474,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                           return const SizedBox.shrink();
                         }
                         return TopBar(
+                          key: widget.topBarKey,
                           appState: widget.appState,
                           themeState: widget.themeState,
                           userName: widget.appState.userName,
@@ -695,7 +698,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
           themeState: widget.themeState,
         );
       case 7:
-        return ReminderPage(
+        return TaskPage(
           key: const ValueKey('reminders'),
           appState: widget.appState,
           themeState: widget.themeState,

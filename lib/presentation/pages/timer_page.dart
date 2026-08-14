@@ -7,31 +7,20 @@ import '../../domain/services/project_breakdown.dart';
 import '../../domain/services/time_entry_grouping.dart';
 import '../widgets/time_entry_editor.dart';
 
+import '../../application/use_cases/timer/resolve_time_entry_task_use_case.dart';
 import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
 import '../state/app_state.dart';
+import '../state/task_state.dart';
 import '../state/theme_state.dart';
 import '../state/timer_state.dart';
 import '../widgets/glassmorphic_container.dart';
 import 'package:get_it/get_it.dart';
 import '../widgets/animated_dialog.dart';
+import '../widgets/app_picker_menu.dart';
+import '../widgets/project_colors.dart';
+import '../widgets/task_board.dart' show showTaskDetailDialog;
 import '../widgets/timer_calendar_view.dart';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Preset colors for new projects
-// ─────────────────────────────────────────────────────────────────────────────
-const _projectColors = [
-  Color(0xFF6C5CE7), // Purple
-  Color(0xFF0984E3), // Blue
-  Color(0xFF00B894), // Teal
-  Color(0xFFE17055), // Coral
-  Color(0xFFF5A623), // Amber
-  Color(0xFFE84393), // Pink
-  Color(0xFF2D3436), // Dark
-  Color(0xFF00CEC9), // Cyan
-  Color(0xFFD63031), // Red
-  Color(0xFF6AB04C), // Green
-];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Timer Page
@@ -715,8 +704,48 @@ class _ProjectChip extends StatelessWidget {
         : timerState.draftProjectId;
     final project = timerState.projectForId(selectedId);
 
-    return GestureDetector(
-      onTap: enabled ? () => _showProjectMenu(context) : null,
+    return AppPickerMenu<String?>(
+      value: timerState.draftProjectId,
+      enabled: enabled,
+      surfaceColor: themeState.editorBgColor,
+      accentColor: themeState.accentColor,
+      borderRadius: BorderRadius.circular(20),
+      semanticsLabel: 'Project',
+      // "All projects" widens the FILTER (filterProjectId), a different
+      // piece of state than the draft project every other row tracks —
+      // without this row there would be no way back to the whole week once
+      // a project narrows the view.
+      leadingOption: const AppPickerOption(
+        value: '__all__',
+        label: 'All projects',
+        icon: Icons.all_inclusive_rounded,
+      ),
+      leadingSelected: filterProjectId == null,
+      options: [
+        const AppPickerOption<String?>(
+          value: null,
+          label: 'No Project',
+          icon: Icons.folder_outlined,
+        ),
+        for (final p in timerState.projects)
+          AppPickerOption<String?>(
+            value: p.id,
+            label: p.name,
+            dotColor: p.color,
+            trailing: _ProjectDeleteButton(
+              onTap: () {
+                Navigator.pop(context); // close the menu first
+                _showDeleteProjectDialog(context, p);
+              },
+            ),
+          ),
+      ],
+      footerAction: const AppPickerOption.action(
+        value: '__new__',
+        label: 'New Project',
+        icon: Icons.add_rounded,
+      ),
+      onSelected: (result) => _handleProjectMenuResult(context, result),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
@@ -782,156 +811,27 @@ class _ProjectChip extends StatelessWidget {
     );
   }
 
-  Future<void> _showProjectMenu(BuildContext context) async {
-    final RenderBox button = context.findRenderObject() as RenderBox;
-    final RenderBox overlay =
-        Overlay.of(context).context.findRenderObject() as RenderBox;
-    final RelativeRect position = RelativeRect.fromRect(
-      Rect.fromPoints(
-        button.localToGlobal(Offset.zero, ancestor: overlay),
-        button.localToGlobal(
-          button.size.bottomRight(Offset.zero),
-          ancestor: overlay,
-        ),
-      ),
-      Offset.zero & overlay.size,
-    );
-
-    final projects = timerState.projects;
-    final currentDraftId = timerState.draftProjectId;
-
-    Widget checkIfActive(String? id) => SizedBox(
-      width: 18,
-      child: currentDraftId == id
-          ? Icon(Icons.check_rounded, size: 14, color: themeState.accentColor)
-          : null,
-    );
-
-    final result = await showMenu<String?>(
-      context: context,
-      position: position,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-      items: [
-        // Every other row narrows the list; without this one there is no way
-        // back to the whole week once a project has been picked.
-        PopupMenuItem<String?>(
-          value: '__all__',
-          child: Row(
-            children: [
-              SizedBox(
-                width: 18,
-                child: filterProjectId == null
-                    ? Icon(Icons.check_rounded,
-                        size: 14, color: themeState.accentColor)
-                    : null,
-              ),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.all_inclusive_rounded,
-                size: 16,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'All projects',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
-        // No Project option
-        PopupMenuItem<String?>(
-          value: '__none__',
-          child: Row(
-            children: [
-              checkIfActive(null),
-              const SizedBox(width: 4),
-              Icon(
-                Icons.folder_outlined,
-                size: 16,
-                color: Colors.grey.shade400,
-              ),
-              const SizedBox(width: 8),
-              Text(
-                'No Project',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-              ),
-            ],
-          ),
-        ),
-        if (projects.isNotEmpty) const PopupMenuDivider(),
-        ...projects.map(
-          (p) => PopupMenuItem<String?>(
-            value: p.id,
-            child: Row(
-              children: [
-                checkIfActive(p.id),
-                const SizedBox(width: 4),
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: p.color,
-                    shape: BoxShape.circle,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(p.name, style: const TextStyle(fontSize: 13)),
-                ),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.pop(context); // close menu first
-                    _showDeleteProjectDialog(context, p);
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.delete_outline_rounded,
-                      size: 15,
-                      color: Colors.red.shade300,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const PopupMenuDivider(),
-        // New project
-        PopupMenuItem<String?>(
-          value: '__new__',
-          child: Row(
-            children: [
-              const SizedBox(width: 22), // align with others
-              Icon(Icons.add_rounded, size: 16, color: themeState.accentColor),
-              const SizedBox(width: 8),
-              Text(
-                'New Project',
-                style: TextStyle(
-                  color: themeState.accentColor,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-
-    if (result == null) return;
+  /// [result] is whatever [AppPickerOption.value] the caller picked:
+  /// `'__all__'` (the leading meta row), `'__new__'` (the footer action),
+  /// `null` ("No Project" — a real value now, not a sentinel, since
+  /// [AppPickerMenu] keys its menu by index and never confuses a
+  /// null-valued selection with "dismissed without choosing") or a real
+  /// project id.
+  Future<void> _handleProjectMenuResult(
+    BuildContext context,
+    String? result,
+  ) async {
     if (result == '__all__') {
       // Only the filter. The draft project is what the next entry will be
       // tagged with, and widening the view is not a decision about that.
       onProjectSelected(null);
-    } else if (result == '__new__' && context.mounted) {
+    } else if (result == '__new__') {
+      if (!context.mounted) return;
       await _showNewProjectDialog(context);
       // After creation, timerState.draftProjectId holds the new project id.
       // Propagate to filter.
       onProjectSelected(timerState.draftProjectId);
-    } else if (result == '__none__') {
+    } else if (result == null) {
       timerState.setDraftProject(null);
       onProjectSelected('__none__'); // filter to show only no-project entries
     } else {
@@ -942,7 +842,7 @@ class _ProjectChip extends StatelessWidget {
 
   Future<void> _showNewProjectDialog(BuildContext context) async {
     final nameController = TextEditingController();
-    int selectedColorValue = _projectColors.first.toARGB32();
+    int selectedColorValue = kProjectColors.first.toARGB32();
 
     await showAnimatedDialog(
       context: context,
@@ -984,7 +884,7 @@ class _ProjectChip extends StatelessWidget {
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
-                children: _projectColors.map((c) {
+                children: kProjectColors.map((c) {
                   final isSelected = c.toARGB32() == selectedColorValue;
                   return GestureDetector(
                     onTap: () =>
@@ -1074,6 +974,45 @@ class _ProjectChip extends StatelessWidget {
             child: const Text('Delete'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The project row's inline delete affordance — its own 44x44 tappable
+/// region, deliberately built with [SizedBox] as the OUTERMOST widget
+/// rather than a padded [Container]: a [Container]'s `constraints` apply
+/// OUTSIDE its own `padding`, so a `Container(padding: ..., constraints:
+/// ...)` only ever bounds padding+child together, leaving the inner icon's
+/// small intrinsic size as the real (and too small) tappable area. Wrapping
+/// with [SizedBox] first, then handing the FULL box to [InkWell], avoids
+/// that trap entirely.
+class _ProjectDeleteButton extends StatelessWidget {
+  const _ProjectDeleteButton({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: 'Delete project',
+      child: SizedBox(
+        width: 44,
+        height: 44,
+        child: Material(
+          type: MaterialType.transparency,
+          child: InkWell(
+            onTap: onTap,
+            customBorder: const CircleBorder(),
+            child: Center(
+              child: Icon(
+                Icons.delete_outline_rounded,
+                size: 15,
+                color: Colors.red.shade300,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -1902,6 +1841,23 @@ class _EntryTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 8),
 
+                // Open the task this entry was started from, if any — a
+                // distinct icon + tooltip (not colour alone) doubles as the
+                // "came from a task" indicator and the way to open it.
+                if (entry.taskId != null) ...[
+                  IconButton(
+                    icon: Icon(Icons.task_alt_outlined, size: 16, color: accent),
+                    tooltip: 'Open task',
+                    splashRadius: 16,
+                    constraints:
+                        const BoxConstraints(minWidth: 44, minHeight: 44),
+                    padding: EdgeInsets.zero,
+                    onPressed: () =>
+                        _openTaskFromTimeEntry(context, entry.taskId!, themeState),
+                  ),
+                  const SizedBox(width: 4),
+                ],
+
                 // Delete
                 InkWell(
                   onTap: () => _confirmDelete(context),
@@ -1971,7 +1927,17 @@ class _EntryTile extends StatelessWidget {
             child: const Text('Cancel'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Colors.red.shade400),
+            style: FilledButton.styleFrom(
+              backgroundColor: Colors.red.shade400,
+              // Same shape as the task-tracker feature's other
+              // accent-coloured buttons: left unset, foregroundColor
+              // resolves against `colorScheme.onPrimary` (the seed's tonal
+              // primary), not the literal background colour actually
+              // painted — same defect, found in a sweep for it.
+              foregroundColor: Colors.red.shade400.computeLuminance() > 0.5
+                  ? Colors.black
+                  : Colors.white,
+            ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Delete'),
           ),
@@ -2052,6 +2018,41 @@ class _ColorDotState extends State<_ColorDot>
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared helpers
 // ─────────────────────────────────────────────────────────────────────────────
+
+/// Resolves the task behind [taskId] and opens its detail dialog through
+/// the single public entry point ([showTaskDetailDialog]) — never a copy
+/// of the dialog. Shared by [_EntryTile] and [_EntryGroupTile] so a single
+/// entry and a grouped row behave identically.
+///
+/// A time entry can outlive its task (tasks are soft-deleted, never
+/// cascaded from here). [ResolveTimeEntryTaskUseCase] collapses "never
+/// existed" and "soft-deleted" into one `null` result, and this degrades
+/// by saying so plainly in a SnackBar instead of crashing or opening an
+/// empty dialog — mirrors the linked-note precedent (resolve, don't
+/// cascade). The entry itself is never mutated: a stale [taskId] is left
+/// exactly as it is, same as a note link that points nowhere.
+Future<void> _openTaskFromTimeEntry(
+  BuildContext context,
+  String taskId,
+  ThemeState themeState,
+) async {
+  final task =
+      await GetIt.instance<ResolveTimeEntryTaskUseCase>().execute(taskId);
+  if (!context.mounted) return;
+  if (task == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('This task no longer exists.')),
+    );
+    return;
+  }
+  await showTaskDetailDialog(
+    context,
+    task,
+    GetIt.instance<TaskState>(),
+    themeState.accentColor,
+    surfaceColor: themeState.editorBgColor,
+  );
+}
 
 String _formatDuration(Duration d) {
   final h = d.inHours.toString().padLeft(2, '0');
@@ -2208,6 +2209,29 @@ class _EntryGroupTileState extends State<_EntryGroupTile> {
                       ),
                     ),
                     const SizedBox(width: 8),
+
+                    // Same task-open affordance as a single row (shared
+                    // via _openTaskFromTimeEntry) — a group carries it once
+                    // for whichever of its runs was linked to a task,
+                    // rather than requiring it be expanded first.
+                    if (group.taskId != null) ...[
+                      IconButton(
+                        icon:
+                            Icon(Icons.task_alt_outlined, size: 16, color: accent),
+                        tooltip: 'Open task',
+                        splashRadius: 16,
+                        constraints:
+                            const BoxConstraints(minWidth: 44, minHeight: 44),
+                        padding: EdgeInsets.zero,
+                        onPressed: () => _openTaskFromTimeEntry(
+                          context,
+                          group.taskId!,
+                          themeState,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                    ],
+
                     AnimatedRotation(
                       turns: _open ? 0.5 : 0,
                       duration: const Duration(milliseconds: 180),

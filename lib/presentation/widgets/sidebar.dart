@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
+import '../utils/app_shortcuts.dart';
+
 /// Sidebar width (including margin).
 const double kSidebarWidth = 62.0;
 
@@ -33,12 +35,49 @@ class Sidebar extends StatelessWidget {
     (2, _SidebarItem(Icons.edit_note_rounded, 'Editor')),
     (3, _SidebarItem(Icons.calendar_month_rounded, 'Calendar')),
     (4, _SidebarItem(Icons.timer_rounded, 'Timer')),
-    (5, _SidebarItem(Icons.article_rounded, 'Markdown')),
+    // index 5 (Markdown) intentionally omitted — hidden from the UI, not
+    // deleted. The Markdown feature, its data, and its page still exist;
+    // see AppState.navigateToPage for the fallback if anything still
+    // requests that index. Every remaining tuple keeps its own explicit
+    // page index, so removing this entry does not shift what any other
+    // item points at.
     (9, _SidebarItem(Icons.hub_rounded, 'Graph')),
-    (7, _SidebarItem(Icons.notifications_rounded, 'Reminders')),
+    (7, _SidebarItem(Icons.task_alt_rounded, 'Tasks')),
     (8, _SidebarItem(Icons.delete_outline_rounded, 'Trash')),
     (6, _SidebarItem(Icons.settings_rounded, 'Settings')),
   ];
+
+  /// The page index of each visible sidebar section, in display order —
+  /// the single source of truth the app-wide numeric shortcuts (Cmd/Ctrl+1..8,
+  /// see `AppShortcuts`) derive their mapping from, so hiding or reordering a
+  /// section here automatically keeps those shortcuts correct. Never hardcode
+  /// a parallel copy of this list elsewhere.
+  static List<int> get visiblePageIndices => [
+        for (final (pageIndex, _) in _navItems) pageIndex,
+      ];
+
+  /// The label each visible sidebar section shows, in the same display
+  /// order as [visiblePageIndices] — lets callers (and tests) verify a
+  /// shortcut opens "the section whose name the sidebar shows in that
+  /// position" without duplicating the item list.
+  static List<String> get visibleSectionLabels => [
+        for (final (_, item) in _navItems) item.label,
+      ];
+
+  /// The hover tooltip for the sidebar section shown at [position] (1-based,
+  /// matching [visiblePageIndices]/[visibleSectionLabels] order): [label]
+  /// plus its numeric jump shortcut when [position] falls within
+  /// [kNumberedSectionShortcutCount] — the exact range `AppShortcuts` itself
+  /// binds (Cmd/Ctrl+1..[kNumberedSectionShortcutCount]) — using the same
+  /// platform-aware [primaryModifierLabel] the rest of the app's shortcut
+  /// hints read from. A section beyond that range gets no shortcut hint
+  /// instead of a wrong one, since `AppShortcuts` never binds it a key.
+  static String sectionTooltip(String label, int position) {
+    if (position < 1 || position > kNumberedSectionShortcutCount) {
+      return label;
+    }
+    return '$label ($primaryModifierLabel+$position)';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -71,9 +110,10 @@ class Sidebar extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (final (pageIndex, item) in _navItems)
+                    for (final (i, (pageIndex, item)) in _navItems.indexed)
                       _NavIcon(
                         item: item,
+                        tooltip: sectionTooltip(item.label, i + 1),
                         isSelected: selectedIndex == pageIndex,
                         accentColor: accentColor,
                         baseIconColor: baseIconColor,
@@ -95,6 +135,11 @@ class Sidebar extends StatelessWidget {
 
 class _NavIcon extends StatefulWidget {
   final _SidebarItem item;
+
+  /// The hover tooltip text — [Sidebar.sectionTooltip]'s output, so it's
+  /// already the item's label plus its shortcut hint (or just the label
+  /// when the item has none).
+  final String tooltip;
   final bool isSelected;
   final Color accentColor;
   final Color baseIconColor;
@@ -103,6 +148,7 @@ class _NavIcon extends StatefulWidget {
 
   const _NavIcon({
     required this.item,
+    required this.tooltip,
     required this.isSelected,
     required this.accentColor,
     required this.baseIconColor,
@@ -150,7 +196,7 @@ class _NavIconState extends State<_NavIcon> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 5),
       child: Tooltip(
-        message: widget.item.label,
+        message: widget.tooltip,
         preferBelow: false,
         waitDuration: const Duration(milliseconds: 600),
         child: MouseRegion(

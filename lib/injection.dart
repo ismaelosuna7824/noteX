@@ -10,7 +10,7 @@ import 'domain/repositories/time_entry_repository.dart';
 import 'domain/repositories/markdown_file_repository.dart';
 import 'domain/repositories/markdown_project_repository.dart';
 import 'domain/repositories/note_project_repository.dart';
-import 'domain/repositories/reminder_repository.dart';
+import 'domain/repositories/task_repository.dart';
 import 'domain/services/sync_service.dart';
 import 'domain/services/connectivity_service.dart';
 import 'domain/services/title_generation_service.dart';
@@ -25,7 +25,7 @@ import 'infrastructure/local/drift_time_entry_repository.dart';
 import 'infrastructure/local/drift_markdown_file_repository.dart';
 import 'infrastructure/local/drift_markdown_project_repository.dart';
 import 'infrastructure/local/drift_note_project_repository.dart';
-import 'infrastructure/local/drift_reminder_repository.dart';
+import 'infrastructure/local/drift_task_repository.dart';
 import 'infrastructure/auth/supabase_auth_adapter.dart';
 import 'infrastructure/supabase/supabase_sync_adapter.dart';
 import 'infrastructure/network/connectivity_adapter.dart';
@@ -51,6 +51,7 @@ import 'application/use_cases/timer/stop_timer_use_case.dart';
 import 'application/use_cases/timer/get_time_entries_use_case.dart';
 import 'application/use_cases/timer/delete_time_entry_use_case.dart';
 import 'application/use_cases/timer/update_time_entry_use_case.dart';
+import 'application/use_cases/timer/resolve_time_entry_task_use_case.dart';
 import 'application/use_cases/markdown/create_markdown_file_use_case.dart';
 import 'application/use_cases/markdown/update_markdown_file_use_case.dart';
 import 'application/use_cases/markdown/get_markdown_files_use_case.dart';
@@ -65,10 +66,14 @@ import 'application/use_cases/note/rename_note_project_use_case.dart';
 import 'application/use_cases/note/get_deleted_notes_use_case.dart';
 import 'application/use_cases/note/restore_note_use_case.dart';
 import 'application/use_cases/note/permanent_delete_note_use_case.dart';
-import 'application/use_cases/reminder/create_reminder_use_case.dart';
-import 'application/use_cases/reminder/get_reminders_use_case.dart';
-import 'application/use_cases/reminder/complete_reminder_use_case.dart';
-import 'application/use_cases/reminder/delete_reminder_use_case.dart';
+import 'application/use_cases/task/create_task_use_case.dart';
+import 'application/use_cases/task/get_tasks_use_case.dart';
+import 'application/use_cases/task/link_note_to_task_use_case.dart';
+import 'application/use_cases/task/transition_task_status_use_case.dart';
+import 'application/use_cases/task/unlink_note_from_task_use_case.dart';
+import 'application/use_cases/task/update_task_use_case.dart';
+import 'application/use_cases/task/delete_task_use_case.dart';
+import 'application/use_cases/task/resolve_task_note_link_use_case.dart';
 import 'application/use_cases/check_for_update_use_case.dart';
 import 'application/use_cases/cleanup_empty_notes_use_case.dart';
 import 'application/use_cases/cleanup_expired_ephemeral_notes_use_case.dart';
@@ -80,7 +85,7 @@ import 'presentation/state/app_state.dart';
 import 'presentation/state/theme_state.dart';
 import 'presentation/state/timer_state.dart';
 import 'presentation/state/markdown_state.dart';
-import 'presentation/state/reminder_state.dart';
+import 'presentation/state/task_state.dart';
 import 'presentation/state/security_state.dart';
 import 'presentation/state/tiling_state.dart';
 import 'presentation/state/writing_stats_state.dart';
@@ -144,9 +149,9 @@ Future<void> setupDependencies() async {
     DriftNoteProjectRepository(database),
   );
 
-  // Infrastructure - Reminder Repository
-  getIt.registerSingleton<ReminderRepository>(
-    DriftReminderRepository(database),
+  // Infrastructure - Task Repository
+  getIt.registerSingleton<TaskRepository>(
+    DriftTaskRepository(database),
   );
 
   // Infrastructure - Sync Service (Supabase adapter)
@@ -160,7 +165,7 @@ Future<void> setupDependencies() async {
       mdFileRepo: getIt<MarkdownFileRepository>(),
       mdProjectRepo: getIt<MarkdownProjectRepository>(),
       noteProjectRepo: getIt<NoteProjectRepository>(),
-      reminderRepo: getIt<ReminderRepository>(),
+      taskRepo: getIt<TaskRepository>(),
     ),
   );
 
@@ -239,7 +244,10 @@ Future<void> setupDependencies() async {
     ),
   );
   getIt.registerFactory<StartTimerUseCase>(
-    () => StartTimerUseCase(getIt<TimeEntryRepository>()),
+    () => StartTimerUseCase(
+      getIt<TimeEntryRepository>(),
+      getIt<TransitionTaskStatusUseCase>(),
+    ),
   );
   getIt.registerFactory<StopTimerUseCase>(
     () => StopTimerUseCase(getIt<TimeEntryRepository>()),
@@ -255,6 +263,9 @@ Future<void> setupDependencies() async {
   );
   getIt.registerFactory<UpdateTimeEntryUseCase>(
     () => UpdateTimeEntryUseCase(getIt<TimeEntryRepository>()),
+  );
+  getIt.registerFactory<ResolveTimeEntryTaskUseCase>(
+    () => ResolveTimeEntryTaskUseCase(getIt<TaskRepository>()),
   );
 
   // Application - Markdown Use Cases
@@ -315,21 +326,33 @@ Future<void> setupDependencies() async {
     () => PermanentDeleteNoteUseCase(getIt<NoteRepository>()),
   );
 
-  // Application - Reminder Use Cases
-  getIt.registerFactory<CreateReminderUseCase>(
-    () => CreateReminderUseCase(getIt<ReminderRepository>()),
+  // Application - Task Use Cases
+  getIt.registerFactory<CreateTaskUseCase>(
+    () => CreateTaskUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<GetRemindersUseCase>(
-    () => GetRemindersUseCase(getIt<ReminderRepository>()),
+  getIt.registerFactory<GetTasksUseCase>(
+    () => GetTasksUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<CompleteReminderUseCase>(
-    () => CompleteReminderUseCase(getIt<ReminderRepository>()),
+  getIt.registerFactory<TransitionTaskStatusUseCase>(
+    () => TransitionTaskStatusUseCase(getIt<TaskRepository>()),
   );
-  getIt.registerFactory<DeleteReminderUseCase>(
-    () => DeleteReminderUseCase(
-      getIt<ReminderRepository>(),
+  getIt.registerFactory<UpdateTaskUseCase>(
+    () => UpdateTaskUseCase(getIt<TaskRepository>()),
+  );
+  getIt.registerFactory<DeleteTaskUseCase>(
+    () => DeleteTaskUseCase(
+      getIt<TaskRepository>(),
       getIt<SyncEngine>(),
     ),
+  );
+  getIt.registerFactory<ResolveTaskNoteLinkUseCase>(
+    () => ResolveTaskNoteLinkUseCase(getIt<NoteRepository>()),
+  );
+  getIt.registerFactory<LinkNoteToTaskUseCase>(
+    () => LinkNoteToTaskUseCase(getIt<TaskRepository>()),
+  );
+  getIt.registerFactory<UnlinkNoteFromTaskUseCase>(
+    () => UnlinkNoteFromTaskUseCase(getIt<TaskRepository>()),
   );
 
   // Application - Update Use Case
@@ -384,7 +407,7 @@ Future<void> setupDependencies() async {
   // Wire sync completion callback so the UI refreshes after each sync
   getIt<SyncEngine>().onSyncComplete = () async {
     await appState.refreshNotes();
-    await getIt<ReminderState>().refreshReminders();
+    await getIt<TaskState>().refreshReminders();
   };
   // Wire sync engine to AppState for user switch detection on sign-in
   appState.syncEngine = getIt<SyncEngine>();
@@ -415,13 +438,22 @@ Future<void> setupDependencies() async {
       autoSaveService: getIt<MarkdownAutoSaveService>(),
     ),
   );
-  // ReminderState
-  getIt.registerSingleton<ReminderState>(
-    ReminderState(
-      createReminder: getIt<CreateReminderUseCase>(),
-      getReminders: getIt<GetRemindersUseCase>(),
-      completeReminder: getIt<CompleteReminderUseCase>(),
-      deleteReminder: getIt<DeleteReminderUseCase>(),
+  // TaskState
+  getIt.registerSingleton<TaskState>(
+    TaskState(
+      createReminder: getIt<CreateTaskUseCase>(),
+      getReminders: getIt<GetTasksUseCase>(),
+      completeReminder: getIt<TransitionTaskStatusUseCase>(),
+      updateReminder: getIt<UpdateTaskUseCase>(),
+      deleteReminder: getIt<DeleteTaskUseCase>(),
+      linkNote: getIt<LinkNoteToTaskUseCase>(),
+      unlinkNote: getIt<UnlinkNoteFromTaskUseCase>(),
     ),
   );
+  // Wire timer→task cross-state refresh (design D1) — deferred-getIt,
+  // mirroring the SyncEngine.onSyncComplete pattern above. So the board
+  // shows the task's TRUE status after starting a linked timer, whether the
+  // transition applied or failed — never an optimistic lie.
+  getIt<TimerState>().onTaskChanged =
+      () => getIt<TaskState>().refreshReminders();
 }

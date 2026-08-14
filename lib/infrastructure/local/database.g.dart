@@ -1682,6 +1682,15 @@ class $TimeEntriesTable extends TimeEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _taskIdMeta = const VerificationMeta('taskId');
+  @override
+  late final GeneratedColumn<String> taskId = GeneratedColumn<String>(
+    'task_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -1694,6 +1703,7 @@ class $TimeEntriesTable extends TimeEntries
     deletedAt,
     syncStatus,
     userId,
+    taskId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1771,6 +1781,12 @@ class $TimeEntriesTable extends TimeEntries
         userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
       );
     }
+    if (data.containsKey('task_id')) {
+      context.handle(
+        _taskIdMeta,
+        taskId.isAcceptableOrUnknown(data['task_id']!, _taskIdMeta),
+      );
+    }
     return context;
   }
 
@@ -1820,6 +1836,10 @@ class $TimeEntriesTable extends TimeEntries
         DriftSqlType.string,
         data['${effectivePrefix}user_id'],
       ),
+      taskId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}task_id'],
+      ),
     );
   }
 
@@ -1840,6 +1860,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
   final DateTime? deletedAt;
   final String syncStatus;
   final String? userId;
+  final String? taskId;
   const TimeEntryRow({
     required this.id,
     required this.description,
@@ -1851,6 +1872,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
     this.deletedAt,
     required this.syncStatus,
     this.userId,
+    this.taskId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1874,6 +1896,9 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
     map['sync_status'] = Variable<String>(syncStatus);
     if (!nullToAbsent || userId != null) {
       map['user_id'] = Variable<String>(userId);
+    }
+    if (!nullToAbsent || taskId != null) {
+      map['task_id'] = Variable<String>(taskId);
     }
     return map;
   }
@@ -1900,6 +1925,9 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
       userId: userId == null && nullToAbsent
           ? const Value.absent()
           : Value(userId),
+      taskId: taskId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(taskId),
     );
   }
 
@@ -1919,6 +1947,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       userId: serializer.fromJson<String?>(json['userId']),
+      taskId: serializer.fromJson<String?>(json['taskId']),
     );
   }
   @override
@@ -1935,6 +1964,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'syncStatus': serializer.toJson<String>(syncStatus),
       'userId': serializer.toJson<String?>(userId),
+      'taskId': serializer.toJson<String?>(taskId),
     };
   }
 
@@ -1949,6 +1979,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
     Value<DateTime?> deletedAt = const Value.absent(),
     String? syncStatus,
     Value<String?> userId = const Value.absent(),
+    Value<String?> taskId = const Value.absent(),
   }) => TimeEntryRow(
     id: id ?? this.id,
     description: description ?? this.description,
@@ -1960,6 +1991,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     syncStatus: syncStatus ?? this.syncStatus,
     userId: userId.present ? userId.value : this.userId,
+    taskId: taskId.present ? taskId.value : this.taskId,
   );
   TimeEntryRow copyWithCompanion(TimeEntriesCompanion data) {
     return TimeEntryRow(
@@ -1977,6 +2009,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
           ? data.syncStatus.value
           : this.syncStatus,
       userId: data.userId.present ? data.userId.value : this.userId,
+      taskId: data.taskId.present ? data.taskId.value : this.taskId,
     );
   }
 
@@ -1992,7 +2025,8 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('syncStatus: $syncStatus, ')
-          ..write('userId: $userId')
+          ..write('userId: $userId, ')
+          ..write('taskId: $taskId')
           ..write(')'))
         .toString();
   }
@@ -2009,6 +2043,7 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
     deletedAt,
     syncStatus,
     userId,
+    taskId,
   );
   @override
   bool operator ==(Object other) =>
@@ -2023,7 +2058,8 @@ class TimeEntryRow extends DataClass implements Insertable<TimeEntryRow> {
           other.version == this.version &&
           other.deletedAt == this.deletedAt &&
           other.syncStatus == this.syncStatus &&
-          other.userId == this.userId);
+          other.userId == this.userId &&
+          other.taskId == this.taskId);
 }
 
 class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
@@ -2037,6 +2073,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
   final Value<DateTime?> deletedAt;
   final Value<String> syncStatus;
   final Value<String?> userId;
+  final Value<String?> taskId;
   final Value<int> rowid;
   const TimeEntriesCompanion({
     this.id = const Value.absent(),
@@ -2049,6 +2086,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
     this.deletedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.userId = const Value.absent(),
+    this.taskId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
   TimeEntriesCompanion.insert({
@@ -2062,6 +2100,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
     this.deletedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.userId = const Value.absent(),
+    this.taskId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
        startTime = Value(startTime);
@@ -2076,6 +2115,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
     Expression<DateTime>? deletedAt,
     Expression<String>? syncStatus,
     Expression<String>? userId,
+    Expression<String>? taskId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -2089,6 +2129,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (userId != null) 'user_id': userId,
+      if (taskId != null) 'task_id': taskId,
       if (rowid != null) 'rowid': rowid,
     });
   }
@@ -2104,6 +2145,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
     Value<DateTime?>? deletedAt,
     Value<String>? syncStatus,
     Value<String?>? userId,
+    Value<String?>? taskId,
     Value<int>? rowid,
   }) {
     return TimeEntriesCompanion(
@@ -2117,6 +2159,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
       deletedAt: deletedAt ?? this.deletedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       userId: userId ?? this.userId,
+      taskId: taskId ?? this.taskId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -2154,6 +2197,9 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
     if (userId.present) {
       map['user_id'] = Variable<String>(userId.value);
     }
+    if (taskId.present) {
+      map['task_id'] = Variable<String>(taskId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -2173,6 +2219,7 @@ class TimeEntriesCompanion extends UpdateCompanion<TimeEntryRow> {
           ..write('deletedAt: $deletedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('userId: $userId, ')
+          ..write('taskId: $taskId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -4221,12 +4268,12 @@ class NoteProjectEntriesCompanion extends UpdateCompanion<NoteProjectRow> {
   }
 }
 
-class $ReminderEntriesTable extends ReminderEntries
-    with TableInfo<$ReminderEntriesTable, ReminderEntry> {
+class $TaskEntriesTable extends TaskEntries
+    with TableInfo<$TaskEntriesTable, TaskEntry> {
   @override
   final GeneratedDatabase attachedDatabase;
   final String? _alias;
-  $ReminderEntriesTable(this.attachedDatabase, [this._alias]);
+  $TaskEntriesTable(this.attachedDatabase, [this._alias]);
   static const VerificationMeta _idMeta = const VerificationMeta('id');
   @override
   late final GeneratedColumn<String> id = GeneratedColumn<String>(
@@ -4254,9 +4301,9 @@ class $ReminderEntriesTable extends ReminderEntries
       GeneratedColumn<DateTime>(
         'scheduled_date',
         aliasedName,
-        false,
+        true,
         type: DriftSqlType.dateTime,
-        requiredDuringInsert: true,
+        requiredDuringInsert: false,
       );
   static const VerificationMeta _isCompletedMeta = const VerificationMeta(
     'isCompleted',
@@ -4350,6 +4397,153 @@ class $ReminderEntriesTable extends ReminderEntries
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _statusMeta = const VerificationMeta('status');
+  @override
+  late final GeneratedColumn<String> status = GeneratedColumn<String>(
+    'status',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('todo'),
+  );
+  static const VerificationMeta _statusChangedAtMeta = const VerificationMeta(
+    'statusChangedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> statusChangedAt =
+      GeneratedColumn<DateTime>(
+        'status_changed_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _statusPendingPushMeta = const VerificationMeta(
+    'statusPendingPush',
+  );
+  @override
+  late final GeneratedColumn<bool> statusPendingPush = GeneratedColumn<bool>(
+    'status_pending_push',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("status_pending_push" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
+  static const VerificationMeta _descriptionMeta = const VerificationMeta(
+    'description',
+  );
+  @override
+  late final GeneratedColumn<String> description = GeneratedColumn<String>(
+    'description',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _blockedReasonMeta = const VerificationMeta(
+    'blockedReason',
+  );
+  @override
+  late final GeneratedColumn<String> blockedReason = GeneratedColumn<String>(
+    'blocked_reason',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteIdMeta = const VerificationMeta('noteId');
+  @override
+  late final GeneratedColumn<String> noteId = GeneratedColumn<String>(
+    'note_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _noteIdsMeta = const VerificationMeta(
+    'noteIds',
+  );
+  @override
+  late final GeneratedColumn<String> noteIds = GeneratedColumn<String>(
+    'note_ids',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('[]'),
+  );
+  static const VerificationMeta _externalProviderMeta = const VerificationMeta(
+    'externalProvider',
+  );
+  @override
+  late final GeneratedColumn<String> externalProvider = GeneratedColumn<String>(
+    'external_provider',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalIdMeta = const VerificationMeta(
+    'externalId',
+  );
+  @override
+  late final GeneratedColumn<String> externalId = GeneratedColumn<String>(
+    'external_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalUrlMeta = const VerificationMeta(
+    'externalUrl',
+  );
+  @override
+  late final GeneratedColumn<String> externalUrl = GeneratedColumn<String>(
+    'external_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _externalCachedTitleMeta =
+      const VerificationMeta('externalCachedTitle');
+  @override
+  late final GeneratedColumn<String> externalCachedTitle =
+      GeneratedColumn<String>(
+        'external_cached_title',
+        aliasedName,
+        true,
+        type: DriftSqlType.string,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _externalLastSyncedAtMeta =
+      const VerificationMeta('externalLastSyncedAt');
+  @override
+  late final GeneratedColumn<DateTime> externalLastSyncedAt =
+      GeneratedColumn<DateTime>(
+        'external_last_synced_at',
+        aliasedName,
+        true,
+        type: DriftSqlType.dateTime,
+        requiredDuringInsert: false,
+      );
+  static const VerificationMeta _projectIdMeta = const VerificationMeta(
+    'projectId',
+  );
+  @override
+  late final GeneratedColumn<String> projectId = GeneratedColumn<String>(
+    'project_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   @override
   List<GeneratedColumn> get $columns => [
     id,
@@ -4363,6 +4557,19 @@ class $ReminderEntriesTable extends ReminderEntries
     deletedAt,
     syncStatus,
     userId,
+    status,
+    statusChangedAt,
+    statusPendingPush,
+    description,
+    blockedReason,
+    noteId,
+    noteIds,
+    externalProvider,
+    externalId,
+    externalUrl,
+    externalCachedTitle,
+    externalLastSyncedAt,
+    projectId,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -4371,7 +4578,7 @@ class $ReminderEntriesTable extends ReminderEntries
   static const String $name = 'reminders';
   @override
   VerificationContext validateIntegrity(
-    Insertable<ReminderEntry> instance, {
+    Insertable<TaskEntry> instance, {
     bool isInserting = false,
   }) {
     final context = VerificationContext();
@@ -4395,8 +4602,6 @@ class $ReminderEntriesTable extends ReminderEntries
           _scheduledDateMeta,
         ),
       );
-    } else if (isInserting) {
-      context.missing(_scheduledDateMeta);
     }
     if (data.containsKey('is_completed')) {
       context.handle(
@@ -4456,15 +4661,117 @@ class $ReminderEntriesTable extends ReminderEntries
         userId.isAcceptableOrUnknown(data['user_id']!, _userIdMeta),
       );
     }
+    if (data.containsKey('status')) {
+      context.handle(
+        _statusMeta,
+        status.isAcceptableOrUnknown(data['status']!, _statusMeta),
+      );
+    }
+    if (data.containsKey('status_changed_at')) {
+      context.handle(
+        _statusChangedAtMeta,
+        statusChangedAt.isAcceptableOrUnknown(
+          data['status_changed_at']!,
+          _statusChangedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('status_pending_push')) {
+      context.handle(
+        _statusPendingPushMeta,
+        statusPendingPush.isAcceptableOrUnknown(
+          data['status_pending_push']!,
+          _statusPendingPushMeta,
+        ),
+      );
+    }
+    if (data.containsKey('description')) {
+      context.handle(
+        _descriptionMeta,
+        description.isAcceptableOrUnknown(
+          data['description']!,
+          _descriptionMeta,
+        ),
+      );
+    }
+    if (data.containsKey('blocked_reason')) {
+      context.handle(
+        _blockedReasonMeta,
+        blockedReason.isAcceptableOrUnknown(
+          data['blocked_reason']!,
+          _blockedReasonMeta,
+        ),
+      );
+    }
+    if (data.containsKey('note_id')) {
+      context.handle(
+        _noteIdMeta,
+        noteId.isAcceptableOrUnknown(data['note_id']!, _noteIdMeta),
+      );
+    }
+    if (data.containsKey('note_ids')) {
+      context.handle(
+        _noteIdsMeta,
+        noteIds.isAcceptableOrUnknown(data['note_ids']!, _noteIdsMeta),
+      );
+    }
+    if (data.containsKey('external_provider')) {
+      context.handle(
+        _externalProviderMeta,
+        externalProvider.isAcceptableOrUnknown(
+          data['external_provider']!,
+          _externalProviderMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_id')) {
+      context.handle(
+        _externalIdMeta,
+        externalId.isAcceptableOrUnknown(data['external_id']!, _externalIdMeta),
+      );
+    }
+    if (data.containsKey('external_url')) {
+      context.handle(
+        _externalUrlMeta,
+        externalUrl.isAcceptableOrUnknown(
+          data['external_url']!,
+          _externalUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_cached_title')) {
+      context.handle(
+        _externalCachedTitleMeta,
+        externalCachedTitle.isAcceptableOrUnknown(
+          data['external_cached_title']!,
+          _externalCachedTitleMeta,
+        ),
+      );
+    }
+    if (data.containsKey('external_last_synced_at')) {
+      context.handle(
+        _externalLastSyncedAtMeta,
+        externalLastSyncedAt.isAcceptableOrUnknown(
+          data['external_last_synced_at']!,
+          _externalLastSyncedAtMeta,
+        ),
+      );
+    }
+    if (data.containsKey('project_id')) {
+      context.handle(
+        _projectIdMeta,
+        projectId.isAcceptableOrUnknown(data['project_id']!, _projectIdMeta),
+      );
+    }
     return context;
   }
 
   @override
   Set<GeneratedColumn> get $primaryKey => {id};
   @override
-  ReminderEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
+  TaskEntry map(Map<String, dynamic> data, {String? tablePrefix}) {
     final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
-    return ReminderEntry(
+    return TaskEntry(
       id: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}id'],
@@ -4476,7 +4783,7 @@ class $ReminderEntriesTable extends ReminderEntries
       scheduledDate: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}scheduled_date'],
-      )!,
+      ),
       isCompleted: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
         data['${effectivePrefix}is_completed'],
@@ -4509,19 +4816,71 @@ class $ReminderEntriesTable extends ReminderEntries
         DriftSqlType.string,
         data['${effectivePrefix}user_id'],
       ),
+      status: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}status'],
+      )!,
+      statusChangedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}status_changed_at'],
+      ),
+      statusPendingPush: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}status_pending_push'],
+      )!,
+      description: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}description'],
+      )!,
+      blockedReason: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}blocked_reason'],
+      ),
+      noteId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_id'],
+      ),
+      noteIds: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}note_ids'],
+      )!,
+      externalProvider: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_provider'],
+      ),
+      externalId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_id'],
+      ),
+      externalUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_url'],
+      ),
+      externalCachedTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}external_cached_title'],
+      ),
+      externalLastSyncedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}external_last_synced_at'],
+      ),
+      projectId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}project_id'],
+      ),
     );
   }
 
   @override
-  $ReminderEntriesTable createAlias(String alias) {
-    return $ReminderEntriesTable(attachedDatabase, alias);
+  $TaskEntriesTable createAlias(String alias) {
+    return $TaskEntriesTable(attachedDatabase, alias);
   }
 }
 
-class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
+class TaskEntry extends DataClass implements Insertable<TaskEntry> {
   final String id;
   final String title;
-  final DateTime scheduledDate;
+  final DateTime? scheduledDate;
   final bool isCompleted;
   final DateTime? completedAt;
   final DateTime createdAt;
@@ -4530,10 +4889,23 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
   final DateTime? deletedAt;
   final String syncStatus;
   final String? userId;
-  const ReminderEntry({
+  final String status;
+  final DateTime? statusChangedAt;
+  final bool statusPendingPush;
+  final String description;
+  final String? blockedReason;
+  final String? noteId;
+  final String noteIds;
+  final String? externalProvider;
+  final String? externalId;
+  final String? externalUrl;
+  final String? externalCachedTitle;
+  final DateTime? externalLastSyncedAt;
+  final String? projectId;
+  const TaskEntry({
     required this.id,
     required this.title,
-    required this.scheduledDate,
+    this.scheduledDate,
     required this.isCompleted,
     this.completedAt,
     required this.createdAt,
@@ -4542,13 +4914,28 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     this.deletedAt,
     required this.syncStatus,
     this.userId,
+    required this.status,
+    this.statusChangedAt,
+    required this.statusPendingPush,
+    required this.description,
+    this.blockedReason,
+    this.noteId,
+    required this.noteIds,
+    this.externalProvider,
+    this.externalId,
+    this.externalUrl,
+    this.externalCachedTitle,
+    this.externalLastSyncedAt,
+    this.projectId,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
     final map = <String, Expression>{};
     map['id'] = Variable<String>(id);
     map['title'] = Variable<String>(title);
-    map['scheduled_date'] = Variable<DateTime>(scheduledDate);
+    if (!nullToAbsent || scheduledDate != null) {
+      map['scheduled_date'] = Variable<DateTime>(scheduledDate);
+    }
     map['is_completed'] = Variable<bool>(isCompleted);
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
@@ -4563,14 +4950,47 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     if (!nullToAbsent || userId != null) {
       map['user_id'] = Variable<String>(userId);
     }
+    map['status'] = Variable<String>(status);
+    if (!nullToAbsent || statusChangedAt != null) {
+      map['status_changed_at'] = Variable<DateTime>(statusChangedAt);
+    }
+    map['status_pending_push'] = Variable<bool>(statusPendingPush);
+    map['description'] = Variable<String>(description);
+    if (!nullToAbsent || blockedReason != null) {
+      map['blocked_reason'] = Variable<String>(blockedReason);
+    }
+    if (!nullToAbsent || noteId != null) {
+      map['note_id'] = Variable<String>(noteId);
+    }
+    map['note_ids'] = Variable<String>(noteIds);
+    if (!nullToAbsent || externalProvider != null) {
+      map['external_provider'] = Variable<String>(externalProvider);
+    }
+    if (!nullToAbsent || externalId != null) {
+      map['external_id'] = Variable<String>(externalId);
+    }
+    if (!nullToAbsent || externalUrl != null) {
+      map['external_url'] = Variable<String>(externalUrl);
+    }
+    if (!nullToAbsent || externalCachedTitle != null) {
+      map['external_cached_title'] = Variable<String>(externalCachedTitle);
+    }
+    if (!nullToAbsent || externalLastSyncedAt != null) {
+      map['external_last_synced_at'] = Variable<DateTime>(externalLastSyncedAt);
+    }
+    if (!nullToAbsent || projectId != null) {
+      map['project_id'] = Variable<String>(projectId);
+    }
     return map;
   }
 
-  ReminderEntriesCompanion toCompanion(bool nullToAbsent) {
-    return ReminderEntriesCompanion(
+  TaskEntriesCompanion toCompanion(bool nullToAbsent) {
+    return TaskEntriesCompanion(
       id: Value(id),
       title: Value(title),
-      scheduledDate: Value(scheduledDate),
+      scheduledDate: scheduledDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(scheduledDate),
       isCompleted: Value(isCompleted),
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
@@ -4585,18 +5005,49 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
       userId: userId == null && nullToAbsent
           ? const Value.absent()
           : Value(userId),
+      status: Value(status),
+      statusChangedAt: statusChangedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(statusChangedAt),
+      statusPendingPush: Value(statusPendingPush),
+      description: Value(description),
+      blockedReason: blockedReason == null && nullToAbsent
+          ? const Value.absent()
+          : Value(blockedReason),
+      noteId: noteId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(noteId),
+      noteIds: Value(noteIds),
+      externalProvider: externalProvider == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalProvider),
+      externalId: externalId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalId),
+      externalUrl: externalUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalUrl),
+      externalCachedTitle: externalCachedTitle == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalCachedTitle),
+      externalLastSyncedAt: externalLastSyncedAt == null && nullToAbsent
+          ? const Value.absent()
+          : Value(externalLastSyncedAt),
+      projectId: projectId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(projectId),
     );
   }
 
-  factory ReminderEntry.fromJson(
+  factory TaskEntry.fromJson(
     Map<String, dynamic> json, {
     ValueSerializer? serializer,
   }) {
     serializer ??= driftRuntimeOptions.defaultSerializer;
-    return ReminderEntry(
+    return TaskEntry(
       id: serializer.fromJson<String>(json['id']),
       title: serializer.fromJson<String>(json['title']),
-      scheduledDate: serializer.fromJson<DateTime>(json['scheduledDate']),
+      scheduledDate: serializer.fromJson<DateTime?>(json['scheduledDate']),
       isCompleted: serializer.fromJson<bool>(json['isCompleted']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
@@ -4605,6 +5056,23 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
       deletedAt: serializer.fromJson<DateTime?>(json['deletedAt']),
       syncStatus: serializer.fromJson<String>(json['syncStatus']),
       userId: serializer.fromJson<String?>(json['userId']),
+      status: serializer.fromJson<String>(json['status']),
+      statusChangedAt: serializer.fromJson<DateTime?>(json['statusChangedAt']),
+      statusPendingPush: serializer.fromJson<bool>(json['statusPendingPush']),
+      description: serializer.fromJson<String>(json['description']),
+      blockedReason: serializer.fromJson<String?>(json['blockedReason']),
+      noteId: serializer.fromJson<String?>(json['noteId']),
+      noteIds: serializer.fromJson<String>(json['noteIds']),
+      externalProvider: serializer.fromJson<String?>(json['externalProvider']),
+      externalId: serializer.fromJson<String?>(json['externalId']),
+      externalUrl: serializer.fromJson<String?>(json['externalUrl']),
+      externalCachedTitle: serializer.fromJson<String?>(
+        json['externalCachedTitle'],
+      ),
+      externalLastSyncedAt: serializer.fromJson<DateTime?>(
+        json['externalLastSyncedAt'],
+      ),
+      projectId: serializer.fromJson<String?>(json['projectId']),
     );
   }
   @override
@@ -4613,7 +5081,7 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     return <String, dynamic>{
       'id': serializer.toJson<String>(id),
       'title': serializer.toJson<String>(title),
-      'scheduledDate': serializer.toJson<DateTime>(scheduledDate),
+      'scheduledDate': serializer.toJson<DateTime?>(scheduledDate),
       'isCompleted': serializer.toJson<bool>(isCompleted),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
       'createdAt': serializer.toJson<DateTime>(createdAt),
@@ -4622,13 +5090,28 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
       'deletedAt': serializer.toJson<DateTime?>(deletedAt),
       'syncStatus': serializer.toJson<String>(syncStatus),
       'userId': serializer.toJson<String?>(userId),
+      'status': serializer.toJson<String>(status),
+      'statusChangedAt': serializer.toJson<DateTime?>(statusChangedAt),
+      'statusPendingPush': serializer.toJson<bool>(statusPendingPush),
+      'description': serializer.toJson<String>(description),
+      'blockedReason': serializer.toJson<String?>(blockedReason),
+      'noteId': serializer.toJson<String?>(noteId),
+      'noteIds': serializer.toJson<String>(noteIds),
+      'externalProvider': serializer.toJson<String?>(externalProvider),
+      'externalId': serializer.toJson<String?>(externalId),
+      'externalUrl': serializer.toJson<String?>(externalUrl),
+      'externalCachedTitle': serializer.toJson<String?>(externalCachedTitle),
+      'externalLastSyncedAt': serializer.toJson<DateTime?>(
+        externalLastSyncedAt,
+      ),
+      'projectId': serializer.toJson<String?>(projectId),
     };
   }
 
-  ReminderEntry copyWith({
+  TaskEntry copyWith({
     String? id,
     String? title,
-    DateTime? scheduledDate,
+    Value<DateTime?> scheduledDate = const Value.absent(),
     bool? isCompleted,
     Value<DateTime?> completedAt = const Value.absent(),
     DateTime? createdAt,
@@ -4637,10 +5120,25 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     Value<DateTime?> deletedAt = const Value.absent(),
     String? syncStatus,
     Value<String?> userId = const Value.absent(),
-  }) => ReminderEntry(
+    String? status,
+    Value<DateTime?> statusChangedAt = const Value.absent(),
+    bool? statusPendingPush,
+    String? description,
+    Value<String?> blockedReason = const Value.absent(),
+    Value<String?> noteId = const Value.absent(),
+    String? noteIds,
+    Value<String?> externalProvider = const Value.absent(),
+    Value<String?> externalId = const Value.absent(),
+    Value<String?> externalUrl = const Value.absent(),
+    Value<String?> externalCachedTitle = const Value.absent(),
+    Value<DateTime?> externalLastSyncedAt = const Value.absent(),
+    Value<String?> projectId = const Value.absent(),
+  }) => TaskEntry(
     id: id ?? this.id,
     title: title ?? this.title,
-    scheduledDate: scheduledDate ?? this.scheduledDate,
+    scheduledDate: scheduledDate.present
+        ? scheduledDate.value
+        : this.scheduledDate,
     isCompleted: isCompleted ?? this.isCompleted,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
     createdAt: createdAt ?? this.createdAt,
@@ -4649,9 +5147,32 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     deletedAt: deletedAt.present ? deletedAt.value : this.deletedAt,
     syncStatus: syncStatus ?? this.syncStatus,
     userId: userId.present ? userId.value : this.userId,
+    status: status ?? this.status,
+    statusChangedAt: statusChangedAt.present
+        ? statusChangedAt.value
+        : this.statusChangedAt,
+    statusPendingPush: statusPendingPush ?? this.statusPendingPush,
+    description: description ?? this.description,
+    blockedReason: blockedReason.present
+        ? blockedReason.value
+        : this.blockedReason,
+    noteId: noteId.present ? noteId.value : this.noteId,
+    noteIds: noteIds ?? this.noteIds,
+    externalProvider: externalProvider.present
+        ? externalProvider.value
+        : this.externalProvider,
+    externalId: externalId.present ? externalId.value : this.externalId,
+    externalUrl: externalUrl.present ? externalUrl.value : this.externalUrl,
+    externalCachedTitle: externalCachedTitle.present
+        ? externalCachedTitle.value
+        : this.externalCachedTitle,
+    externalLastSyncedAt: externalLastSyncedAt.present
+        ? externalLastSyncedAt.value
+        : this.externalLastSyncedAt,
+    projectId: projectId.present ? projectId.value : this.projectId,
   );
-  ReminderEntry copyWithCompanion(ReminderEntriesCompanion data) {
-    return ReminderEntry(
+  TaskEntry copyWithCompanion(TaskEntriesCompanion data) {
+    return TaskEntry(
       id: data.id.present ? data.id.value : this.id,
       title: data.title.present ? data.title.value : this.title,
       scheduledDate: data.scheduledDate.present
@@ -4671,12 +5192,43 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
           ? data.syncStatus.value
           : this.syncStatus,
       userId: data.userId.present ? data.userId.value : this.userId,
+      status: data.status.present ? data.status.value : this.status,
+      statusChangedAt: data.statusChangedAt.present
+          ? data.statusChangedAt.value
+          : this.statusChangedAt,
+      statusPendingPush: data.statusPendingPush.present
+          ? data.statusPendingPush.value
+          : this.statusPendingPush,
+      description: data.description.present
+          ? data.description.value
+          : this.description,
+      blockedReason: data.blockedReason.present
+          ? data.blockedReason.value
+          : this.blockedReason,
+      noteId: data.noteId.present ? data.noteId.value : this.noteId,
+      noteIds: data.noteIds.present ? data.noteIds.value : this.noteIds,
+      externalProvider: data.externalProvider.present
+          ? data.externalProvider.value
+          : this.externalProvider,
+      externalId: data.externalId.present
+          ? data.externalId.value
+          : this.externalId,
+      externalUrl: data.externalUrl.present
+          ? data.externalUrl.value
+          : this.externalUrl,
+      externalCachedTitle: data.externalCachedTitle.present
+          ? data.externalCachedTitle.value
+          : this.externalCachedTitle,
+      externalLastSyncedAt: data.externalLastSyncedAt.present
+          ? data.externalLastSyncedAt.value
+          : this.externalLastSyncedAt,
+      projectId: data.projectId.present ? data.projectId.value : this.projectId,
     );
   }
 
   @override
   String toString() {
-    return (StringBuffer('ReminderEntry(')
+    return (StringBuffer('TaskEntry(')
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('scheduledDate: $scheduledDate, ')
@@ -4687,13 +5239,26 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
           ..write('version: $version, ')
           ..write('deletedAt: $deletedAt, ')
           ..write('syncStatus: $syncStatus, ')
-          ..write('userId: $userId')
+          ..write('userId: $userId, ')
+          ..write('status: $status, ')
+          ..write('statusChangedAt: $statusChangedAt, ')
+          ..write('statusPendingPush: $statusPendingPush, ')
+          ..write('description: $description, ')
+          ..write('blockedReason: $blockedReason, ')
+          ..write('noteId: $noteId, ')
+          ..write('noteIds: $noteIds, ')
+          ..write('externalProvider: $externalProvider, ')
+          ..write('externalId: $externalId, ')
+          ..write('externalUrl: $externalUrl, ')
+          ..write('externalCachedTitle: $externalCachedTitle, ')
+          ..write('externalLastSyncedAt: $externalLastSyncedAt, ')
+          ..write('projectId: $projectId')
           ..write(')'))
         .toString();
   }
 
   @override
-  int get hashCode => Object.hash(
+  int get hashCode => Object.hashAll([
     id,
     title,
     scheduledDate,
@@ -4705,11 +5270,24 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
     deletedAt,
     syncStatus,
     userId,
-  );
+    status,
+    statusChangedAt,
+    statusPendingPush,
+    description,
+    blockedReason,
+    noteId,
+    noteIds,
+    externalProvider,
+    externalId,
+    externalUrl,
+    externalCachedTitle,
+    externalLastSyncedAt,
+    projectId,
+  ]);
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      (other is ReminderEntry &&
+      (other is TaskEntry &&
           other.id == this.id &&
           other.title == this.title &&
           other.scheduledDate == this.scheduledDate &&
@@ -4720,13 +5298,26 @@ class ReminderEntry extends DataClass implements Insertable<ReminderEntry> {
           other.version == this.version &&
           other.deletedAt == this.deletedAt &&
           other.syncStatus == this.syncStatus &&
-          other.userId == this.userId);
+          other.userId == this.userId &&
+          other.status == this.status &&
+          other.statusChangedAt == this.statusChangedAt &&
+          other.statusPendingPush == this.statusPendingPush &&
+          other.description == this.description &&
+          other.blockedReason == this.blockedReason &&
+          other.noteId == this.noteId &&
+          other.noteIds == this.noteIds &&
+          other.externalProvider == this.externalProvider &&
+          other.externalId == this.externalId &&
+          other.externalUrl == this.externalUrl &&
+          other.externalCachedTitle == this.externalCachedTitle &&
+          other.externalLastSyncedAt == this.externalLastSyncedAt &&
+          other.projectId == this.projectId);
 }
 
-class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
+class TaskEntriesCompanion extends UpdateCompanion<TaskEntry> {
   final Value<String> id;
   final Value<String> title;
-  final Value<DateTime> scheduledDate;
+  final Value<DateTime?> scheduledDate;
   final Value<bool> isCompleted;
   final Value<DateTime?> completedAt;
   final Value<DateTime> createdAt;
@@ -4735,8 +5326,21 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
   final Value<DateTime?> deletedAt;
   final Value<String> syncStatus;
   final Value<String?> userId;
+  final Value<String> status;
+  final Value<DateTime?> statusChangedAt;
+  final Value<bool> statusPendingPush;
+  final Value<String> description;
+  final Value<String?> blockedReason;
+  final Value<String?> noteId;
+  final Value<String> noteIds;
+  final Value<String?> externalProvider;
+  final Value<String?> externalId;
+  final Value<String?> externalUrl;
+  final Value<String?> externalCachedTitle;
+  final Value<DateTime?> externalLastSyncedAt;
+  final Value<String?> projectId;
   final Value<int> rowid;
-  const ReminderEntriesCompanion({
+  const TaskEntriesCompanion({
     this.id = const Value.absent(),
     this.title = const Value.absent(),
     this.scheduledDate = const Value.absent(),
@@ -4748,12 +5352,25 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     this.deletedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.userId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.statusChangedAt = const Value.absent(),
+    this.statusPendingPush = const Value.absent(),
+    this.description = const Value.absent(),
+    this.blockedReason = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.noteIds = const Value.absent(),
+    this.externalProvider = const Value.absent(),
+    this.externalId = const Value.absent(),
+    this.externalUrl = const Value.absent(),
+    this.externalCachedTitle = const Value.absent(),
+    this.externalLastSyncedAt = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.rowid = const Value.absent(),
   });
-  ReminderEntriesCompanion.insert({
+  TaskEntriesCompanion.insert({
     required String id,
     this.title = const Value.absent(),
-    required DateTime scheduledDate,
+    this.scheduledDate = const Value.absent(),
     this.isCompleted = const Value.absent(),
     this.completedAt = const Value.absent(),
     required DateTime createdAt,
@@ -4762,12 +5379,24 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     this.deletedAt = const Value.absent(),
     this.syncStatus = const Value.absent(),
     this.userId = const Value.absent(),
+    this.status = const Value.absent(),
+    this.statusChangedAt = const Value.absent(),
+    this.statusPendingPush = const Value.absent(),
+    this.description = const Value.absent(),
+    this.blockedReason = const Value.absent(),
+    this.noteId = const Value.absent(),
+    this.noteIds = const Value.absent(),
+    this.externalProvider = const Value.absent(),
+    this.externalId = const Value.absent(),
+    this.externalUrl = const Value.absent(),
+    this.externalCachedTitle = const Value.absent(),
+    this.externalLastSyncedAt = const Value.absent(),
+    this.projectId = const Value.absent(),
     this.rowid = const Value.absent(),
   }) : id = Value(id),
-       scheduledDate = Value(scheduledDate),
        createdAt = Value(createdAt),
        updatedAt = Value(updatedAt);
-  static Insertable<ReminderEntry> custom({
+  static Insertable<TaskEntry> custom({
     Expression<String>? id,
     Expression<String>? title,
     Expression<DateTime>? scheduledDate,
@@ -4779,6 +5408,19 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     Expression<DateTime>? deletedAt,
     Expression<String>? syncStatus,
     Expression<String>? userId,
+    Expression<String>? status,
+    Expression<DateTime>? statusChangedAt,
+    Expression<bool>? statusPendingPush,
+    Expression<String>? description,
+    Expression<String>? blockedReason,
+    Expression<String>? noteId,
+    Expression<String>? noteIds,
+    Expression<String>? externalProvider,
+    Expression<String>? externalId,
+    Expression<String>? externalUrl,
+    Expression<String>? externalCachedTitle,
+    Expression<DateTime>? externalLastSyncedAt,
+    Expression<String>? projectId,
     Expression<int>? rowid,
   }) {
     return RawValuesInsertable({
@@ -4793,14 +5435,29 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
       if (deletedAt != null) 'deleted_at': deletedAt,
       if (syncStatus != null) 'sync_status': syncStatus,
       if (userId != null) 'user_id': userId,
+      if (status != null) 'status': status,
+      if (statusChangedAt != null) 'status_changed_at': statusChangedAt,
+      if (statusPendingPush != null) 'status_pending_push': statusPendingPush,
+      if (description != null) 'description': description,
+      if (blockedReason != null) 'blocked_reason': blockedReason,
+      if (noteId != null) 'note_id': noteId,
+      if (noteIds != null) 'note_ids': noteIds,
+      if (externalProvider != null) 'external_provider': externalProvider,
+      if (externalId != null) 'external_id': externalId,
+      if (externalUrl != null) 'external_url': externalUrl,
+      if (externalCachedTitle != null)
+        'external_cached_title': externalCachedTitle,
+      if (externalLastSyncedAt != null)
+        'external_last_synced_at': externalLastSyncedAt,
+      if (projectId != null) 'project_id': projectId,
       if (rowid != null) 'rowid': rowid,
     });
   }
 
-  ReminderEntriesCompanion copyWith({
+  TaskEntriesCompanion copyWith({
     Value<String>? id,
     Value<String>? title,
-    Value<DateTime>? scheduledDate,
+    Value<DateTime?>? scheduledDate,
     Value<bool>? isCompleted,
     Value<DateTime?>? completedAt,
     Value<DateTime>? createdAt,
@@ -4809,9 +5466,22 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     Value<DateTime?>? deletedAt,
     Value<String>? syncStatus,
     Value<String?>? userId,
+    Value<String>? status,
+    Value<DateTime?>? statusChangedAt,
+    Value<bool>? statusPendingPush,
+    Value<String>? description,
+    Value<String?>? blockedReason,
+    Value<String?>? noteId,
+    Value<String>? noteIds,
+    Value<String?>? externalProvider,
+    Value<String?>? externalId,
+    Value<String?>? externalUrl,
+    Value<String?>? externalCachedTitle,
+    Value<DateTime?>? externalLastSyncedAt,
+    Value<String?>? projectId,
     Value<int>? rowid,
   }) {
-    return ReminderEntriesCompanion(
+    return TaskEntriesCompanion(
       id: id ?? this.id,
       title: title ?? this.title,
       scheduledDate: scheduledDate ?? this.scheduledDate,
@@ -4823,6 +5493,19 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
       deletedAt: deletedAt ?? this.deletedAt,
       syncStatus: syncStatus ?? this.syncStatus,
       userId: userId ?? this.userId,
+      status: status ?? this.status,
+      statusChangedAt: statusChangedAt ?? this.statusChangedAt,
+      statusPendingPush: statusPendingPush ?? this.statusPendingPush,
+      description: description ?? this.description,
+      blockedReason: blockedReason ?? this.blockedReason,
+      noteId: noteId ?? this.noteId,
+      noteIds: noteIds ?? this.noteIds,
+      externalProvider: externalProvider ?? this.externalProvider,
+      externalId: externalId ?? this.externalId,
+      externalUrl: externalUrl ?? this.externalUrl,
+      externalCachedTitle: externalCachedTitle ?? this.externalCachedTitle,
+      externalLastSyncedAt: externalLastSyncedAt ?? this.externalLastSyncedAt,
+      projectId: projectId ?? this.projectId,
       rowid: rowid ?? this.rowid,
     );
   }
@@ -4863,6 +5546,49 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
     if (userId.present) {
       map['user_id'] = Variable<String>(userId.value);
     }
+    if (status.present) {
+      map['status'] = Variable<String>(status.value);
+    }
+    if (statusChangedAt.present) {
+      map['status_changed_at'] = Variable<DateTime>(statusChangedAt.value);
+    }
+    if (statusPendingPush.present) {
+      map['status_pending_push'] = Variable<bool>(statusPendingPush.value);
+    }
+    if (description.present) {
+      map['description'] = Variable<String>(description.value);
+    }
+    if (blockedReason.present) {
+      map['blocked_reason'] = Variable<String>(blockedReason.value);
+    }
+    if (noteId.present) {
+      map['note_id'] = Variable<String>(noteId.value);
+    }
+    if (noteIds.present) {
+      map['note_ids'] = Variable<String>(noteIds.value);
+    }
+    if (externalProvider.present) {
+      map['external_provider'] = Variable<String>(externalProvider.value);
+    }
+    if (externalId.present) {
+      map['external_id'] = Variable<String>(externalId.value);
+    }
+    if (externalUrl.present) {
+      map['external_url'] = Variable<String>(externalUrl.value);
+    }
+    if (externalCachedTitle.present) {
+      map['external_cached_title'] = Variable<String>(
+        externalCachedTitle.value,
+      );
+    }
+    if (externalLastSyncedAt.present) {
+      map['external_last_synced_at'] = Variable<DateTime>(
+        externalLastSyncedAt.value,
+      );
+    }
+    if (projectId.present) {
+      map['project_id'] = Variable<String>(projectId.value);
+    }
     if (rowid.present) {
       map['rowid'] = Variable<int>(rowid.value);
     }
@@ -4871,7 +5597,7 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
 
   @override
   String toString() {
-    return (StringBuffer('ReminderEntriesCompanion(')
+    return (StringBuffer('TaskEntriesCompanion(')
           ..write('id: $id, ')
           ..write('title: $title, ')
           ..write('scheduledDate: $scheduledDate, ')
@@ -4883,6 +5609,19 @@ class ReminderEntriesCompanion extends UpdateCompanion<ReminderEntry> {
           ..write('deletedAt: $deletedAt, ')
           ..write('syncStatus: $syncStatus, ')
           ..write('userId: $userId, ')
+          ..write('status: $status, ')
+          ..write('statusChangedAt: $statusChangedAt, ')
+          ..write('statusPendingPush: $statusPendingPush, ')
+          ..write('description: $description, ')
+          ..write('blockedReason: $blockedReason, ')
+          ..write('noteId: $noteId, ')
+          ..write('noteIds: $noteIds, ')
+          ..write('externalProvider: $externalProvider, ')
+          ..write('externalId: $externalId, ')
+          ..write('externalUrl: $externalUrl, ')
+          ..write('externalCachedTitle: $externalCachedTitle, ')
+          ..write('externalLastSyncedAt: $externalLastSyncedAt, ')
+          ..write('projectId: $projectId, ')
           ..write('rowid: $rowid')
           ..write(')'))
         .toString();
@@ -5111,9 +5850,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
       $MarkdownProjectEntriesTable(this);
   late final $NoteProjectEntriesTable noteProjectEntries =
       $NoteProjectEntriesTable(this);
-  late final $ReminderEntriesTable reminderEntries = $ReminderEntriesTable(
-    this,
-  );
+  late final $TaskEntriesTable taskEntries = $TaskEntriesTable(this);
   late final $AppMetadataEntriesTable appMetadataEntries =
       $AppMetadataEntriesTable(this);
   @override
@@ -5128,7 +5865,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     markdownFileEntries,
     markdownProjectEntries,
     noteProjectEntries,
-    reminderEntries,
+    taskEntries,
     appMetadataEntries,
   ];
 }
@@ -5874,6 +6611,7 @@ typedef $$TimeEntriesTableCreateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String> syncStatus,
       Value<String?> userId,
+      Value<String?> taskId,
       Value<int> rowid,
     });
 typedef $$TimeEntriesTableUpdateCompanionBuilder =
@@ -5888,6 +6626,7 @@ typedef $$TimeEntriesTableUpdateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String> syncStatus,
       Value<String?> userId,
+      Value<String?> taskId,
       Value<int> rowid,
     });
 
@@ -5947,6 +6686,11 @@ class $$TimeEntriesTableFilterComposer
 
   ColumnFilters<String> get userId => $composableBuilder(
     column: $table.userId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get taskId => $composableBuilder(
+    column: $table.taskId,
     builder: (column) => ColumnFilters(column),
   );
 }
@@ -6009,6 +6753,11 @@ class $$TimeEntriesTableOrderingComposer
     column: $table.userId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get taskId => $composableBuilder(
+    column: $table.taskId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
 class $$TimeEntriesTableAnnotationComposer
@@ -6053,6 +6802,9 @@ class $$TimeEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get userId =>
       $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get taskId =>
+      $composableBuilder(column: $table.taskId, builder: (column) => column);
 }
 
 class $$TimeEntriesTableTableManager
@@ -6096,6 +6848,7 @@ class $$TimeEntriesTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
+                Value<String?> taskId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TimeEntriesCompanion(
                 id: id,
@@ -6108,6 +6861,7 @@ class $$TimeEntriesTableTableManager
                 deletedAt: deletedAt,
                 syncStatus: syncStatus,
                 userId: userId,
+                taskId: taskId,
                 rowid: rowid,
               ),
           createCompanionCallback:
@@ -6122,6 +6876,7 @@ class $$TimeEntriesTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
+                Value<String?> taskId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => TimeEntriesCompanion.insert(
                 id: id,
@@ -6134,6 +6889,7 @@ class $$TimeEntriesTableTableManager
                 deletedAt: deletedAt,
                 syncStatus: syncStatus,
                 userId: userId,
+                taskId: taskId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7263,11 +8019,11 @@ typedef $$NoteProjectEntriesTableProcessedTableManager =
       NoteProjectRow,
       PrefetchHooks Function()
     >;
-typedef $$ReminderEntriesTableCreateCompanionBuilder =
-    ReminderEntriesCompanion Function({
+typedef $$TaskEntriesTableCreateCompanionBuilder =
+    TaskEntriesCompanion Function({
       required String id,
       Value<String> title,
-      required DateTime scheduledDate,
+      Value<DateTime?> scheduledDate,
       Value<bool> isCompleted,
       Value<DateTime?> completedAt,
       required DateTime createdAt,
@@ -7276,13 +8032,26 @@ typedef $$ReminderEntriesTableCreateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String> syncStatus,
       Value<String?> userId,
+      Value<String> status,
+      Value<DateTime?> statusChangedAt,
+      Value<bool> statusPendingPush,
+      Value<String> description,
+      Value<String?> blockedReason,
+      Value<String?> noteId,
+      Value<String> noteIds,
+      Value<String?> externalProvider,
+      Value<String?> externalId,
+      Value<String?> externalUrl,
+      Value<String?> externalCachedTitle,
+      Value<DateTime?> externalLastSyncedAt,
+      Value<String?> projectId,
       Value<int> rowid,
     });
-typedef $$ReminderEntriesTableUpdateCompanionBuilder =
-    ReminderEntriesCompanion Function({
+typedef $$TaskEntriesTableUpdateCompanionBuilder =
+    TaskEntriesCompanion Function({
       Value<String> id,
       Value<String> title,
-      Value<DateTime> scheduledDate,
+      Value<DateTime?> scheduledDate,
       Value<bool> isCompleted,
       Value<DateTime?> completedAt,
       Value<DateTime> createdAt,
@@ -7291,12 +8060,25 @@ typedef $$ReminderEntriesTableUpdateCompanionBuilder =
       Value<DateTime?> deletedAt,
       Value<String> syncStatus,
       Value<String?> userId,
+      Value<String> status,
+      Value<DateTime?> statusChangedAt,
+      Value<bool> statusPendingPush,
+      Value<String> description,
+      Value<String?> blockedReason,
+      Value<String?> noteId,
+      Value<String> noteIds,
+      Value<String?> externalProvider,
+      Value<String?> externalId,
+      Value<String?> externalUrl,
+      Value<String?> externalCachedTitle,
+      Value<DateTime?> externalLastSyncedAt,
+      Value<String?> projectId,
       Value<int> rowid,
     });
 
-class $$ReminderEntriesTableFilterComposer
-    extends Composer<_$AppDatabase, $ReminderEntriesTable> {
-  $$ReminderEntriesTableFilterComposer({
+class $$TaskEntriesTableFilterComposer
+    extends Composer<_$AppDatabase, $TaskEntriesTable> {
+  $$TaskEntriesTableFilterComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -7357,11 +8139,76 @@ class $$ReminderEntriesTableFilterComposer
     column: $table.userId,
     builder: (column) => ColumnFilters(column),
   );
+
+  ColumnFilters<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get statusChangedAt => $composableBuilder(
+    column: $table.statusChangedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get statusPendingPush => $composableBuilder(
+    column: $table.statusPendingPush,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get blockedReason => $composableBuilder(
+    column: $table.blockedReason,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get noteIds => $composableBuilder(
+    column: $table.noteIds,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalProvider => $composableBuilder(
+    column: $table.externalProvider,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalId => $composableBuilder(
+    column: $table.externalId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalUrl => $composableBuilder(
+    column: $table.externalUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get externalCachedTitle => $composableBuilder(
+    column: $table.externalCachedTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get externalLastSyncedAt => $composableBuilder(
+    column: $table.externalLastSyncedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnFilters(column),
+  );
 }
 
-class $$ReminderEntriesTableOrderingComposer
-    extends Composer<_$AppDatabase, $ReminderEntriesTable> {
-  $$ReminderEntriesTableOrderingComposer({
+class $$TaskEntriesTableOrderingComposer
+    extends Composer<_$AppDatabase, $TaskEntriesTable> {
+  $$TaskEntriesTableOrderingComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -7422,11 +8269,76 @@ class $$ReminderEntriesTableOrderingComposer
     column: $table.userId,
     builder: (column) => ColumnOrderings(column),
   );
+
+  ColumnOrderings<String> get status => $composableBuilder(
+    column: $table.status,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get statusChangedAt => $composableBuilder(
+    column: $table.statusChangedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<bool> get statusPendingPush => $composableBuilder(
+    column: $table.statusPendingPush,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get blockedReason => $composableBuilder(
+    column: $table.blockedReason,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteId => $composableBuilder(
+    column: $table.noteId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get noteIds => $composableBuilder(
+    column: $table.noteIds,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalProvider => $composableBuilder(
+    column: $table.externalProvider,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalId => $composableBuilder(
+    column: $table.externalId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalUrl => $composableBuilder(
+    column: $table.externalUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get externalCachedTitle => $composableBuilder(
+    column: $table.externalCachedTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get externalLastSyncedAt => $composableBuilder(
+    column: $table.externalLastSyncedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get projectId => $composableBuilder(
+    column: $table.projectId,
+    builder: (column) => ColumnOrderings(column),
+  );
 }
 
-class $$ReminderEntriesTableAnnotationComposer
-    extends Composer<_$AppDatabase, $ReminderEntriesTable> {
-  $$ReminderEntriesTableAnnotationComposer({
+class $$TaskEntriesTableAnnotationComposer
+    extends Composer<_$AppDatabase, $TaskEntriesTable> {
+  $$TaskEntriesTableAnnotationComposer({
     required super.$db,
     required super.$table,
     super.joinBuilder,
@@ -7473,44 +8385,99 @@ class $$ReminderEntriesTableAnnotationComposer
 
   GeneratedColumn<String> get userId =>
       $composableBuilder(column: $table.userId, builder: (column) => column);
+
+  GeneratedColumn<String> get status =>
+      $composableBuilder(column: $table.status, builder: (column) => column);
+
+  GeneratedColumn<DateTime> get statusChangedAt => $composableBuilder(
+    column: $table.statusChangedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<bool> get statusPendingPush => $composableBuilder(
+    column: $table.statusPendingPush,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get description => $composableBuilder(
+    column: $table.description,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get blockedReason => $composableBuilder(
+    column: $table.blockedReason,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get noteId =>
+      $composableBuilder(column: $table.noteId, builder: (column) => column);
+
+  GeneratedColumn<String> get noteIds =>
+      $composableBuilder(column: $table.noteIds, builder: (column) => column);
+
+  GeneratedColumn<String> get externalProvider => $composableBuilder(
+    column: $table.externalProvider,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalId => $composableBuilder(
+    column: $table.externalId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalUrl => $composableBuilder(
+    column: $table.externalUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get externalCachedTitle => $composableBuilder(
+    column: $table.externalCachedTitle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get externalLastSyncedAt => $composableBuilder(
+    column: $table.externalLastSyncedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get projectId =>
+      $composableBuilder(column: $table.projectId, builder: (column) => column);
 }
 
-class $$ReminderEntriesTableTableManager
+class $$TaskEntriesTableTableManager
     extends
         RootTableManager<
           _$AppDatabase,
-          $ReminderEntriesTable,
-          ReminderEntry,
-          $$ReminderEntriesTableFilterComposer,
-          $$ReminderEntriesTableOrderingComposer,
-          $$ReminderEntriesTableAnnotationComposer,
-          $$ReminderEntriesTableCreateCompanionBuilder,
-          $$ReminderEntriesTableUpdateCompanionBuilder,
+          $TaskEntriesTable,
+          TaskEntry,
+          $$TaskEntriesTableFilterComposer,
+          $$TaskEntriesTableOrderingComposer,
+          $$TaskEntriesTableAnnotationComposer,
+          $$TaskEntriesTableCreateCompanionBuilder,
+          $$TaskEntriesTableUpdateCompanionBuilder,
           (
-            ReminderEntry,
-            BaseReferences<_$AppDatabase, $ReminderEntriesTable, ReminderEntry>,
+            TaskEntry,
+            BaseReferences<_$AppDatabase, $TaskEntriesTable, TaskEntry>,
           ),
-          ReminderEntry,
+          TaskEntry,
           PrefetchHooks Function()
         > {
-  $$ReminderEntriesTableTableManager(
-    _$AppDatabase db,
-    $ReminderEntriesTable table,
-  ) : super(
+  $$TaskEntriesTableTableManager(_$AppDatabase db, $TaskEntriesTable table)
+    : super(
         TableManagerState(
           db: db,
           table: table,
           createFilteringComposer: () =>
-              $$ReminderEntriesTableFilterComposer($db: db, $table: table),
+              $$TaskEntriesTableFilterComposer($db: db, $table: table),
           createOrderingComposer: () =>
-              $$ReminderEntriesTableOrderingComposer($db: db, $table: table),
+              $$TaskEntriesTableOrderingComposer($db: db, $table: table),
           createComputedFieldComposer: () =>
-              $$ReminderEntriesTableAnnotationComposer($db: db, $table: table),
+              $$TaskEntriesTableAnnotationComposer($db: db, $table: table),
           updateCompanionCallback:
               ({
                 Value<String> id = const Value.absent(),
                 Value<String> title = const Value.absent(),
-                Value<DateTime> scheduledDate = const Value.absent(),
+                Value<DateTime?> scheduledDate = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
@@ -7519,8 +8486,21 @@ class $$ReminderEntriesTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> statusChangedAt = const Value.absent(),
+                Value<bool> statusPendingPush = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<String?> blockedReason = const Value.absent(),
+                Value<String?> noteId = const Value.absent(),
+                Value<String> noteIds = const Value.absent(),
+                Value<String?> externalProvider = const Value.absent(),
+                Value<String?> externalId = const Value.absent(),
+                Value<String?> externalUrl = const Value.absent(),
+                Value<String?> externalCachedTitle = const Value.absent(),
+                Value<DateTime?> externalLastSyncedAt = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => ReminderEntriesCompanion(
+              }) => TaskEntriesCompanion(
                 id: id,
                 title: title,
                 scheduledDate: scheduledDate,
@@ -7532,13 +8512,26 @@ class $$ReminderEntriesTableTableManager
                 deletedAt: deletedAt,
                 syncStatus: syncStatus,
                 userId: userId,
+                status: status,
+                statusChangedAt: statusChangedAt,
+                statusPendingPush: statusPendingPush,
+                description: description,
+                blockedReason: blockedReason,
+                noteId: noteId,
+                noteIds: noteIds,
+                externalProvider: externalProvider,
+                externalId: externalId,
+                externalUrl: externalUrl,
+                externalCachedTitle: externalCachedTitle,
+                externalLastSyncedAt: externalLastSyncedAt,
+                projectId: projectId,
                 rowid: rowid,
               ),
           createCompanionCallback:
               ({
                 required String id,
                 Value<String> title = const Value.absent(),
-                required DateTime scheduledDate,
+                Value<DateTime?> scheduledDate = const Value.absent(),
                 Value<bool> isCompleted = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
                 required DateTime createdAt,
@@ -7547,8 +8540,21 @@ class $$ReminderEntriesTableTableManager
                 Value<DateTime?> deletedAt = const Value.absent(),
                 Value<String> syncStatus = const Value.absent(),
                 Value<String?> userId = const Value.absent(),
+                Value<String> status = const Value.absent(),
+                Value<DateTime?> statusChangedAt = const Value.absent(),
+                Value<bool> statusPendingPush = const Value.absent(),
+                Value<String> description = const Value.absent(),
+                Value<String?> blockedReason = const Value.absent(),
+                Value<String?> noteId = const Value.absent(),
+                Value<String> noteIds = const Value.absent(),
+                Value<String?> externalProvider = const Value.absent(),
+                Value<String?> externalId = const Value.absent(),
+                Value<String?> externalUrl = const Value.absent(),
+                Value<String?> externalCachedTitle = const Value.absent(),
+                Value<DateTime?> externalLastSyncedAt = const Value.absent(),
+                Value<String?> projectId = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
-              }) => ReminderEntriesCompanion.insert(
+              }) => TaskEntriesCompanion.insert(
                 id: id,
                 title: title,
                 scheduledDate: scheduledDate,
@@ -7560,6 +8566,19 @@ class $$ReminderEntriesTableTableManager
                 deletedAt: deletedAt,
                 syncStatus: syncStatus,
                 userId: userId,
+                status: status,
+                statusChangedAt: statusChangedAt,
+                statusPendingPush: statusPendingPush,
+                description: description,
+                blockedReason: blockedReason,
+                noteId: noteId,
+                noteIds: noteIds,
+                externalProvider: externalProvider,
+                externalId: externalId,
+                externalUrl: externalUrl,
+                externalCachedTitle: externalCachedTitle,
+                externalLastSyncedAt: externalLastSyncedAt,
+                projectId: projectId,
                 rowid: rowid,
               ),
           withReferenceMapper: (p0) => p0
@@ -7570,21 +8589,18 @@ class $$ReminderEntriesTableTableManager
       );
 }
 
-typedef $$ReminderEntriesTableProcessedTableManager =
+typedef $$TaskEntriesTableProcessedTableManager =
     ProcessedTableManager<
       _$AppDatabase,
-      $ReminderEntriesTable,
-      ReminderEntry,
-      $$ReminderEntriesTableFilterComposer,
-      $$ReminderEntriesTableOrderingComposer,
-      $$ReminderEntriesTableAnnotationComposer,
-      $$ReminderEntriesTableCreateCompanionBuilder,
-      $$ReminderEntriesTableUpdateCompanionBuilder,
-      (
-        ReminderEntry,
-        BaseReferences<_$AppDatabase, $ReminderEntriesTable, ReminderEntry>,
-      ),
-      ReminderEntry,
+      $TaskEntriesTable,
+      TaskEntry,
+      $$TaskEntriesTableFilterComposer,
+      $$TaskEntriesTableOrderingComposer,
+      $$TaskEntriesTableAnnotationComposer,
+      $$TaskEntriesTableCreateCompanionBuilder,
+      $$TaskEntriesTableUpdateCompanionBuilder,
+      (TaskEntry, BaseReferences<_$AppDatabase, $TaskEntriesTable, TaskEntry>),
+      TaskEntry,
       PrefetchHooks Function()
     >;
 typedef $$AppMetadataEntriesTableCreateCompanionBuilder =
@@ -7760,8 +8776,8 @@ class $AppDatabaseManager {
       );
   $$NoteProjectEntriesTableTableManager get noteProjectEntries =>
       $$NoteProjectEntriesTableTableManager(_db, _db.noteProjectEntries);
-  $$ReminderEntriesTableTableManager get reminderEntries =>
-      $$ReminderEntriesTableTableManager(_db, _db.reminderEntries);
+  $$TaskEntriesTableTableManager get taskEntries =>
+      $$TaskEntriesTableTableManager(_db, _db.taskEntries);
   $$AppMetadataEntriesTableTableManager get appMetadataEntries =>
       $$AppMetadataEntriesTableTableManager(_db, _db.appMetadataEntries);
 }

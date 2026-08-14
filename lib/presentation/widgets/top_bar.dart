@@ -26,11 +26,10 @@ class TopBar extends StatefulWidget {
   });
 
   @override
-  State<TopBar> createState() => _TopBarState();
+  State<TopBar> createState() => TopBarState();
 }
 
-class _TopBarState extends State<TopBar>
-    with SingleTickerProviderStateMixin {
+class TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
@@ -71,6 +70,15 @@ class _TopBarState extends State<TopBar>
     }
   }
 
+  /// Focuses the search field — the Cmd/Ctrl+K app-wide shortcut's entry
+  /// point (see `AppShortcuts`), reached via a [GlobalKey<TopBarState>] held
+  /// by `AppShell` since the search [FocusNode] itself is private to this
+  /// State. Does not open the results dropdown by itself — that still only
+  /// appears once a query is typed, same as clicking into the field.
+  void requestSearchFocus() {
+    _searchFocusNode.requestFocus();
+  }
+
   void _onSearchChanged(String query) {
     widget.appState.search(query);
     if (query.isEmpty) {
@@ -81,10 +89,17 @@ class _TopBarState extends State<TopBar>
     // Deliberately reads appState.notes, NOT filteredNotes: that getter also
     // applies the selected folder, which would silently scope a search that
     // presents itself as global.
+    //
+    // Markdown files are deliberately excluded: the Markdown section is
+    // hidden from the UI, so a search result that opened one would either
+    // dead-end (nothing to open it into) or silently bounce the user to
+    // Home via AppState.navigateToPage's fallback. The data and
+    // `_openHit`'s markdownFile branch are untouched — reversible by
+    // passing the real file list back in.
     _searchResults = UnifiedSearch.run(
       query: query,
       notes: widget.appState.notes,
-      files: GetIt.instance<MarkdownState>().files,
+      files: const [],
     );
     _showOverlay();
   }

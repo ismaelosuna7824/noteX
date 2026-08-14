@@ -1,0 +1,81 @@
+-- ============================================================================
+-- Migration: schema v21 — link a task to a timer project
+-- Target: Supabase / Postgres
+-- Pairs with: local Drift schemaVersion 20 -> 21
+-- ============================================================================
+--
+-- FOR HUMAN REVIEW. NOT APPLIED. This script has not been run against any
+-- Supabase environment and this file does not claim otherwise — see the same
+-- caveat in supabase_v20_task_notes.sql.
+--
+-- ORDERING IS A HARD REQUIREMENT, same shape as v18/v19/v20. Apply this
+-- BEFORE shipping any client build that pushes `project_id`. A client that
+-- pushes a column the remote table does not have does not degrade — the
+-- write fails outright.
+--
+-- Lets a task carry the project its tracked time should land in (user
+-- request: "the timer... también le puedas... link con los proyectos del
+-- timer"). A `TimeEntry` started from a task inherits this project.
+--
+-- UNLIKE `note_id`/`note_ids` (deliberately no FK — a note can be
+-- permanently deleted from the trash), this column DOES take a real foreign
+-- key, matching `time_entries.project_id`'s existing convention exactly: a
+-- `Project` is only ever soft-deleted (see `DeleteProjectUseCase`), never
+-- hard-removed, so a FK here can never block a user's own delete action the
+-- way one on `note_id` would.
+--
+-- NO BACKWARD-COMPATIBILITY BURDEN: `feat/task-tracker` has never shipped in
+-- a released build — this branch is unmerged. No released client reads or
+-- writes any `reminders` column added on this branch, so there is no
+-- dual-write and nothing to protect here.
+--
+-- The whole script is wrapped in a transaction and the statement is
+-- idempotent, so it is safe to re-run. No backfill: this is a brand-new
+-- nullable link with no prior data to derive it from — every existing row
+-- reads back as `project_id = null` ("No Project"), the same default a new
+-- row gets.
+-- ============================================================================
+
+begin;
+
+alter table public.reminders
+  add column if not exists project_id uuid references public.projects(id);
+
+commit;
+
+-- ============================================================================
+-- Verify after applying — expected results in comments
+-- ============================================================================
+--
+-- 1. The column landed, nullable, with the expected FK target (expect 1
+--    row):
+--
+-- select column_name, data_type, is_nullable
+--   from information_schema.columns
+--  where table_schema = 'public' and table_name = 'reminders'
+--    and column_name = 'project_id';
+--
+-- select tc.constraint_name, ccu.table_name as references_table
+--   from information_schema.table_constraints tc
+--   join information_schema.constraint_column_usage ccu
+--     on tc.constraint_name = ccu.constraint_name
+--  where tc.table_name = 'reminders'
+--    and tc.constraint_type = 'FOREIGN KEY'
+--    and ccu.table_name = 'projects';
+--
+-- 2. No existing row was touched (expect 0 — nothing to backfill):
+--
+-- select count(*) from public.reminders where project_id is not null;
+--
+-- ============================================================================
+-- Rollback
+-- ============================================================================
+--
+-- Safe: this migration performs no backfill, so there is no data-loss caveat
+-- beyond the column's own contents (any project assignment made after this
+-- migration was applied).
+--
+-- begin;
+--   alter table public.reminders drop column if exists project_id;
+-- commit;
+-- ============================================================================

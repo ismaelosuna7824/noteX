@@ -15,6 +15,7 @@ import '../widgets/glassmorphic_container.dart';
 import '../widgets/note_grid_card.dart';
 import '../widgets/mention_picker_host.dart';
 import '../widgets/note_markdown_editor.dart';
+import '../widgets/shortcuts_help_sheet.dart' show shortcutKeysFor;
 
 /// Notes list view with inline edit panel.
 ///
@@ -325,7 +326,14 @@ class _NotesListPageState extends State<NotesListPage>
         ),
         const SizedBox(width: 6),
         Tooltip(
-          message: 'New Note',
+          // Shortcut hint is looked up from `buildShortcutEntries()` (via
+          // `shortcutKeysFor`) rather than hand-typed here — this button
+          // performs the exact same action as the app-wide New Note
+          // shortcut, so its tooltip must never show a stale combination.
+          message: () {
+            final keys = shortcutKeysFor('New note');
+            return keys == null ? 'New Note' : 'New Note ($keys)';
+          }(),
           child: InkWell(
             onTap: () async {
               await widget.appState.createNewNote();

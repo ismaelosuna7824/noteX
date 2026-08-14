@@ -39,7 +39,10 @@ create table public.time_entries (
   updated_at timestamp with time zone not null,
   deleted_at timestamp with time zone,
   version integer not null default 1,
-  sync_status text not null default 'synced'
+  sync_status text not null default 'synced',
+  -- v18 (task-tracker). No foreign key on purpose: a tracked session must never
+  -- be able to block deleting the task it points at.
+  task_id uuid
 );
 
 -- Create the `note_projects` table
@@ -152,6 +155,7 @@ create index idx_projects_user_updated on public.projects (user_id, updated_at);
 create index idx_time_entries_user_id on public.time_entries (user_id);
 create index idx_time_entries_user_updated on public.time_entries (user_id, updated_at);
 create index idx_time_entries_project_id on public.time_entries (project_id);
+create index idx_time_entries_task_id on public.time_entries (task_id);
 
 -- markdown_projects
 create index idx_markdown_projects_user_id on public.markdown_projects (user_id);
@@ -169,14 +173,60 @@ create table public.reminders (
   id uuid primary key,
   user_id uuid references auth.users not null,
   title text not null default '',
-  scheduled_date timestamp with time zone not null,
+  -- v19: relaxed from NOT NULL. A null row is a backlog task with no date.
+  -- Apply via supabase_v19_backlog_task.sql — this file describes the TARGET
+  -- schema and does not record whether a given environment has been migrated.
+  -- Until the relaxation is applied, pushing a backlog task fails outright.
+  scheduled_date timestamp with time zone,
   is_completed boolean not null default false,
   completed_at timestamp with time zone,
   created_at timestamp with time zone not null,
   updated_at timestamp with time zone not null,
   deleted_at timestamp with time zone,
   version integer not null default 1,
-  sync_status text not null default 'synced'
+  sync_status text not null default 'synced',
+  -- v18 (task-tracker). `status` is the source of truth for task state;
+  -- `is_completed` above is kept as a derived, deprecated column so older
+  -- shipped clients keep working. The 'todo' default is load-bearing: an older
+  -- client omits `status` from its payload, so Postgres applies this default
+  -- instead of rejecting the insert. `note_id` deliberately carries no foreign
+  -- key, so permanently deleting a note is never blocked by a task linking to
+  -- it. The local-only `status_pending_push` column has no counterpart here by
+  -- design. See supabase_v18_task_tracker.sql.
+  status text not null default 'todo',
+  status_changed_at timestamp with time zone,
+  description text not null default '',
+  blocked_reason text,
+  -- v18. DEPRECATED as of v20 — superseded by `note_ids` below, which
+  -- corrects a design error: a task links to N notes, not one (decision
+  -- architecture/task-note-linking-model). Kept, unused, rather than
+  -- dropped — dropping it buys nothing and the local side keeps its own
+  -- deprecated `note_id` column for the same reason. Not read or written
+  -- by any v20+ client.
+  note_id uuid,
+  -- v20. A task's links to zero or more notes, JSON-encoded as text — the
+  -- same shape the local Drift `noteIds` column and `TaskSupabaseMapper`
+  -- use. NOT NULL / `'[]'` default for the same load-bearing-DEFAULT
+  -- reason as `status` above. Apply via supabase_v20_task_notes.sql — THIS
+  -- FILE DESCRIBES THE TARGET SCHEMA ONLY and does not record whether any
+  -- environment has actually been migrated. Until the migration is
+  -- applied, pushing `note_ids` fails outright.
+  note_ids text not null default '[]',
+  external_provider text,
+  external_id text,
+  external_url text,
+  external_cached_title text,
+  external_last_synced_at timestamp with time zone,
+  -- v21. Links a task to one of the timer feature's projects — tracked
+  -- time started from a task inherits it. Real foreign key (unlike
+  -- note_id/note_ids): a project is only ever soft-deleted, never
+  -- permanently removed, so this can never block a user's own delete
+  -- action, matching `time_entries.project_id`'s existing convention. Apply
+  -- via supabase_v21_task_project.sql — THIS FILE DESCRIBES THE TARGET
+  -- SCHEMA ONLY and does not record whether any environment has actually
+  -- been migrated. Until the migration is applied, pushing `project_id`
+  -- fails outright.
+  project_id uuid references public.projects(id)
 );
 
 -- Enable RLS

@@ -15,6 +15,12 @@ class TimeEntry {
   final SyncStatus syncStatus;
   final String? userId;
 
+  /// Optional link to a task. No foreign key — mirrors the same
+  /// no-FK rationale as `Task.noteIds` (design D9). Nullable so a
+  /// free-text timer with no task behaves exactly as it did before this
+  /// field existed.
+  final String? taskId;
+
   const TimeEntry({
     required this.id,
     required this.description,
@@ -26,6 +32,7 @@ class TimeEntry {
     this.deletedAt,
     this.syncStatus = SyncStatus.pendingSync,
     this.userId,
+    this.taskId,
   });
 
   /// True when this entry has no end time (the timer is live).
@@ -39,6 +46,10 @@ class TimeEntry {
       (endTime ?? DateTime.now()).difference(startTime);
 
   /// Returns a stopped copy with [endTime] set to now.
+  ///
+  /// Rebuilds the entity field-by-field rather than via [copyWith] — every
+  /// field, [taskId] included, must be listed explicitly here or it is
+  /// silently dropped the instant the timer stops.
   TimeEntry stop() {
     final now = DateTime.now();
     return TimeEntry(
@@ -52,6 +63,7 @@ class TimeEntry {
       deletedAt: deletedAt,
       syncStatus: SyncStatus.pendingSync,
       userId: userId,
+      taskId: taskId,
     );
   }
 
@@ -65,6 +77,7 @@ class TimeEntry {
     Object? deletedAt = const _Unset(),
     SyncStatus? syncStatus,
     Object? userId = const _Unset(),
+    Object? taskId = const _Unset(),
   }) {
     return TimeEntry(
       id: id,
@@ -77,6 +90,7 @@ class TimeEntry {
       deletedAt: deletedAt is _Unset ? this.deletedAt : deletedAt as DateTime?,
       syncStatus: syncStatus ?? this.syncStatus,
       userId: userId is _Unset ? this.userId : userId as String?,
+      taskId: taskId is _Unset ? this.taskId : taskId as String?,
     );
   }
 

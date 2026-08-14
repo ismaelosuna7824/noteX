@@ -9,4 +9,9 @@ class GetTimeEntriesUseCase {
 
   Future<List<TimeEntry>> getByDateRange(DateTime from, DateTime to) =>
       _repository.getByDateRange(from, to);
+
+  /// Every stretch of tracked time linked to [taskId] — the task detail
+  /// dialog's "total tracked time" figure.
+  Future<List<TimeEntry>> getByTaskId(String taskId) =>
+      _repository.getByTaskId(taskId);
 }

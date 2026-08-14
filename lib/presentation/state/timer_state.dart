@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../domain/entities/project.dart';
 import '../../domain/entities/time_entry.dart';
+import '../../domain/value_objects/task_transition_outcome.dart';
 import '../../application/use_cases/timer/create_project_use_case.dart';
 import '../../application/use_cases/timer/get_projects_use_case.dart';
 import '../../application/use_cases/timer/delete_project_use_case.dart';
@@ -51,6 +52,13 @@ class TimerState extends ChangeNotifier {
   bool _isLoading = false;
   bool _isInitialized = false;
   Timer? _ticker;
+
+  /// Invoked whenever a timer start also attempted a linked task's status
+  /// transition (applied or failed — never on `notApplicable`), so the
+  /// board refetches the task's TRUE status instead of showing an
+  /// optimistic lie (design D1). Wired post-construction in `injection.dart`
+  /// (deferred-getIt pattern, mirroring `SyncEngine.onSyncComplete`).
+  VoidCallback? onTaskChanged;
 
   TimerState({
     required CreateProjectUseCase createProject,
@@ -185,17 +193,43 @@ class TimerState extends ChangeNotifier {
 
   // ── Timer control ─────────────────────────────────────────────────────────
 
-  Future<void> startTimer() async {
-    _runningEntry = await _startTimer.execute(
+  /// Starts a new timer, stopping any currently running one first.
+  ///
+  /// [taskId] links the entry to a task, which is transitioned to `doing`
+  /// — including from `blocked` — as a best-effort side effect (design D1).
+  /// [description] overrides the draft bar's description without consuming
+  /// it, so starting a timer from elsewhere (e.g. a task card) never clears
+  /// what the user was typing in the timer bar. [projectId] overrides the
+  /// draft bar's project the same way — omit to use the draft bar's
+  /// project as before; pass a value (including `null`, for "No Project")
+  /// to inherit a specific project, e.g. the linked task's own project, so
+  /// tracked time started from a task lands in that task's project. Returns
+  /// the task-transition outcome so callers can surface a non-blocking
+  /// error on [failed] (design D1 — never thrown, never silently
+  /// swallowed).
+  Future<TaskTransitionOutcome> startTimer({
+    String? taskId,
+    String? description,
+    Object? projectId = const _Unset(),
+  }) async {
+    final result = await _startTimer.execute(
       id: const Uuid().v4(),
-      description: _draftDescription,
-      projectId: _draftProjectId,
+      description: description ?? _draftDescription,
+      projectId: projectId is _Unset ? _draftProjectId : projectId as String?,
+      taskId: taskId,
     );
-    _draftDescription = '';
+    _runningEntry = result.entry;
+    if (description == null) _draftDescription = '';
     // Keep _draftProjectId so the next entry defaults to the same project.
     await _loadWeekEntries();
     _startTicker();
+    if (result.taskTransition != TaskTransitionOutcome.notApplicable) {
+      // Refetch the task's true status whether the transition applied or
+      // failed — never an optimistic lie (design D1).
+      onTaskChanged?.call();
+    }
     notifyListeners();
+    return result.taskTransition;
   }
 
   Future<void> stopTimer() async {

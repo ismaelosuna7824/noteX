@@ -72,6 +72,18 @@ class ThemeState extends ChangeNotifier {
   /// a second thing to load, migrate and forget.
   String _timerViewMode = 'list';
 
+  /// 'list' or 'board' for the task page. Same rationale as
+  /// [_timerViewMode] — an additional surface, not a replacement; the flat
+  /// list stays available via 'list'.
+  String _taskViewMode = 'list';
+
+  /// The Kanban board's project filter. `'all'` (default) shows every
+  /// task, `'none'` shows only tasks with a null `projectId`, and any
+  /// other value is a project id — same persisted-String pattern as
+  /// [_taskViewMode]/[_timerViewMode]. A board-only affordance: the flat
+  /// list and the home page's "pending today" card are unaffected.
+  String _taskBoardProjectFilter = 'all';
+
   // ── Getters ───────────────────────────────────────────────────────────────
 
   String get fontFamily => _fontFamily;
@@ -140,6 +152,8 @@ class ThemeState extends ChangeNotifier {
   /// Last-used editor view mode ('edit', 'preview', or 'split').
   String get editorViewMode => _editorViewMode;
   String get timerViewMode => _timerViewMode;
+  String get taskViewMode => _taskViewMode;
+  String get taskBoardProjectFilter => _taskBoardProjectFilter;
 
   // ── Static data ───────────────────────────────────────────────────────────
 
@@ -350,6 +364,9 @@ class ThemeState extends ChangeNotifier {
       _notesDisplayMode = json['notesDisplayMode'] as String? ?? 'list';
       _editorViewMode = json['editorViewMode'] as String? ?? 'preview';
       _timerViewMode = json['timerViewMode'] as String? ?? 'list';
+      _taskViewMode = json['taskViewMode'] as String? ?? 'list';
+      _taskBoardProjectFilter =
+          json['taskBoardProjectFilter'] as String? ?? 'all';
     } catch (_) {
       // Keep defaults — never crash on a corrupt settings file.
     }
@@ -391,6 +408,8 @@ class ThemeState extends ChangeNotifier {
         'notesDisplayMode': _notesDisplayMode,
         'editorViewMode': _editorViewMode,
         'timerViewMode': _timerViewMode,
+        'taskViewMode': _taskViewMode,
+        'taskBoardProjectFilter': _taskBoardProjectFilter,
       }));
     } catch (_) {
       // Silently ignore — UI should never break on a save failure.
@@ -424,6 +443,25 @@ class ThemeState extends ChangeNotifier {
   void setTimerViewMode(String mode) {
     if (_timerViewMode == mode) return;
     _timerViewMode = mode;
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Unlike the editor's mode, this one notifies: the task page is rebuilt
+  /// from it, so a silent write would leave the toggle button out of sync
+  /// with the visible surface.
+  void setTaskViewMode(String mode) {
+    if (_taskViewMode == mode) return;
+    _taskViewMode = mode;
+    _saveToDisk();
+    notifyListeners();
+  }
+
+  /// Change the Kanban board's project filter and persist. Notifies: the
+  /// board is rebuilt from it, same as [setTaskViewMode].
+  void setTaskBoardProjectFilter(String filter) {
+    if (_taskBoardProjectFilter == filter) return;
+    _taskBoardProjectFilter = filter;
     _saveToDisk();
     notifyListeners();
   }

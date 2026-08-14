@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:drift/drift.dart';
@@ -11,8 +12,11 @@ import '../../domain/entities/time_entry.dart' as domain_time;
 import '../../domain/entities/markdown_file.dart' as domain_md;
 import '../../domain/entities/markdown_project.dart' as domain_mdp;
 import '../../domain/entities/note_project.dart' as domain_np;
-import '../../domain/entities/reminder.dart' as domain_reminder;
+import '../../domain/entities/task.dart' as domain_task;
 import '../../domain/value_objects/sync_status.dart';
+import '../../domain/value_objects/task_status_resolution.dart';
+import 'task_note_ids_migration.dart';
+import 'task_status_migration.dart';
 
 part 'database.g.dart';
 
@@ -85,6 +89,8 @@ class TimeEntries extends Table {
   TextColumn get syncStatus =>
       text().withDefault(const Constant('localOnly'))();
   TextColumn get userId => text().nullable()();
+  // v18: schema only, unused until slice 3 (timer↔task link).
+  TextColumn get taskId => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};
@@ -156,12 +162,14 @@ class NoteProjectEntries extends Table {
   String get tableName => 'note_projects';
 }
 
-/// Drift table for reminders.
-@DataClassName('ReminderEntry')
-class ReminderEntries extends Table {
+/// Drift table for tasks.
+@DataClassName('TaskEntry')
+class TaskEntries extends Table {
   TextColumn get id => text()();
   TextColumn get title => text().withDefault(const Constant(''))();
-  DateTimeColumn get scheduledDate => dateTime()();
+  // Nullable since v19 — a null row is a backlog task. See design D5 / M9;
+  // this is the ONLY schema change v19 makes.
+  DateTimeColumn get scheduledDate => dateTime().nullable()();
   BoolColumn get isCompleted =>
       boolean().withDefault(const Constant(false))();
   DateTimeColumn get completedAt => dateTime().nullable()();
@@ -173,9 +181,58 @@ class ReminderEntries extends Table {
       text().withDefault(const Constant('localOnly'))();
   TextColumn get userId => text().nullable()();
 
+  // ── v18: task-tracker columns (status-as-source-of-truth wiring lands
+  // in a later phase). ──
+  TextColumn get status => text().withDefault(const Constant('todo'))();
+  DateTimeColumn get statusChangedAt => dateTime().nullable()();
+  // Local only — never serialized to Supabase. See task_status_migration.dart
+  // and the D10 push-payload contract in the design doc.
+  BoolColumn get statusPendingPush =>
+      boolean().withDefault(const Constant(false))();
+  TextColumn get description => text().withDefault(const Constant(''))();
+  TextColumn get blockedReason => text().nullable()();
+
+  // DEPRECATED (schema v20) — superseded by `noteIds` below. A task links
+  // to N notes, not one (decision architecture/task-note-linking-model).
+  // Kept, unused, rather than dropped: dropping a column in SQLite requires
+  // a full table rebuild, the most dangerous DDL in this project (see the
+  // v19 `alterTable` migration below for what that costs). v20's backfill
+  // (`task_note_ids_migration.dart`) reads this column once, to seed
+  // `noteIds` for pre-existing rows; nothing else in the app reads or
+  // writes it going forward.
+  TextColumn get noteId => text().nullable()();
+
+  // v20: a task's links to zero or more notes, JSON-encoded as a text
+  // column (`domain_task.Task.noteIds`) — the same sync path every other
+  // task field already travels, rather than a new join table with its own
+  // push/pull/merge rules. NOT NULL with a `'[]'` default so `ADD COLUMN`
+  // does not need a nullable relaxation later (see D5/v19 for why that is
+  // expensive) — an empty JSON array IS "no links", not a null sentinel.
+  TextColumn get noteIds => text().withDefault(const Constant('[]'))();
+
+  TextColumn get externalProvider => text().nullable()();
+  TextColumn get externalId => text().nullable()();
+  TextColumn get externalUrl => text().nullable()();
+  TextColumn get externalCachedTitle => text().nullable()();
+  DateTimeColumn get externalLastSyncedAt => dateTime().nullable()();
+
+  // v21: links a task to one of the timer feature's projects
+  // (`domain_task.Task.projectId`). Nullable — no project is the default,
+  // same as `TimeEntry.projectId`. No local FK (Drift/SQLite tables here
+  // don't declare cross-table FKs at all — see `TimeEntries.projectId`
+  // above for the same shape); the Supabase side does add a real FK since,
+  // unlike a note, a project is only ever soft-deleted, never permanently
+  // removed (see `task_supabase_mapper.dart`).
+  TextColumn get projectId => text().nullable()();
+
   @override
   Set<Column> get primaryKey => {id};
 
+  // Deliberately NOT renamed to 'tasks'. Renaming the physical table would
+  // require a distributed migration against production Supabase rows still
+  // written by older shipped clients that only know the `reminders` table —
+  // see design D4. Only the Dart symbol (`ReminderEntries` → `TaskEntries`)
+  // changes; the wire format does not.
   @override
   String get tableName => 'reminders';
 }
@@ -223,7 +280,7 @@ class SyncMetadataEntries extends Table {
   MarkdownFileEntries,
   MarkdownProjectEntries,
   NoteProjectEntries,
-  ReminderEntries,
+  TaskEntries,
   AppMetadataEntries,
 ])
 class AppDatabase extends _$AppDatabase {
@@ -233,7 +290,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.e);
 
   @override
-  int get schemaVersion => 17;
+  int get schemaVersion => 21;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -308,7 +365,10 @@ class AppDatabase extends _$AppDatabase {
         await m.addColumn(noteEntries, noteEntries.projectId);
       }
       if (from < 9) {
-        await m.createTable(reminderEntries);
+        // Historical line: acts on the same physical `reminders` table under
+        // its current Dart symbol, `taskEntries` (renamed from
+        // `reminderEntries` in C3 — see design D4). Behavior unchanged.
+        await m.createTable(taskEntries);
       }
       if (from < 10) {
         Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
@@ -383,6 +443,86 @@ class AppDatabase extends _$AppDatabase {
         // loses nothing that note bodies do not already contain.
         await customStatement('DROP TABLE IF EXISTS note_links');
       }
+      if (from < 18) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+
+        // Originally written against the pre-rename symbol `reminderEntries`
+        // in C2; renamed to `taskEntries` here in C3 (see design D4) —
+        // symbol only, the underlying `reminders` table is unchanged.
+        await safeAddColumn(taskEntries, taskEntries.status);
+        await safeAddColumn(taskEntries, taskEntries.statusChangedAt);
+        await safeAddColumn(taskEntries, taskEntries.statusPendingPush);
+        await safeAddColumn(taskEntries, taskEntries.description);
+        await safeAddColumn(taskEntries, taskEntries.blockedReason);
+        await safeAddColumn(taskEntries, taskEntries.noteId);
+        await safeAddColumn(taskEntries, taskEntries.externalProvider);
+        await safeAddColumn(taskEntries, taskEntries.externalId);
+        await safeAddColumn(taskEntries, taskEntries.externalUrl);
+        await safeAddColumn(taskEntries, taskEntries.externalCachedTitle);
+        await safeAddColumn(taskEntries, taskEntries.externalLastSyncedAt);
+
+        // Schema only, unused until slice 3.
+        await safeAddColumn(timeEntries, timeEntries.taskId);
+
+        await backfillTaskStatus(this);
+      }
+      if (from < 19) {
+        // Relaxes `scheduled_date` from NOT NULL to nullable so a task can
+        // live in the backlog (design D5 / M9). SQLite has no
+        // `ALTER COLUMN`, so this requires a full table rebuild via
+        // `Migrator.alterTable`.
+        //
+        // This is the ONLY statement in this block, deliberately. Unlike
+        // the rest of this ladder, `alterTable` runs inside its OWN
+        // transaction (see `Migrator.alterTable`) — the ladder itself is
+        // NOT transactional (design D5 "transaction correction"). Anything
+        // else placed here would run outside that protection.
+        //
+        // `alterTable`/`TableMigration` are drift's own documented mechanism
+        // for a NOT NULL relaxation table rebuild — currently marked
+        // `@experimental` upstream, not a sign this call site is unstable.
+        // ignore: experimental_member_use
+        await m.alterTable(TableMigration(taskEntries));
+      }
+      if (from < 20) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+
+        // Additive only (decision architecture/task-note-linking-model) —
+        // corrects the single nullable `noteId` design error to a list, N
+        // notes per task. The deprecated `noteId` column is untouched.
+        await safeAddColumn(taskEntries, taskEntries.noteIds);
+        await backfillTaskNoteIds(this);
+      }
+      if (from < 21) {
+        Future<void> safeAddColumn(TableInfo table, GeneratedColumn col) async {
+          try {
+            await m.addColumn(table, col);
+          } catch (e) {
+            if (e.toString().contains('duplicate column name')) return;
+            rethrow;
+          }
+        }
+
+        // Additive only. A brand-new nullable link with no prior data to
+        // derive it from (unlike v20's noteIds), so there is nothing to
+        // backfill — every existing row simply reads back with
+        // projectId == null ("No Project"), the same default new rows get.
+        await safeAddColumn(taskEntries, taskEntries.projectId);
+      }
     },
   );
 
@@ -415,7 +555,7 @@ class AppDatabase extends _$AppDatabase {
       await delete(markdownFileEntries).go();
       await delete(markdownProjectEntries).go();
       await delete(noteProjectEntries).go();
-      await delete(reminderEntries).go();
+      await delete(taskEntries).go();
       await delete(syncMetadataEntries).go();
     });
   }
@@ -519,6 +659,7 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: row.deletedAt,
       syncStatus: _parseSyncStatus(row.syncStatus),
       userId: row.userId,
+      taskId: row.taskId,
     );
   }
 
@@ -535,6 +676,7 @@ class AppDatabase extends _$AppDatabase {
       deletedAt: Value(entry.deletedAt),
       syncStatus: Value(entry.syncStatus.name),
       userId: Value(entry.userId),
+      taskId: Value(entry.taskId),
     );
   }
 
@@ -636,15 +778,36 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  // ── Reminders ──────────────────────────────────────────────────────────
+  // ── Tasks ─────────────────────────────────────────────────────────────
 
-  static domain_reminder.Reminder reminderToDomain(ReminderEntry row) {
-    return domain_reminder.Reminder(
+  static domain_task.Task taskToDomain(TaskEntry row) {
+    // Local rows are self-consistent (this table is the only writer of
+    // both `status` and `is_completed` locally), so this resolution is a
+    // harmless no-op in practice — it is the same parser used for the
+    // Supabase read path (design D2), applied here for symmetry.
+    final resolution = TaskStatusResolution.fromStorage(
+      row.status,
+      isCompleted: row.isCompleted,
+      completedAt: row.completedAt,
+      statusChangedAt: row.statusChangedAt,
+    );
+    return domain_task.Task(
       id: row.id,
       title: row.title,
       scheduledDate: row.scheduledDate,
-      isCompleted: row.isCompleted,
-      completedAt: row.completedAt,
+      status: resolution.status,
+      statusChangedAt: row.statusChangedAt,
+      statusPendingPush: row.statusPendingPush,
+      completedAt: resolution.completedAt,
+      description: row.description,
+      blockedReason: row.blockedReason,
+      noteIds: _decodeNoteIds(row.noteIds),
+      externalProvider: row.externalProvider,
+      externalId: row.externalId,
+      externalUrl: row.externalUrl,
+      externalCachedTitle: row.externalCachedTitle,
+      externalLastSyncedAt: row.externalLastSyncedAt,
+      projectId: row.projectId,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       version: row.version,
@@ -654,20 +817,46 @@ class AppDatabase extends _$AppDatabase {
     );
   }
 
-  static ReminderEntriesCompanion reminderToCompanion(
-      domain_reminder.Reminder r) {
-    return ReminderEntriesCompanion(
-      id: Value(r.id),
-      title: Value(r.title),
-      scheduledDate: Value(r.scheduledDate),
-      isCompleted: Value(r.isCompleted),
-      completedAt: Value(r.completedAt),
-      createdAt: Value(r.createdAt),
-      updatedAt: Value(r.updatedAt),
-      version: Value(r.version),
-      deletedAt: Value(r.deletedAt),
-      syncStatus: Value(r.syncStatus.name),
-      userId: Value(r.userId),
+  /// Decodes the `note_ids` JSON-array text column into a `List<String>`.
+  /// Defensive, matching the rest of this class's row-parsing style: a
+  /// malformed or unexpected value (e.g. a row written before v20 whose
+  /// `noteIds` somehow bypassed the column DEFAULT) reads as "no links"
+  /// rather than throwing.
+  static List<String> _decodeNoteIds(String raw) {
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is List) return decoded.whereType<String>().toList();
+    } catch (_) {
+      // Malformed JSON — degrade to "no links" rather than crash.
+    }
+    return const [];
+  }
+
+  static TaskEntriesCompanion taskToCompanion(domain_task.Task t) {
+    return TaskEntriesCompanion(
+      id: Value(t.id),
+      title: Value(t.title),
+      scheduledDate: Value(t.scheduledDate),
+      isCompleted: Value(t.isDone),
+      completedAt: Value(t.completedAt),
+      status: Value(t.status.name),
+      statusChangedAt: Value(t.statusChangedAt),
+      statusPendingPush: Value(t.statusPendingPush),
+      description: Value(t.description),
+      blockedReason: Value(t.blockedReason),
+      noteIds: Value(jsonEncode(t.noteIds)),
+      externalProvider: Value(t.externalProvider),
+      externalId: Value(t.externalId),
+      externalUrl: Value(t.externalUrl),
+      externalCachedTitle: Value(t.externalCachedTitle),
+      externalLastSyncedAt: Value(t.externalLastSyncedAt),
+      projectId: Value(t.projectId),
+      createdAt: Value(t.createdAt),
+      updatedAt: Value(t.updatedAt),
+      version: Value(t.version),
+      deletedAt: Value(t.deletedAt),
+      syncStatus: Value(t.syncStatus.name),
+      userId: Value(t.userId),
     );
   }
 }

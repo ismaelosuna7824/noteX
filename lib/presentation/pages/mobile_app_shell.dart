@@ -17,7 +17,7 @@ import 'calendar_page.dart';
 import 'settings_page.dart';
 import 'timer_page.dart';
 import 'markdown_page.dart';
-import 'reminder_page.dart';
+import 'task_page.dart';
 import 'trash_page.dart';
 
 /// Mobile application shell — bottom navigation + content area.
@@ -165,10 +165,16 @@ class _MobileAppShellState extends State<MobileAppShell>
 
   // ── Bottom navigation mapping ───────────────────────────────────────────
   // Sidebar indices: 0=Home, 1=Notes, 2=Editor, 3=Calendar, 4=Timer,
-  //                  5=Markdown, 6=Settings, 7=Reminders
+  //                  6=Settings, 7=Tasks
   // Bottom nav uses a compact 5-item bar with the most-used features.
-  // Settings and Reminders are accessible from the "More" overflow or
+  // Settings and Tasks are accessible from the "More" overflow or
   // directly via their page indices.
+  //
+  // Index 5 (Markdown) intentionally omitted — hidden from the UI, not
+  // deleted. Every remaining tuple keeps its own explicit page index, so
+  // removing this entry does not shift what any other item points at
+  // (see AppState.navigateToPage for the fallback if anything still
+  // requests index 5).
 
   static const _navDestinations = [
     (0, Icons.home_rounded, 'Home'),
@@ -176,9 +182,8 @@ class _MobileAppShellState extends State<MobileAppShell>
     (2, Icons.edit_note_rounded, 'Editor'),
     (3, Icons.calendar_month_rounded, 'Calendar'),
     (4, Icons.timer_rounded, 'Timer'),
-    (5, Icons.article_rounded, 'Markdown'),
     (6, Icons.settings_rounded, 'Settings'),
-    (7, Icons.notifications_rounded, 'Reminders'),
+    (7, Icons.task_alt_rounded, 'Tasks'),
   ];
 
   int get _bottomNavIndex {
@@ -339,47 +344,50 @@ class _MobileAppShellState extends State<MobileAppShell>
     required bool isDark,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeOutCubic,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: isSelected
-                    ? accentColor.withValues(alpha: 0.18)
-                    : Colors.transparent,
-                borderRadius: BorderRadius.circular(12),
+    return Tooltip(
+      message: label,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          curve: Curves.easeOutCubic,
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? accentColor.withValues(alpha: 0.18)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  icon,
+                  size: 22,
+                  color: isSelected
+                      ? accentColor
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.5)
+                          : Colors.black.withValues(alpha: 0.4)),
+                ),
               ),
-              child: Icon(
-                icon,
-                size: 22,
-                color: isSelected
-                    ? accentColor
-                    : (isDark
-                        ? Colors.white.withValues(alpha: 0.5)
-                        : Colors.black.withValues(alpha: 0.4)),
+              // Accent dot indicator
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                margin: const EdgeInsets.only(top: 3),
+                width: isSelected ? 5 : 0,
+                height: isSelected ? 5 : 0,
+                decoration: BoxDecoration(
+                  color: accentColor,
+                  shape: BoxShape.circle,
+                ),
               ),
-            ),
-            // Accent dot indicator
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              margin: const EdgeInsets.only(top: 3),
-              width: isSelected ? 5 : 0,
-              height: isSelected ? 5 : 0,
-              decoration: BoxDecoration(
-                color: accentColor,
-                shape: BoxShape.circle,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -431,7 +439,7 @@ class _MobileAppShellState extends State<MobileAppShell>
           themeState: widget.themeState,
         );
       case 7:
-        return ReminderPage(
+        return TaskPage(
           key: const ValueKey('reminders'),
           appState: widget.appState,
           themeState: widget.themeState,

@@ -406,9 +406,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Page index reserved for the Markdown section, which is currently
+  /// hidden from the sidebar and mobile nav (feature, data, and page are
+  /// still intact — only the entry points into it are hidden). Kept as a
+  /// named guard in [navigateToPage] so nothing can strand the user on a
+  /// page with no nav item to get back out of: a stale search result, a
+  /// leftover shortcut, or any future persisted "last selected page".
+  static const int _hiddenMarkdownPageIndex = 5;
+
   /// Navigate to a specific page via the sidebar.
   /// Locks the PIN session on navigation so locked notes require re-entry.
   Future<void> navigateToPage(int index) async {
+    if (index == _hiddenMarkdownPageIndex) {
+      // Markdown section is hidden — fall back to Home instead of
+      // stranding the user on a page nothing points at anymore.
+      index = 0;
+    }
     if (index != _selectedPageIndex) {
       GetIt.instance<SecurityState>().lockAll();
       // Flush all pending saves when changing pages
