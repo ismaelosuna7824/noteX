@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../../domain/services/mention_trigger.dart';
 import '../../domain/services/note_link_parser.dart';
 import '../../infrastructure/content/note_content_format.dart';
+import '../utils/app_shortcuts.dart';
 import 'markdown/notex_markdown_view.dart';
 
 /// Toggles between edit and preview — see [NoteMarkdownEditorState._togglePreview].
@@ -623,9 +624,18 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// The row holding the edit-mode insert toolbar (when applicable) and the
   /// edit⇄preview toggle. The toggle is always present outside read-only mode.
   Widget _buildControlBar(BuildContext context, List<Widget>? toolbarButtons) {
-    // The modifier key differs by platform: Cmd on macOS, Ctrl elsewhere.
-    final mod =
-        Theme.of(context).platform == TargetPlatform.macOS ? 'Cmd' : 'Ctrl';
+    // The modifier glyph/label for the running platform (⌘ on macOS, "Ctrl"
+    // elsewhere) — the same [primaryModifierLabel] every other shortcut hint
+    // in the app reads from (the sidebar's numbered sections, the ⌘/ help
+    // sheet, the Settings shortcuts list), so this editor's own tooltips
+    // never show a different modifier than the rest of the UI. Deliberately
+    // NOT `Theme.of(context).platform`: that value is overridable per
+    // subtree for styling purposes and can disagree with the actual running
+    // platform, whereas `primaryModifierLabel` (via `defaultTargetPlatform`)
+    // reflects the real platform whose physical keyboard sends Cmd or Ctrl —
+    // the same source `AppShortcuts.isPrimaryModifierMeta` uses to decide
+    // which modifier this editor's own Cmd/Ctrl+E binding actually expects.
+    final mod = primaryModifierLabel;
     return Material(
       color: Colors.transparent,
       child: Row(

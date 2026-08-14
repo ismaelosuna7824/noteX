@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -687,6 +688,42 @@ void main() {
           .controller!
           .text;
       expect(result, contains('prose\n```mermaid'));
+    });
+  });
+
+  group('unified modifier label in the preview/split tooltips', () {
+    // Regression coverage for unifying this editor's own tooltip modifier
+    // with `primaryModifierLabel` (the single source of truth also used by
+    // the sidebar tooltips, the ⌘/ help sheet, and the Settings shortcuts
+    // section) instead of a separately computed 'Cmd'/'Ctrl' string.
+    testWidgets('show the ⌘ glyph on macOS', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        await mountEditor(
+          tester,
+          NoteMarkdownEditor(initialContent: '', onChanged: (_) {}),
+        );
+
+        expect(find.byTooltip('Split view (⌘+Shift+E)'), findsOneWidget);
+        expect(find.byTooltip('Preview (⌘+E)'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('show "Ctrl" on Windows', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await mountEditor(
+          tester,
+          NoteMarkdownEditor(initialContent: '', onChanged: (_) {}),
+        );
+
+        expect(find.byTooltip('Split view (Ctrl+Shift+E)'), findsOneWidget);
+        expect(find.byTooltip('Preview (Ctrl+E)'), findsOneWidget);
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
     });
   });
 }
