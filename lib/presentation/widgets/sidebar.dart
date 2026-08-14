@@ -45,6 +45,23 @@ class Sidebar extends StatelessWidget {
     (6, _SidebarItem(Icons.settings_rounded, 'Settings')),
   ];
 
+  /// The page index of each visible sidebar section, in display order —
+  /// the single source of truth the app-wide numeric shortcuts (Cmd/Ctrl+1..8,
+  /// see `AppShortcuts`) derive their mapping from, so hiding or reordering a
+  /// section here automatically keeps those shortcuts correct. Never hardcode
+  /// a parallel copy of this list elsewhere.
+  static List<int> get visiblePageIndices => [
+        for (final (pageIndex, _) in _navItems) pageIndex,
+      ];
+
+  /// The label each visible sidebar section shows, in the same display
+  /// order as [visiblePageIndices] — lets callers (and tests) verify a
+  /// shortcut opens "the section whose name the sidebar shows in that
+  /// position" without duplicating the item list.
+  static List<String> get visibleSectionLabels => [
+        for (final (_, item) in _navItems) item.label,
+      ];
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;

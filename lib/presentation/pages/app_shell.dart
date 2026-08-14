@@ -1,6 +1,5 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:window_manager/window_manager.dart';
@@ -8,8 +7,13 @@ import 'package:window_manager/window_manager.dart';
 import '../../main.dart' show WindowSizeStore;
 
 import '../state/app_state.dart';
+import '../state/task_state.dart';
 import '../state/theme_state.dart';
+import '../state/timer_state.dart';
+import '../utils/app_shortcuts.dart';
+import '../utils/timer_shortcut.dart';
 import '../widgets/sidebar.dart';
+import '../widgets/task_board.dart' show showAddTaskDialog;
 import '../widgets/top_bar.dart';
 import '../widgets/update_banner.dart';
 import 'home_page.dart';
@@ -52,6 +56,11 @@ class _AppShellState extends State<AppShell> with WindowListener {
 
   /// Tracks the previous page index for direction-aware page transitions.
   int _previousPageIndex = 0;
+
+  /// Reaches [TopBarState.requestSearchFocus] for the Cmd/Ctrl+K shortcut —
+  /// the search [FocusNode] is private to [TopBarState], so this is the
+  /// entry point `AppShortcuts` uses instead of duplicating search UI state.
+  final GlobalKey<TopBarState> _topBarKey = GlobalKey<TopBarState>();
 
   /// Build adaptive shadows that contrast against the wallpaper.
   /// Light hero text (bright bg) → dark shadow; dark hero text → light shadow.
@@ -337,26 +346,41 @@ class _AppShellState extends State<AppShell> with WindowListener {
     if (mounted) setState(() {});
   }
 
+  // ── App-wide keyboard shortcuts (Cmd/Ctrl+N/Shift+N/Shift+T/K) ───────────
+
+  void _handleNewNote() {
+    widget.appState.createNewNote();
+  }
+
+  void _handleNewTask() {
+    showAddTaskDialog(context, getIt<TaskState>(), widget.themeState);
+  }
+
+  void _handleToggleTimer() {
+    toggleRunningTimer(getIt<TimerState>());
+  }
+
+  void _handleSearch() {
+    _topBarKey.currentState?.requestSearchFocus();
+  }
+
+  void _handleShowShortcutsHelp() {
+    // TODO(shortcuts-help-sheet): wire the Cmd/Ctrl+/ help sheet — landing
+    // in the next commit.
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Focus(
-      autofocus: true,
-      onKeyEvent: (node, event) {
-        if (event is! KeyDownEvent) return KeyEventResult.ignored;
-        // F11 toggles zen mode
-        if (event.logicalKey == LogicalKeyboardKey.f11) {
-          widget.appState.toggleZenMode();
-          return KeyEventResult.handled;
-        }
-        // Escape exits zen mode
-        if (event.logicalKey == LogicalKeyboardKey.escape &&
-            widget.appState.isZenMode) {
-          widget.appState.exitZenMode();
-          return KeyEventResult.handled;
-        }
-        return KeyEventResult.ignored;
-      },
-      child: DragToResizeArea(
+    return AppShortcuts(
+      appState: widget.appState,
+      onNewNote: _handleNewNote,
+      onNewTask: _handleNewTask,
+      onToggleTimer: _handleToggleTimer,
+      onSearch: _handleSearch,
+      onShowHelp: _handleShowShortcutsHelp,
+      child: Focus(
+        autofocus: true,
+        child: DragToResizeArea(
       child: ClipRRect(
         borderRadius: BorderRadius.circular(_kWindowRadius),
         child: widget.appState.isClosing
@@ -414,6 +438,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
         ),
       ),
     ),
+      ),
     );
   }
 
@@ -472,6 +497,7 @@ class _AppShellState extends State<AppShell> with WindowListener {
                           return const SizedBox.shrink();
                         }
                         return TopBar(
+                          key: _topBarKey,
                           appState: widget.appState,
                           themeState: widget.themeState,
                           userName: widget.appState.userName,

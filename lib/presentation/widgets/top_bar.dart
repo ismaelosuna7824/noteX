@@ -26,11 +26,10 @@ class TopBar extends StatefulWidget {
   });
 
   @override
-  State<TopBar> createState() => _TopBarState();
+  State<TopBar> createState() => TopBarState();
 }
 
-class _TopBarState extends State<TopBar>
-    with SingleTickerProviderStateMixin {
+class TopBarState extends State<TopBar> with SingleTickerProviderStateMixin {
   final TextEditingController _searchController = TextEditingController();
   final FocusNode _searchFocusNode = FocusNode();
   final LayerLink _layerLink = LayerLink();
@@ -69,6 +68,15 @@ class _TopBarState extends State<TopBar>
         }
       });
     }
+  }
+
+  /// Focuses the search field — the Cmd/Ctrl+K app-wide shortcut's entry
+  /// point (see `AppShortcuts`), reached via a [GlobalKey<TopBarState>] held
+  /// by `AppShell` since the search [FocusNode] itself is private to this
+  /// State. Does not open the results dropdown by itself — that still only
+  /// appears once a query is typed, same as clicking into the field.
+  void requestSearchFocus() {
+    _searchFocusNode.requestFocus();
   }
 
   void _onSearchChanged(String query) {

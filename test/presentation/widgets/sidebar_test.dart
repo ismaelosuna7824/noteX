@@ -68,4 +68,32 @@ void main() {
       );
     }
   });
+
+  test(
+      'visiblePageIndices/visibleSectionLabels expose the exact list the '
+      'sidebar renders from, in the same order', () {
+    // The app-wide numeric shortcuts (Cmd/Ctrl+1..8, see `AppShortcuts`)
+    // derive their mapping from these getters instead of a hand-copied
+    // list — this pins them to the private `_navItems` source so hiding or
+    // reordering a sidebar section can never silently drift out of sync.
+    expect(Sidebar.visiblePageIndices, [0, 1, 2, 3, 4, 9, 7, 8, 6]);
+    expect(
+      Sidebar.visibleSectionLabels,
+      [
+        'Home',
+        'Notes',
+        'Editor',
+        'Calendar',
+        'Timer',
+        'Graph',
+        'Tasks',
+        'Trash',
+        'Settings',
+      ],
+    );
+    expect(
+      Sidebar.visiblePageIndices.length,
+      Sidebar.visibleSectionLabels.length,
+    );
+  });
 }
