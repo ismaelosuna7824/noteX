@@ -81,4 +81,23 @@ void main() {
 
     expect(find.text('Keyboard Shortcuts'), findsNothing);
   });
+
+  group('shortcutKeysFor', () {
+    // Backs every other hoverable control's shortcut hint (the notes list's
+    // "New Note" button, a Kanban column's "New task" button) — covered here
+    // directly since it's the single source those controls read from.
+    test('returns the key combination for a known description', () {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        expect(shortcutKeysFor('New note'), '⌘+N');
+        expect(shortcutKeysFor('New task'), '⌘+Shift+N');
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    test('returns null for a description with no matching entry', () {
+      expect(shortcutKeysFor('Not a real shortcut'), isNull);
+    });
+  });
 }

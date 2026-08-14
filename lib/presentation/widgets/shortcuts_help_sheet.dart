@@ -39,6 +39,22 @@ List<ShortcutEntry> buildShortcutEntries() {
   ];
 }
 
+/// Looks up the key combination for the [buildShortcutEntries] entry whose
+/// description is [description] — e.g. `shortcutKeysFor('New note')` returns
+/// `"⌘+N"` on macOS. Lets any other hoverable control that performs the same
+/// action (the notes list's "New Note" button, a Kanban column's "New task"
+/// button) append the live shortcut hint to its own tooltip without
+/// re-deriving or hand-typing the combination a second time — the single
+/// source of truth stays [buildShortcutEntries]. Returns null if no entry
+/// matches, so a stale/renamed description fails visibly (no hint shown)
+/// instead of silently drifting.
+String? shortcutKeysFor(String description) {
+  for (final entry in buildShortcutEntries()) {
+    if (entry.description == description) return entry.keys;
+  }
+  return null;
+}
+
 /// Renders a single [ShortcutEntry] as a key chip + description row —
 /// shared by the help sheet and the Settings page section so their visual
 /// treatment of a row stays identical, not just the underlying data.

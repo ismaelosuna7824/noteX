@@ -397,6 +397,43 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  group("Todo column's New task button — hover tooltip shows the shortcut",
+      () {
+    // Shows the same Cmd/Ctrl+Shift+N combo as buildShortcutEntries()'s
+    // "New task" entry, looked up via shortcutKeysFor rather than hand-typed
+    // here — this button opens the exact showAddTaskDialog the app-wide
+    // shortcut also opens.
+    testWidgets('shows "⌘+Shift+N" on macOS', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.macOS;
+      try {
+        await taskState.initialize();
+        await pumpBoard(tester);
+
+        expect(
+          find.byTooltip('New task (⌘+Shift+N)'),
+          findsOneWidget,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+
+    testWidgets('shows "Ctrl+Shift+N" on Windows', (tester) async {
+      debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+      try {
+        await taskState.initialize();
+        await pumpBoard(tester);
+
+        expect(
+          find.byTooltip('New task (Ctrl+Shift+N)'),
+          findsOneWidget,
+        );
+      } finally {
+        debugDefaultTargetPlatformOverride = null;
+      }
+    });
+  });
+
   group('backlog — never leaks into the daily list (spec #561)', () {
     testWidgets(
         'a task created with "No date (add to backlog)" checked never '

@@ -24,6 +24,7 @@ import 'animated_dialog.dart';
 import 'app_picker_menu.dart';
 import 'note_markdown_editor.dart';
 import 'project_colors.dart';
+import 'shortcuts_help_sheet.dart' show shortcutKeysFor;
 
 /// Kanban view of tasks, grouped into four columns by [TaskStatus].
 ///
@@ -486,7 +487,15 @@ class _BoardColumn extends StatelessWidget {
                     if (onCreate != null)
                       IconButton(
                         icon: const Icon(Icons.add, size: 18),
-                        tooltip: 'New task',
+                        // Shortcut hint looked up from
+                        // `buildShortcutEntries()` (via `shortcutKeysFor`) —
+                        // this is the exact `showAddTaskDialog` the app-wide
+                        // New Task shortcut also opens, so the hint can never
+                        // drift from a hand-typed copy.
+                        tooltip: () {
+                          final keys = shortcutKeysFor('New task');
+                          return keys == null ? 'New task' : 'New task ($keys)';
+                        }(),
                         onPressed: onCreate,
                         visualDensity: VisualDensity.compact,
                       ),

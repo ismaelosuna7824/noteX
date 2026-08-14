@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
+import '../utils/app_shortcuts.dart';
+
 /// Sidebar width (including margin).
 const double kSidebarWidth = 62.0;
 
@@ -62,6 +64,21 @@ class Sidebar extends StatelessWidget {
         for (final (_, item) in _navItems) item.label,
       ];
 
+  /// The hover tooltip for the sidebar section shown at [position] (1-based,
+  /// matching [visiblePageIndices]/[visibleSectionLabels] order): [label]
+  /// plus its numeric jump shortcut when [position] falls within
+  /// [kNumberedSectionShortcutCount] — the exact range `AppShortcuts` itself
+  /// binds (Cmd/Ctrl+1..[kNumberedSectionShortcutCount]) — using the same
+  /// platform-aware [primaryModifierLabel] the rest of the app's shortcut
+  /// hints read from. A section beyond that range gets no shortcut hint
+  /// instead of a wrong one, since `AppShortcuts` never binds it a key.
+  static String sectionTooltip(String label, int position) {
+    if (position < 1 || position > kNumberedSectionShortcutCount) {
+      return label;
+    }
+    return '$label ($primaryModifierLabel+$position)';
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -93,9 +110,10 @@ class Sidebar extends StatelessWidget {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (final (pageIndex, item) in _navItems)
+                    for (final (i, (pageIndex, item)) in _navItems.indexed)
                       _NavIcon(
                         item: item,
+                        tooltip: sectionTooltip(item.label, i + 1),
                         isSelected: selectedIndex == pageIndex,
                         accentColor: accentColor,
                         baseIconColor: baseIconColor,
@@ -117,6 +135,11 @@ class Sidebar extends StatelessWidget {
 
 class _NavIcon extends StatefulWidget {
   final _SidebarItem item;
+
+  /// The hover tooltip text — [Sidebar.sectionTooltip]'s output, so it's
+  /// already the item's label plus its shortcut hint (or just the label
+  /// when the item has none).
+  final String tooltip;
   final bool isSelected;
   final Color accentColor;
   final Color baseIconColor;
@@ -125,6 +148,7 @@ class _NavIcon extends StatefulWidget {
 
   const _NavIcon({
     required this.item,
+    required this.tooltip,
     required this.isSelected,
     required this.accentColor,
     required this.baseIconColor,
@@ -172,7 +196,7 @@ class _NavIconState extends State<_NavIcon> {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 5),
       child: Tooltip(
-        message: widget.item.label,
+        message: widget.tooltip,
         preferBelow: false,
         waitDuration: const Duration(milliseconds: 600),
         child: MouseRegion(

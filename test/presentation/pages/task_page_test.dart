@@ -256,8 +256,14 @@ void main() {
       await tester.pumpAndSettle();
 
       // The label only renders as a hover [Tooltip] message, not visible
-      // [Text] — same convention every other nav item already uses.
-      expect(find.byTooltip('Tasks'), findsOneWidget);
+      // [Text] — same convention every other nav item already uses. The
+      // tooltip now also carries the section's numeric jump shortcut (item
+      // 7, "Tasks" — see Sidebar.sectionTooltip), so this reads through the
+      // same shared formula rather than a bare literal.
+      expect(
+        find.byTooltip(Sidebar.sectionTooltip('Tasks', 7)),
+        findsOneWidget,
+      );
       expect(find.byTooltip('Reminders'), findsNothing);
     });
 
