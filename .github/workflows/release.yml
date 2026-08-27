@@ -39,7 +39,16 @@ jobs:
         run: flutter build windows --release --dart-define-from-file=dart_defines.json
 
       - name: Build Inno Setup installer
-        run: iscc windows\notex_installer.iss
+        # Read the version from pubspec.yaml, the one source every other
+        # package already derives from, and hand it to Inno Setup. Keeping a
+        # literal in the .iss instead is what let the installer ship 1.59.0
+        # for three consecutive releases.
+        run: |
+          $match = Select-String -Path pubspec.yaml -Pattern '^version:\s*([^+\s]+)' | Select-Object -First 1
+          if (-not $match) { throw "Could not read a version from pubspec.yaml" }
+          $version = $match.Matches[0].Groups[1].Value
+          Write-Host "Installer version: $version"
+          iscc /DMyAppVersion=$version windows\notex_installer.iss
 
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4

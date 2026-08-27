@@ -141,7 +141,7 @@ The repository includes a GitHub Actions workflow (`.github/workflows/release.ym
 
 > ⚠️ The tag version **must match** `currentVersion` in `AppConfig` — otherwise the auto-updater shows a false "update available" banner to users who already have the latest build.
 
-**Step 1 — Bump the two version strings**
+**Step 1 — Bump the version, and write the notes**
 
 `pubspec.yaml`:
 ```yaml
@@ -153,11 +153,22 @@ version: 1.1.0+2   # number before + = public version, after + = build number
 static const String currentVersion = '1.1.0';  // must match the tag
 ```
 
+`release_notes/v1.1.0.md` — what changed, in prose, for the people using the
+app. `scripts/release_notes.sh` puts this at the top of the GitHub Release.
+
+Nothing else carries a version by hand. The macOS bundle
+(`$(FLUTTER_BUILD_NAME)`), the Windows executable (`FLUTTER_VERSION`), the DEB
+package, and the Inno Setup installer all derive theirs from `pubspec.yaml` at
+build time. That last one was a literal in `windows/notex_installer.iss` until
+1.62.0, and it silently shipped 1.59.0 for three releases — if you ever add a
+fourth place that needs the version, teach the build to read it rather than
+adding another copy to keep in sync.
+
 **Step 2 — Commit and push**
 
 ```bash
-git add pubspec.yaml lib/infrastructure/config/app_config.dart
-git commit -m "chore: bump version to 1.1.0"
+git add pubspec.yaml lib/infrastructure/config/app_config.dart release_notes/v1.1.0.md
+git commit -m "chore(release): 1.1.0"
 git push
 ```
 

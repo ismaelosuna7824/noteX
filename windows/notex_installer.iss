@@ -1,5 +1,15 @@
 #define MyAppName "NoteX"
-#define MyAppVersion "1.59.0"
+; The version comes from pubspec.yaml, passed in by CI as
+; `iscc /DMyAppVersion=<version>`. It used to be a literal here, which made
+; the .iss a second source of truth — and it silently drifted three releases
+; behind before anyone noticed the installer still advertising 1.59.0.
+;
+; The fallback below is only so a local `iscc` run still works. It is
+; deliberately not a real version number: a hand-built installer should never
+; be mistakable for a release.
+#ifndef MyAppVersion
+  #define MyAppVersion "0.0.0-dev"
+#endif
 #define MyAppPublisher "ismaelosuna7824"
 #define MyAppURL "https://github.com/ismaelosuna7824/noteX"
 #define MyAppExeName "notex.exe"
