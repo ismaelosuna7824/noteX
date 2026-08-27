@@ -6,6 +6,7 @@ import '../../domain/services/note_link_parser.dart';
 import '../../infrastructure/content/note_content_format.dart';
 import '../utils/app_shortcuts.dart';
 import 'markdown/notex_markdown_view.dart';
+import 'typing_ink_controller.dart';
 
 /// Toggles between edit and preview — see [NoteMarkdownEditorState._togglePreview].
 class _TogglePreviewIntent extends Intent {
@@ -171,7 +172,7 @@ class NoteMarkdownEditor extends StatefulWidget {
 }
 
 class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
-  late final TextEditingController _controller;
+  late final TypingInkController _controller;
 
   /// Focus node for the edit [TextField], so a Cmd/Ctrl+E toggle from preview
   /// back to edit can immediately return focus to the field for typing.
@@ -196,7 +197,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     // widget.onChanged. Only real user typing (and explicit toolbar inserts)
     // do.
     final markdown = NoteContentFormat.ensureMarkdown(widget.initialContent);
-    _controller = TextEditingController(text: markdown);
+    _controller = TypingInkController(text: markdown);
     _viewMode = _resolveInitialViewMode(markdown);
     // In split mode the preview reads _controller.text directly, but user typing
     // fires TextField.onChanged (the host callback) — not setState here. So the
@@ -234,7 +235,8 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// A [preview] request on an empty note is downgraded to edit so a new note
   /// is immediately typable; split keeps its editable field, so it survives.
   EditorViewMode _resolveInitialViewMode(String markdown) {
-    final requested = widget.initialViewMode ??
+    final requested =
+        widget.initialViewMode ??
         (widget.initiallyPreview
             ? EditorViewMode.preview
             : EditorViewMode.edit);
@@ -308,18 +310,25 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     // No valid selection (never focused): append the markers at the end.
     if (!selection.isValid) {
       final newText = '$text$left$right';
-      _apply(newText, TextSelection.collapsed(offset: text.length + left.length));
+      _apply(
+        newText,
+        TextSelection.collapsed(offset: text.length + left.length),
+      );
       return;
     }
 
     final selected = text.substring(selection.start, selection.end);
-    final newText =
-        text.replaceRange(selection.start, selection.end, '$left$selected$right');
+    final newText = text.replaceRange(
+      selection.start,
+      selection.end,
+      '$left$selected$right',
+    );
 
     final TextSelection newSelection;
     if (selection.isCollapsed) {
-      newSelection =
-          TextSelection.collapsed(offset: selection.start + left.length);
+      newSelection = TextSelection.collapsed(
+        offset: selection.start + left.length,
+      );
     } else {
       newSelection = TextSelection(
         baseOffset: selection.start + left.length,
@@ -496,10 +505,12 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       return;
     }
 
-    onMentionQuery(MentionTrigger.detect(
-      text: _controller.text,
-      caret: selection.baseOffset,
-    ));
+    onMentionQuery(
+      MentionTrigger.detect(
+        text: _controller.text,
+        caret: selection.baseOffset,
+      ),
+    );
   }
 
   /// Replaces the mention being composed with a link to [noteId].
@@ -688,29 +699,42 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     return Focus(
       skipTraversal: true,
       onKeyEvent: _handleEditKeyEvent,
-      child: TextField(
-        controller: _controller,
-        focusNode: _editFocusNode,
-        onChanged: _handleChanged,
-        maxLines: null,
-        minLines: null,
-        expands: true,
-        keyboardType: TextInputType.multiline,
-        textAlignVertical: TextAlignVertical.top,
-        style: TextStyle(
-          fontSize: widget.fontSize,
-          height: widget.lineHeight,
-          color: color,
-        ),
-        decoration: const InputDecoration(
-          border: InputBorder.none,
-          hintText: 'Start writing…',
-          contentPadding: EdgeInsets.all(16),
-          // Kill the default InputDecorator hover tint so the glass editor
-          // background doesn't flicker when the mouse enters/leaves the field.
-          hoverColor: Colors.transparent,
-          fillColor: Colors.transparent,
-          filled: false,
+      // The ink wash fades frame by frame, so the field has to rebuild frame by
+      // frame while it does. Listening to the controller itself would drag the
+      // split-mode preview through the same ~70 rebuilds for a change it cannot
+      // render, so the fade gets its own narrower signal.
+      child: ListenableBuilder(
+        listenable: _controller.ink,
+        builder: (context, _) => TextField(
+          controller: _controller,
+          focusNode: _editFocusNode,
+          onChanged: _handleChanged,
+          maxLines: null,
+          minLines: null,
+          expands: true,
+          keyboardType: TextInputType.multiline,
+          textAlignVertical: TextAlignVertical.top,
+          // A block caret rather than a hairline. It belongs with the ink
+          // wash: the wash says what was just written and the block says where
+          // the next character lands, and at a hairline's width that second
+          // half is invisible the moment the caret jumps to a new line.
+          cursorWidth: (widget.fontSize ?? 15) * 0.5,
+          cursorRadius: const Radius.circular(2),
+          style: TextStyle(
+            fontSize: widget.fontSize,
+            height: widget.lineHeight,
+            color: color,
+          ),
+          decoration: const InputDecoration(
+            border: InputBorder.none,
+            hintText: 'Start writing…',
+            contentPadding: EdgeInsets.all(16),
+            // Kill the default InputDecorator hover tint so the glass editor
+            // background doesn't flicker when the mouse enters/leaves the field.
+            hoverColor: Colors.transparent,
+            fillColor: Colors.transparent,
+            filled: false,
+          ),
         ),
       ),
     );
@@ -753,8 +777,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       return;
     }
 
-    final newText =
-        text.replaceRange(selection.start, selection.end, _indent);
+    final newText = text.replaceRange(selection.start, selection.end, _indent);
     _apply(
       newText,
       TextSelection.collapsed(offset: selection.start + _indent.length),
@@ -769,8 +792,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     final selection = value.selection;
 
     final caret = selection.isValid ? selection.start : text.length;
-    final lineStart =
-        caret <= 0 ? 0 : text.lastIndexOf('\n', caret - 1) + 1;
+    final lineStart = caret <= 0 ? 0 : text.lastIndexOf('\n', caret - 1) + 1;
 
     var removeCount = 0;
     if (lineStart < text.length && text[lineStart] == '\t') {
@@ -785,8 +807,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     if (removeCount == 0) return;
 
     final newText = text.replaceRange(lineStart, lineStart + removeCount, '');
-    final newCaret =
-        (caret - removeCount).clamp(lineStart, newText.length);
+    final newCaret = (caret - removeCount).clamp(lineStart, newText.length);
     _apply(newText, TextSelection.collapsed(offset: newCaret));
   }
 
@@ -842,11 +863,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       _headerButton('H2', 'Heading 2', '## '),
       _headerButton('H3', 'Heading 3', '### '),
       const VerticalDivider(width: 1),
-      _prefixButton(
-        Icons.format_list_bulleted,
-        'Bullet list',
-        (_) => '- ',
-      ),
+      _prefixButton(Icons.format_list_bulleted, 'Bullet list', (_) => '- '),
       _prefixButton(
         Icons.format_list_numbered,
         'Numbered list',
@@ -870,11 +887,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
       _headerButton('H2', 'Heading 2', '## '),
       _headerButton('H3', 'Heading 3', '### '),
       const VerticalDivider(width: 1),
-      _prefixButton(
-        Icons.format_list_bulleted,
-        'Bullet list',
-        (_) => '- ',
-      ),
+      _prefixButton(Icons.format_list_bulleted, 'Bullet list', (_) => '- '),
       _prefixButton(
         Icons.format_list_numbered,
         'Numbered list',
@@ -904,11 +917,7 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   }
 
   Widget _iconButton(IconData icon, String tooltip, VoidCallback onPressed) {
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon),
-      onPressed: onPressed,
-    );
+    return IconButton(tooltip: tooltip, icon: Icon(icon), onPressed: onPressed);
   }
 
   Widget _headerButton(String label, String tooltip, String prefix) {
