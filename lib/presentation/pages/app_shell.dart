@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:media_kit/media_kit.dart';
@@ -128,12 +129,48 @@ class _AppShellState extends State<AppShell> with WindowListener {
     }
   }
 
+  /// How long the cleanup gets before the window closes anyway.
+  ///
+  /// Comfortably longer than the work needs when everything is reachable, and
+  /// short enough that a reader who pressed close is not left watching a
+  /// farewell animation wonder whether the app has hung.
+  static const _closeCleanupBudget = Duration(seconds: 5);
+
   @override
   void onWindowClose() async {
-    // Show goodbye screen — cleanup runs in parallel with the animation.
-    widget.appState.startClosing();
+    // Closing is not negotiable; everything else here is best-effort.
+    //
+    // This used to be one straight chain of awaits ending in destroy(), which
+    // made every step of the cleanup a way for the app to become unclosable:
+    // one throw skipped destroy() entirely, and one call that never returned
+    // held it forever. The Supabase push is the obvious candidate — it goes to
+    // the network, and a machine whose DNS has gone away answers neither way —
+    // but the point is that it does not matter which step misbehaves. A reader
+    // who pressed close gets a closed window.
+    //
+    // What is lost when the budget runs out is a sync that would have failed
+    // anyway, and a window size. Both are recoverable. A window that will not
+    // close is not.
+    try {
+      // Show goodbye screen — cleanup runs in parallel with the animation.
+      // Inside the try with everything else: if even this throws, the window
+      // still has to go.
+      widget.appState.startClosing();
+      await _cleanUpBeforeClose().timeout(_closeCleanupBudget);
+    } on TimeoutException {
+      debugPrint('noteX: close cleanup exceeded its budget; closing anyway');
+    } catch (e) {
+      debugPrint('noteX: close cleanup failed ($e); closing anyway');
+    } finally {
+      // Give the goodbye animation the rest of its run, then go. Inside the
+      // finally so an early failure does not turn into an abrupt disappearance.
+      await Future.delayed(const Duration(milliseconds: 1700));
+      await windowManager.destroy();
+    }
+  }
 
-    // Run cleanup tasks while goodbye animates.
+  /// Everything worth doing before the window goes, none of it load-bearing.
+  Future<void> _cleanUpBeforeClose() async {
     // Persist window size before closing.
     if (!await windowManager.isMaximized()) {
       final size = await windowManager.getSize();
@@ -169,11 +206,6 @@ class _AppShellState extends State<AppShell> with WindowListener {
     _bgPlayer = null;
     _bgVideoController = null;
     _currentVideoPath = null;
-
-    // Wait for goodbye animation to finish (at least 1.7s total).
-    await Future.delayed(const Duration(milliseconds: 1700));
-
-    await windowManager.destroy();
   }
 
   @override
