@@ -193,6 +193,9 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// The rendered preview is visible in both preview and split modes.
   bool get _previewVisible => _viewMode != EditorViewMode.edit;
 
+  /// True when the source field is not on screen, so there is nothing to focus.
+  bool get _previewOnly => _viewMode == EditorViewMode.preview;
+
   @override
   void initState() {
     super.initState();
@@ -479,6 +482,20 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   void _apply(String newText, TextSelection selection) {
     _controller.value = TextEditingValue(text: newText, selection: selection);
     widget.onChanged(newText);
+
+    // Hand focus back to the field. A toolbar button is a Material button, so
+    // pressing one takes focus — and an editor whose text just changed while
+    // the focus sits on a button is an editor where Cmd/Ctrl+Z goes nowhere,
+    // because undo is dispatched to whatever is focused. The reader has to
+    // click back into the text before they can take the insert back, which is
+    // the one moment they are most likely to want to.
+    //
+    // Returning focus rather than making the toolbar unfocusable keeps the
+    // buttons reachable by keyboard, and it is what the action means anyway:
+    // every caller here writes into the document, so the document is where
+    // the caret belongs afterwards.
+    if (_previewOnly) return;
+    _editFocusNode.requestFocus();
   }
 
   // --- link handling --------------------------------------------------------
