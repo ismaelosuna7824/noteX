@@ -145,7 +145,7 @@ const version = await getLatestVersion();
         </div>
 
         <p data-reveal class="mt-6 text-sm text-white/40" style="transition-delay:300ms">
-          {t.hero.platforms}{version && ` · v${version}`}
+          {t.hero.platforms}<span data-version-suffix>{version ? ` · v${version}` : ''}</span>
         </p>
       </div>
     </div>

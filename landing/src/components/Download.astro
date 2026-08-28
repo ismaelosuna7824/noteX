@@ -109,7 +109,9 @@ const firstRun = firstRunPlatforms.map((p) => ({
     </details>
 
     <p class="mt-10 text-sm text-white/45">
-      {version && t.download.versionLine(version)}{' '}
+      <span data-version-line data-template={t.download.versionLine('{v}')}
+        >{version ? t.download.versionLine(version) : ''}</span
+      >{' '}
       <a href={site.releases} target="_blank"
               rel="noopener noreferrer" class="underline underline-offset-4 hover:text-white/70">
         {t.download.allReleases}

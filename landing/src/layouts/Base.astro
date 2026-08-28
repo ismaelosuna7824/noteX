@@ -123,5 +123,46 @@ const faqSchema = {
       {t.nav.skipToContent}
     </a>
     <slot />
+
+    <script define:vars={{ latestReleaseApi: `https://api.github.com/repos/${site.repo.split('github.com/')[1]}/releases/latest` }}>
+      // Correct the version in place if the page has gone stale.
+      //
+      // The number is rendered at build time — see lib/github.ts — which makes
+      // the page as current as its last deploy and no more. That is fine for
+      // the star count, which nobody checks twice, and it is not fine here: a
+      // version this page states confidently and wrongly sends someone hunting
+      // for a release that does not exist. So this one fact, and only this one,
+      // is worth a request per visit.
+      //
+      // The built value stays in the HTML rather than being left blank for this
+      // script to fill. It is what a reader without JavaScript sees, what a
+      // crawler indexes, and what remains when GitHub is unreachable or has
+      // rate-limited the visitor. This only ever replaces it with something
+      // newer.
+      (async () => {
+        const suffix = document.querySelector('[data-version-suffix]');
+        const line = document.querySelector('[data-version-line]');
+        if (!suffix && !line) return;
+
+        try {
+          const response = await fetch(latestReleaseApi, {
+            headers: { Accept: 'application/vnd.github+json' },
+            signal: AbortSignal.timeout(5000),
+          });
+          if (!response.ok) return;
+
+          const { tag_name: tag } = await response.json();
+          const version = typeof tag === 'string' ? tag.replace(/^v/, '') : null;
+          if (!version) return;
+
+          if (suffix) suffix.textContent = ` · v${version}`;
+          if (line && line.dataset.template) {
+            line.textContent = line.dataset.template.replace('{v}', version);
+          }
+        } catch {
+          // Offline, blocked, rate limited: the built-in value stands.
+        }
+      })();
+    </script>
   </body>
 </html>
