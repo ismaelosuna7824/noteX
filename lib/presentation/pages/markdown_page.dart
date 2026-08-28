@@ -7,6 +7,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../application/use_cases/export_markdown_file_use_case.dart';
+import '../../domain/services/markdown_task_toggle.dart';
 import '../../domain/entities/markdown_file.dart';
 import '../../domain/entities/markdown_project.dart';
 import '../../domain/entities/note.dart';
@@ -1187,6 +1188,29 @@ class _MarkdownPageState extends State<MarkdownPage> {
     );
   }
 
+  /// Flips the task the reader pressed in the preview.
+  ///
+  /// Goes through the controller rather than the file so the change reaches the
+  /// editing surface and the autosave timer by the same path a typed edit does
+  /// — a checkbox ticked here has to be saved like any other edit, and has to
+  /// be there if the reader flips back to the source.
+  void _handleToggleTask(int index) {
+    final controller = _contentController;
+    if (controller == null) return;
+
+    final next = MarkdownTaskToggle.toggle(controller.text, index);
+    // Null means the tap addressed a task that is no longer in the text.
+    if (next == null) return;
+
+    // `[ ]` and `[x]` are the same length, so the selection still addresses
+    // what it did before the edit.
+    controller.value = TextEditingValue(
+      text: next,
+      selection: controller.selection,
+    );
+    setState(_onUserEdit);
+  }
+
   Widget _buildPreview(bool isDark) {
     final content = _contentController?.text ?? '';
 
@@ -1211,6 +1235,7 @@ class _MarkdownPageState extends State<MarkdownPage> {
                   child: NoteXMarkdownView(
                     data: content,
                     onTapLink: _handleTapLink,
+                    onToggleTask: _handleToggleTask,
                     style: NoteXMarkdownStyle(
                       isDark: isDark,
                       baseFontSize: widget.themeState.markdownFontSize,

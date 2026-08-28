@@ -5,6 +5,7 @@ import 'package:markdown/markdown.dart' as md;
 import 'package:markdown_widget/markdown_widget.dart';
 
 import 'markdown_blocks.dart';
+import 'markdown_list.dart';
 
 /// The per-surface knobs. Everything else about how Markdown renders is fixed
 /// in [NoteXMarkdownView] so the three editing surfaces cannot drift apart —
@@ -58,6 +59,15 @@ class NoteXMarkdownStyle {
       );
 
   double _heading(double size) => (size * _scale).roundToDouble();
+
+  NoteXListStyle get _list => NoteXListStyle(
+        fontSize: baseFontSize,
+        lineHeight: lineHeight,
+        textColor: textColor,
+        mutedColor: _muted,
+        accentColor: accentColor,
+        guideColor: _rule,
+      );
 }
 
 /// Renders Markdown the way noteX renders Markdown — everywhere.
@@ -70,12 +80,13 @@ class NoteXMarkdownStyle {
 /// caller decides how it scrolls and can wrap the whole thing in one
 /// [SelectionArea] — selection has to cross block boundaries to be worth
 /// anything.
-class NoteXMarkdownView extends StatelessWidget {
+class NoteXMarkdownView extends StatefulWidget {
   const NoteXMarkdownView({
     super.key,
     required this.data,
     required this.style,
     this.onTapLink,
+    this.onToggleTask,
   });
 
   final String data;
@@ -84,8 +95,42 @@ class NoteXMarkdownView extends StatelessWidget {
   /// Receives the raw href, including the app's own `notex://` note links.
   final ValueChanged<String>? onTapLink;
 
+  /// Receives the document-order index of a task whose checkbox was pressed.
+  ///
+  /// The view does not edit the source itself — it does not own it. The host
+  /// applies the change with `MarkdownTaskToggle.toggle`, which counts tasks
+  /// the same way this renderer numbers them. Leave it null and the boxes draw
+  /// their state without offering to change it, which is what a read-only
+  /// surface wants.
+  final ValueChanged<int>? onToggleTask;
+
+  @override
+  State<NoteXMarkdownView> createState() => _NoteXMarkdownViewState();
+}
+
+class _NoteXMarkdownViewState extends State<NoteXMarkdownView> {
+  /// Fold keys of the branches currently shut.
+  ///
+  /// Fold state is a property of this view, not of the note: it says what the
+  /// reader is looking at right now, and writing it into the Markdown would
+  /// mean a note that looks different depending on who last collapsed
+  /// something. It lasts as long as the view is on screen.
+  final Set<String> _collapsed = <String>{};
+
+  NoteXMarkdownStyle get style => widget.style;
+
   @override
   Widget build(BuildContext context) {
+    // One pass per build: the ordinals are handed out as the document is
+    // walked, so they have to start again from zero every time.
+    final listContext = MarkdownListContext(
+      collapsed: _collapsed,
+      onToggleCollapse: (key) => setState(() {
+        if (!_collapsed.remove(key)) _collapsed.add(key);
+      }),
+      onToggleTask: widget.onToggleTask,
+    );
+
     final generator = MarkdownGenerator(
       // gitHubWeb rather than gitHubFlavored: it is what adds alert callouts,
       // `:emoji:` shortcodes and heading ids. gitHubFlavored parsed none of
@@ -117,6 +162,46 @@ class NoteXMarkdownView extends StatelessWidget {
           },
         ),
         SpanNodeGeneratorWithTag(
+          tag: 'ul',
+          generator: (element, config, visitor) => NoteXListNode(
+            ordered: false,
+            start: 1,
+            listStyle: style._list,
+            context: listContext,
+          ),
+        ),
+        SpanNodeGeneratorWithTag(
+          tag: 'ol',
+          generator: (element, config, visitor) => NoteXListNode(
+            ordered: true,
+            start: int.tryParse(element.attributes['start'] ?? '') ?? 1,
+            listStyle: style._list,
+            context: listContext,
+          ),
+        ),
+        SpanNodeGeneratorWithTag(
+          tag: 'li',
+          generator: (element, config, visitor) {
+            // Both of these read or rewrite the element before the visitor
+            // walks its children, which is the only moment either is possible.
+            flattenLooseItem(element);
+            final input = findTaskInput(element);
+            return NoteXListItemNode(
+              element: element,
+              listStyle: style._list,
+              context: listContext,
+              itemIndex: listContext.nextItem(),
+              taskIndex: input == null ? null : listContext.nextTask(),
+              checked: input?.attributes['checked']?.toLowerCase() == 'true',
+            );
+          },
+        ),
+        SpanNodeGeneratorWithTag(
+          tag: 'input',
+          // The checkbox is drawn in the gutter by the item, not inline here.
+          generator: (element, config, visitor) => MarkdownVoidNode(),
+        ),
+        SpanNodeGeneratorWithTag(
           tag: 'sup',
           generator: (element, config, visitor) =>
               FootnoteRefNode(color: style.accentColor),
@@ -133,7 +218,7 @@ class NoteXMarkdownView extends StatelessWidget {
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: generator.buildWidgets(data, config: _config()),
+      children: generator.buildWidgets(widget.data, config: _config()),
     );
   }
 
@@ -195,7 +280,7 @@ class NoteXMarkdownView extends StatelessWidget {
             decoration: TextDecoration.underline,
             decorationColor: style.accentColor.withValues(alpha: 0.4),
           ),
-          onTap: onTapLink,
+          onTap: widget.onTapLink,
         ),
         BlockquoteConfig(sideColor: style.accentColor.withValues(alpha: 0.5)),
         HrConfig(color: style._rule),
@@ -216,16 +301,6 @@ class NoteXMarkdownView extends StatelessWidget {
         ),
         TableConfig(
           border: TableBorder.all(color: style._rule),
-        ),
-        CheckBoxConfig(
-          builder: (checked) => Padding(
-            padding: const EdgeInsets.only(right: 6, top: 2),
-            child: Icon(
-              checked ? Icons.check_box_rounded : Icons.check_box_outline_blank,
-              size: style.baseFontSize,
-              color: checked ? style.accentColor : style._muted,
-            ),
-          ),
         ),
       ],
     );

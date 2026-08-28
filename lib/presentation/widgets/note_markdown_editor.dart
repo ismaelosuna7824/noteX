@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../domain/services/markdown_task_toggle.dart';
 import '../../domain/services/mention_trigger.dart';
 import '../../domain/services/note_link_parser.dart';
 import '../../infrastructure/content/note_content_format.dart';
@@ -189,6 +190,9 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
   /// The source field is visible in both edit and split modes.
   bool get _editVisible => _viewMode != EditorViewMode.preview;
 
+  /// The rendered preview is visible in both preview and split modes.
+  bool get _previewVisible => _viewMode != EditorViewMode.edit;
+
   @override
   void initState() {
     super.initState();
@@ -246,12 +250,22 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
     return requested;
   }
 
-  /// Rebuilds the live preview as the user types, but only in split mode where
-  /// the field and preview are on screen together. In edit/preview mode the two
-  /// surfaces are never visible at once, so a per-keystroke rebuild would be
-  /// wasted work (and re-parse the whole document needlessly).
+  /// Rebuilds whenever the preview is on screen and the document moves under
+  /// it — in split mode as the user types, in preview mode when the preview
+  /// changes the document itself by ticking a checkbox.
+  ///
+  /// This used to fire in split mode alone, on the reasoning that preview mode
+  /// hides the field so nothing could change the text. Pressable checkboxes
+  /// ended that: the preview is now an editing surface too. Without this, a
+  /// ticked box kept its old state until something unrelated — the autosave
+  /// indicator, a resize — happened to rebuild the editor, so the first click
+  /// looked like it had been ignored.
+  ///
+  /// Edit mode is still excluded, and for the original reason: the preview is
+  /// not on screen, so re-parsing the document on every keystroke would buy
+  /// nothing.
   void _handleControllerChange() {
-    if (_viewMode == EditorViewMode.split && mounted) {
+    if (_previewVisible && mounted) {
       setState(() {});
     }
   }
@@ -824,6 +838,9 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
         child: NoteXMarkdownView(
           data: _controller.text,
           onTapLink: _handleTapLink,
+          // A read-only surface still draws the state of every box; what it
+          // withholds is the ability to change it.
+          onToggleTask: widget.readOnly ? null : _handleToggleTask,
           style: NoteXMarkdownStyle(
             isDark: theme.brightness == Brightness.dark,
             baseFontSize: widget.fontSize ?? 16.0,
@@ -835,6 +852,23 @@ class NoteMarkdownEditorState extends State<NoteMarkdownEditor> {
         ),
       ),
     );
+  }
+
+  /// Flips the task the reader pressed in the preview.
+  ///
+  /// The preview counts checkboxes in document order and so does
+  /// [MarkdownTaskToggle]; nothing has to be threaded between them for the two
+  /// to agree on which task was meant.
+  ///
+  /// The selection survives untouched because the edit cannot move it: `[ ]`
+  /// and `[x]` are the same length, so every offset after the change still
+  /// addresses the character it did before.
+  void _handleToggleTask(int index) {
+    final next = MarkdownTaskToggle.toggle(_controller.text, index);
+    // Null means the tap addressed a task that is no longer there — the text
+    // changed under it. Leaving the document alone is the only safe answer.
+    if (next == null) return;
+    _apply(next, _controller.selection);
   }
 
   // --- toolbar --------------------------------------------------------------
